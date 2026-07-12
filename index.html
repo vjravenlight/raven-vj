@@ -5897,7 +5897,11 @@ function tickClock() {
 })();
 
 /* ---------------- multi-idioma (traductor de interfaz por diccionario) ---------------- */
-const LANGS = { es: 'Español', en: 'English', pt: 'Português', fr: 'Français', de: 'Deutsch', it: 'Italiano' };
+const LANGS = {
+  es: 'Español', en: 'English', pt: 'Português', fr: 'Français', de: 'Deutsch', it: 'Italiano',
+  ja: '日本語', zh: '中文', ko: '한국어', ru: 'Русский', he: 'עברית', ar: 'العربية',
+};
+const RTL = new Set(['he', 'ar']); // idiomas de derecha a izquierda
 const I18N = {
   en: {
     'Archivo': 'File', 'Composición': 'Composition', 'Capas': 'Layers', 'Entrada': 'Input',
@@ -5994,6 +5998,120 @@ const I18N = {
     'TELEMETRÍA': 'TELEMETRIA', 'SESIÓN': 'SESSIONE', 'ATAJOS': 'SCORCIATOIE', 'SETLIST': 'SETLIST',
     'REMOTO': 'REMOTO', 'Tema': 'Tema',
   },
+  ja: {
+    'Archivo': 'ファイル', 'Composición': 'コンポジション', 'Capas': 'レイヤー', 'Entrada': '入力',
+    'Salida': '出力', 'Ver': '表示', 'Ayuda': 'ヘルプ', '☕ Donar': '☕ 寄付',
+    'SECUENCIA': 'シーケンス', 'COLUMNA AZAR': 'ランダム列', 'CAOS': 'カオス', 'ESCENAS': 'シーン',
+    'beats': '拍', 'manual': '手動', 'PÁNICO': 'パニック', '＋ VIDEOS': '＋ 動画',
+    'EFECTOS MASTER': 'マスターエフェクト', 'GENERADORES': 'ジェネレーター', 'arrastrá a una celda': 'セルにドラッグ',
+    '＋ agregar efecto…': '＋ エフェクト追加…', 'videos sin enlazar': '未リンクの動画', '🔗 RELINK': '🔗 再リンク',
+    'APARIENCIA': '外観', 'Tema de colores': 'カラーテーマ', 'Idioma': '言語', 'RENDER': 'レンダー',
+    'Resolución': '解像度', 'Límite de FPS': 'FPS制限', 'Motor gráfico': 'グラフィックエンジン',
+    'MONITOR DE SALIDA': '出力モニター', 'Pantallas conectadas': '接続画面',
+    '🔍 detectar': '🔍 検出', 'Mapping': 'マッピング', '🗺 abrir editor': '🗺 エディタを開く',
+    '＋ ventana de salida': '＋ 出力ウィンドウ', 'INFO': '情報', 'ESTADO': '状態',
+    'Dispositivo': 'デバイス', 'Conexión': '接続', '↻ Reintentar': '↻ 再試行', 'borrar todos': 'すべて削除',
+    'exportar': 'エクスポート', 'importar': 'インポート', 'CUALQUIER CONTROLADOR': '任意のコントローラー',
+    'Asistente de mapeo': 'マッピングウィザード', 'Perfiles de fábrica': '工場プリセット',
+    'Compartir mapeos': 'マッピング共有', 'AUDIO': 'オーディオ', 'Sensibilidad del beat': 'ビート感度',
+    'TELEMETRÍA': 'テレメトリ', 'SESIÓN': 'セッション', 'ATAJOS': 'ショートカット', 'SETLIST': 'セットリスト',
+    'REMOTO': 'リモート', 'Tema': 'テーマ',
+  },
+  zh: {
+    'Archivo': '文件', 'Composición': '合成', 'Capas': '图层', 'Entrada': '输入',
+    'Salida': '输出', 'Ver': '视图', 'Ayuda': '帮助', '☕ Donar': '☕ 捐赠',
+    'SECUENCIA': '序列', 'COLUMNA AZAR': '随机列', 'CAOS': '混沌', 'ESCENAS': '场景',
+    'beats': '拍', 'manual': '手动', 'PÁNICO': '紧急停止', '＋ VIDEOS': '＋ 视频',
+    'EFECTOS MASTER': '主效果', 'GENERADORES': '生成器', 'arrastrá a una celda': '拖到单元格',
+    '＋ agregar efecto…': '＋ 添加效果…', 'videos sin enlazar': '未链接视频', '🔗 RELINK': '🔗 重新链接',
+    'APARIENCIA': '外观', 'Tema de colores': '配色主题', 'Idioma': '语言', 'RENDER': '渲染',
+    'Resolución': '分辨率', 'Límite de FPS': '帧率限制', 'Motor gráfico': '图形引擎',
+    'MONITOR DE SALIDA': '输出监视器', 'Pantallas conectadas': '已连接屏幕',
+    '🔍 detectar': '🔍 检测', 'Mapping': '映射', '🗺 abrir editor': '🗺 打开编辑器',
+    '＋ ventana de salida': '＋ 输出窗口', 'INFO': '信息', 'ESTADO': '状态',
+    'Dispositivo': '设备', 'Conexión': '连接', '↻ Reintentar': '↻ 重试', 'borrar todos': '全部清除',
+    'exportar': '导出', 'importar': '导入', 'CUALQUIER CONTROLADOR': '任何控制器',
+    'Asistente de mapeo': '映射向导', 'Perfiles de fábrica': '出厂预设',
+    'Compartir mapeos': '分享映射', 'AUDIO': '音频', 'Sensibilidad del beat': '节拍灵敏度',
+    'TELEMETRÍA': '遥测', 'SESIÓN': '会话', 'ATAJOS': '快捷键', 'SETLIST': '歌单',
+    'REMOTO': '远程', 'Tema': '主题',
+  },
+  ko: {
+    'Archivo': '파일', 'Composición': '컴포지션', 'Capas': '레이어', 'Entrada': '입력',
+    'Salida': '출력', 'Ver': '보기', 'Ayuda': '도움말', '☕ Donar': '☕ 후원',
+    'SECUENCIA': '시퀀스', 'COLUMNA AZAR': '랜덤 열', 'CAOS': '카오스', 'ESCENAS': '씬',
+    'beats': '비트', 'manual': '수동', 'PÁNICO': '패닉', '＋ VIDEOS': '＋ 비디오',
+    'EFECTOS MASTER': '마스터 효과', 'GENERADORES': '제너레이터', 'arrastrá a una celda': '셀로 드래그',
+    '＋ agregar efecto…': '＋ 효과 추가…', 'videos sin enlazar': '연결 안 된 비디오', '🔗 RELINK': '🔗 다시 연결',
+    'APARIENCIA': '모양', 'Tema de colores': '색상 테마', 'Idioma': '언어', 'RENDER': '렌더',
+    'Resolución': '해상도', 'Límite de FPS': 'FPS 제한', 'Motor gráfico': '그래픽 엔진',
+    'MONITOR DE SALIDA': '출력 모니터', 'Pantallas conectadas': '연결된 화면',
+    '🔍 detectar': '🔍 감지', 'Mapping': '매핑', '🗺 abrir editor': '🗺 편집기 열기',
+    '＋ ventana de salida': '＋ 출력 창', 'INFO': '정보', 'ESTADO': '상태',
+    'Dispositivo': '장치', 'Conexión': '연결', '↻ Reintentar': '↻ 재시도', 'borrar todos': '모두 삭제',
+    'exportar': '내보내기', 'importar': '가져오기', 'CUALQUIER CONTROLADOR': '모든 컨트롤러',
+    'Asistente de mapeo': '매핑 마법사', 'Perfiles de fábrica': '공장 프리셋',
+    'Compartir mapeos': '매핑 공유', 'AUDIO': '오디오', 'Sensibilidad del beat': '비트 감도',
+    'TELEMETRÍA': '텔레메트리', 'SESIÓN': '세션', 'ATAJOS': '단축키', 'SETLIST': '셋리스트',
+    'REMOTO': '원격', 'Tema': '테마',
+  },
+  ru: {
+    'Archivo': 'Файл', 'Composición': 'Композиция', 'Capas': 'Слои', 'Entrada': 'Вход',
+    'Salida': 'Выход', 'Ver': 'Вид', 'Ayuda': 'Помощь', '☕ Donar': '☕ Донат',
+    'SECUENCIA': 'ПОСЛЕДОВАТ.', 'COLUMNA AZAR': 'СЛУЧ. КОЛОНКА', 'CAOS': 'ХАОС', 'ESCENAS': 'СЦЕНЫ',
+    'beats': 'доли', 'manual': 'вручную', 'PÁNICO': 'СТОП', '＋ VIDEOS': '＋ ВИДЕО',
+    'EFECTOS MASTER': 'МАСТЕР-ЭФФЕКТЫ', 'GENERADORES': 'ГЕНЕРАТОРЫ', 'arrastrá a una celda': 'перетащите в ячейку',
+    '＋ agregar efecto…': '＋ добавить эффект…', 'videos sin enlazar': 'несвязанные видео', '🔗 RELINK': '🔗 ПЕРЕСВЯЗАТЬ',
+    'APARIENCIA': 'ВНЕШНИЙ ВИД', 'Tema de colores': 'Цветовая тема', 'Idioma': 'Язык', 'RENDER': 'РЕНДЕР',
+    'Resolución': 'Разрешение', 'Límite de FPS': 'Лимит FPS', 'Motor gráfico': 'Графический движок',
+    'MONITOR DE SALIDA': 'МОНИТОР ВЫХОДА', 'Pantallas conectadas': 'Подключённые экраны',
+    '🔍 detectar': '🔍 найти', 'Mapping': 'Маппинг', '🗺 abrir editor': '🗺 открыть редактор',
+    '＋ ventana de salida': '＋ окно вывода', 'INFO': 'ИНФО', 'ESTADO': 'СТАТУС',
+    'Dispositivo': 'Устройство', 'Conexión': 'Соединение', '↻ Reintentar': '↻ Повторить', 'borrar todos': 'удалить все',
+    'exportar': 'экспорт', 'importar': 'импорт', 'CUALQUIER CONTROLADOR': 'ЛЮБОЙ КОНТРОЛЛЕР',
+    'Asistente de mapeo': 'Мастер маппинга', 'Perfiles de fábrica': 'Заводские профили',
+    'Compartir mapeos': 'Поделиться маппингом', 'AUDIO': 'АУДИО', 'Sensibilidad del beat': 'Чувствительность бита',
+    'TELEMETRÍA': 'ТЕЛЕМЕТРИЯ', 'SESIÓN': 'СЕССИЯ', 'ATAJOS': 'ГОРЯЧИЕ КЛАВИШИ', 'SETLIST': 'СЕТ-ЛИСТ',
+    'REMOTO': 'УДАЛЁННО', 'Tema': 'Тема',
+  },
+  he: {
+    'Archivo': 'קובץ', 'Composición': 'קומפוזיציה', 'Capas': 'שכבות', 'Entrada': 'כניסה',
+    'Salida': 'יציאה', 'Ver': 'תצוגה', 'Ayuda': 'עזרה', '☕ Donar': '☕ תרומה',
+    'SECUENCIA': 'רצף', 'COLUMNA AZAR': 'עמודה אקראית', 'CAOS': 'כאוס', 'ESCENAS': 'סצנות',
+    'beats': 'פעימות', 'manual': 'ידני', 'PÁNICO': 'עצירה', '＋ VIDEOS': '＋ וידאו',
+    'EFECTOS MASTER': 'אפקטים ראשיים', 'GENERADORES': 'גנרטורים', 'arrastrá a una celda': 'גרור לתא',
+    '＋ agregar efecto…': '＋ הוסף אפקט…', 'videos sin enlazar': 'וידאו לא מקושר', '🔗 RELINK': '🔗 קישור מחדש',
+    'APARIENCIA': 'מראה', 'Tema de colores': 'ערכת צבעים', 'Idioma': 'שפה', 'RENDER': 'רינדור',
+    'Resolución': 'רזולוציה', 'Límite de FPS': 'הגבלת FPS', 'Motor gráfico': 'מנוע גרפי',
+    'MONITOR DE SALIDA': 'מסך יציאה', 'Pantallas conectadas': 'מסכים מחוברים',
+    '🔍 detectar': '🔍 זהה', 'Mapping': 'מיפוי', '🗺 abrir editor': '🗺 פתח עורך',
+    '＋ ventana de salida': '＋ חלון יציאה', 'INFO': 'מידע', 'ESTADO': 'מצב',
+    'Dispositivo': 'התקן', 'Conexión': 'חיבור', '↻ Reintentar': '↻ נסה שוב', 'borrar todos': 'מחק הכל',
+    'exportar': 'ייצוא', 'importar': 'ייבוא', 'CUALQUIER CONTROLADOR': 'כל בקר',
+    'Asistente de mapeo': 'אשף מיפוי', 'Perfiles de fábrica': 'פרופילי יצרן',
+    'Compartir mapeos': 'שתף מיפויים', 'AUDIO': 'אודיו', 'Sensibilidad del beat': 'רגישות פעימה',
+    'TELEMETRÍA': 'טלמטריה', 'SESIÓN': 'הפעלה', 'ATAJOS': 'קיצורים', 'SETLIST': 'רשימת סט',
+    'REMOTO': 'מרחוק', 'Tema': 'ערכה',
+  },
+  ar: {
+    'Archivo': 'ملف', 'Composición': 'تركيب', 'Capas': 'طبقات', 'Entrada': 'إدخال',
+    'Salida': 'إخراج', 'Ver': 'عرض', 'Ayuda': 'مساعدة', '☕ Donar': '☕ تبرع',
+    'SECUENCIA': 'تسلسل', 'COLUMNA AZAR': 'عمود عشوائي', 'CAOS': 'فوضى', 'ESCENAS': 'مشاهد',
+    'beats': 'نبضات', 'manual': 'يدوي', 'PÁNICO': 'إيقاف', '＋ VIDEOS': '＋ فيديو',
+    'EFECTOS MASTER': 'مؤثرات رئيسية', 'GENERADORES': 'مولدات', 'arrastrá a una celda': 'اسحب إلى خلية',
+    '＋ agregar efecto…': '＋ إضافة مؤثر…', 'videos sin enlazar': 'فيديو غير مرتبط', '🔗 RELINK': '🔗 إعادة ربط',
+    'APARIENCIA': 'المظهر', 'Tema de colores': 'نسق الألوان', 'Idioma': 'اللغة', 'RENDER': 'العرض',
+    'Resolución': 'الدقة', 'Límite de FPS': 'حد الإطارات', 'Motor gráfico': 'محرك الرسوم',
+    'MONITOR DE SALIDA': 'شاشة الإخراج', 'Pantallas conectadas': 'الشاشات المتصلة',
+    '🔍 detectar': '🔍 كشف', 'Mapping': 'تخطيط', '🗺 abrir editor': '🗺 فتح المحرر',
+    '＋ ventana de salida': '＋ نافذة إخراج', 'INFO': 'معلومات', 'ESTADO': 'الحالة',
+    'Dispositivo': 'جهاز', 'Conexión': 'اتصال', '↻ Reintentar': '↻ إعادة المحاولة', 'borrar todos': 'حذف الكل',
+    'exportar': 'تصدير', 'importar': 'استيراد', 'CUALQUIER CONTROLADOR': 'أي وحدة تحكم',
+    'Asistente de mapeo': 'معالج التخطيط', 'Perfiles de fábrica': 'إعدادات المصنع',
+    'Compartir mapeos': 'مشاركة التخطيطات', 'AUDIO': 'صوت', 'Sensibilidad del beat': 'حساسية النبضة',
+    'TELEMETRÍA': 'قياس عن بعد', 'SESIÓN': 'جلسة', 'ATAJOS': 'اختصارات', 'SETLIST': 'قائمة العزف',
+    'REMOTO': 'عن بعد', 'Tema': 'نسق',
+  },
 };
 const I18N_ROOTS = ['#menubar', '#topbar', '#fxPanel', '#genPanel', '#cpanel', '#ctxmenu'];
 const I18N_SKIP = 'input,textarea,[data-noi18n],.cell,.gtile,#genShelf,.cname,#nowName';
@@ -6002,6 +6120,7 @@ function t(es) { const d = I18N[curLang()]; return (d && d[es]) || es; }
 function translateRoot(root) {
   if (!root) return;
   const dict = I18N[curLang()]; // null si 'es' → restaura original
+  const rtl = RTL.has(curLang());
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes = [];
   for (let n; (n = walker.nextNode());) nodes.push(n);
@@ -6011,9 +6130,12 @@ function translateRoot(root) {
     if (node.__es === undefined) node.__es = node.nodeValue;
     const key = node.__es.trim();
     if (!key) continue;
-    if (!dict) { node.nodeValue = node.__es; continue; }
+    if (!dict) { node.nodeValue = node.__es; if (pe.__i18nDir) { pe.removeAttribute('dir'); pe.__i18nDir = 0; } continue; }
     const tr = dict[key];
     node.nodeValue = tr !== undefined ? node.__es.replace(key, tr) : node.__es;
+    // RTL (hebreo/árabe): dirección por elemento, sin espejar toda la interfaz
+    if (rtl) { pe.setAttribute('dir', 'auto'); pe.__i18nDir = 1; }
+    else if (pe.__i18nDir) { pe.removeAttribute('dir'); pe.__i18nDir = 0; }
   }
   root.querySelectorAll('[title]').forEach(elx => {
     if (elx.closest('[data-noi18n]')) return;

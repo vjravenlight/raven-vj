@@ -33,9 +33,12 @@ CONTROL REMOTO DESDE EL CELULAR 📱
 
 IDIOMA 🌐
   Panel (Ctrl+Alt+T) → Render → APARIENCIA → Idioma. La interfaz está
-  en 6 idiomas: Español, English, Português, Français, Deutsch, Italiano.
-  Se traduce menús, topbar y opciones — nunca los nombres de tus clips.
-  El idioma se recuerda en cada PC (como el tema).
+  en 12 idiomas: Español, English, Português, Français, Deutsch,
+  Italiano, 日本語 (japonés), 中文 (chino), 한국어 (coreano),
+  Русский (ruso), עברית (hebreo) y العربية (árabe).
+  Hebreo y árabe se muestran de derecha a izquierda. Se traduce menús,
+  topbar y opciones — nunca los nombres de tus clips. El idioma se
+  recuerda en cada PC (como el tema).
 
 RELOJ 🕐
   Abajo a la derecha ves la hora local (útil para respetar el horario
