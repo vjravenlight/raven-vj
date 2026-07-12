@@ -29,6 +29,10 @@
 
 Un solo `index.html` autocontenido: WebGL2, Web Audio, Web MIDI, MediaRecorder, WebRTC (salida y remoto), Service Worker (offline). Sin frameworks, sin build, sin dependencias — solo [PeerJS](https://peerjs.com) auto-alojado para la señalización del remoto.
 
+## Licencia
+
+© 2026 vjravenlight — [GPL v3](LICENSE): usala, estudiala y mejorala libremente; toda modificación que distribuyas tiene que seguir siendo libre y con el código abierto. El nombre **RAVEN VJ** y ravenlight.net no forman parte de la licencia.
+
 ## Apoyar
 
 Si la usás en tus fiestas y te sirve: ☕ [cafecito.app/vjravenlight](https://cafecito.app/vjravenlight)
