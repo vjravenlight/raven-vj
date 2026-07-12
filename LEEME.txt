@@ -162,6 +162,18 @@ EXTRAS EN VIVO
     Mix / loopback, interfaz de audio).
   - El navegador avisa antes de cerrar si tenés videos cargados.
 
+MIDI — CUALQUIER CONTROLADOR 🎹
+  Funciona con el controlador MIDI que tengas. Tres caminos:
+  1. 🧭 ASISTENTE DE MAPEO (panel → MIDI): te va pidiendo "tocá el pad
+     para CAPA 1 clip 1", "mové el fader del MASTER"... y asigna solo.
+     Salteá lo que tu controlador no tenga. En 2 minutos queda mapeado.
+  2. PERFILES DE FÁBRICA: nanoKONTROL2, APC Mini y Launchpad ya vienen
+     mapeados — elegí el tuyo en el panel MIDI y listo (editable).
+  3. MIDI LEARN: botón 🎹 → click en cualquier control de la interfaz →
+     mové/tocá el control físico. Uno por uno, para ajustes finos.
+  💾 EXPORTAR / 📂 IMPORTAR: compartí tu mapeo como archivo .json con
+  otra gente que use tu mismo controlador.
+
 MIDI (nanoPAD2) — mapeo de fábrica completo
   Enchufá el nanoPAD2 antes de abrir. Con la configuración de fábrica:
   - ESCENA 1: fila de abajo → CAPA 1 (col 1-8), fila de arriba → CAPA 2.

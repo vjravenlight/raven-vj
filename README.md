@@ -11,7 +11,7 @@
 - 🎛 **Mezcla**: blend modes, crossfader A/B, fundidos, modo 1× (un clip a la vez con transiciones), efectos master y por capa con moduladores (LFO sync BPM, audio, pad XY)
 - 🥁 **Audio-rítmico**: beat detect por micrófono, BPM automático (SYNC) o TAP, BUILD/DROP para levantar la pista
 - 🤖 **Automatización**: autopilot, auto-transición por capa (beats/segundos/fin de clip, con paso por negro), animación de parámetros por clip (loops sync BPM, audio, azar), escenas, setlist programado, randomizer de FX
-- 🎹 **MIDI learn** universal + mapeo de fábrica del Korg nanoPAD2 + teclas asignables
+- 🎹 **Cualquier controlador MIDI**: asistente de mapeo guiado, perfiles de fábrica (nanoPAD2, nanoKONTROL2, APC Mini, Launchpad), MIDI learn universal, mapeos exportables/importables y teclas asignables
 - 📱 **Control remoto desde el celular**: grilla, mezcla, macros y secuenciador de bucles de 16 pasos — con roles para que varias personas controlen a la vez sin pisarse
 - 📽 **Salida**: ventana OUTPUT para proyector (sobrevive refrescos y fullscreen), multi-pantalla, mapping multi-superficie con corner-pin, máscaras, soft edge y contornos animados
 - 📐 **Resoluciones**: 16:9, vertical 9:16, cuadrada, 4:3 o personalizada (ej. `1920x600` para tiras LED)

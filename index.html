@@ -56,6 +56,15 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 /* fuera las flechitas nativas del navegador — desentonan con el tema; rueda del mouse ajusta */
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{
   -webkit-appearance:none;margin:0}
+#wizbox{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:5000;width:350px;
+  background:var(--panel);border:1px solid var(--acc);border-radius:12px;padding:14px 16px;
+  box-shadow:0 12px 50px #000c;text-align:center}
+#wizbox h4{margin:0 0 8px;font-size:11px;color:var(--acc);letter-spacing:1px;display:flex;justify-content:space-between}
+#wizbox .wsec{font-size:10px;color:var(--dim);letter-spacing:1px}
+#wizbox .wlbl{font-size:13px;margin:10px 0 14px;line-height:1.5}
+#wizbox .wlbl b{color:var(--acc);font-size:16px}
+#wizbox .wbtns{display:flex;gap:6px;justify-content:center}
+#wizbox .wnote{margin-top:10px;font-size:9px;color:var(--dim)}
 .meters{display:flex;gap:2px;align-items:flex-end;height:18px}
 .meters i{display:block;width:5px;height:2px;background:var(--acc);border-radius:1px}
 #midiBtn.learn{background:var(--acc2);border-color:var(--acc2);color:#000;font-weight:700}
@@ -2825,6 +2834,7 @@ function onMIDI(e) {
     midiPending = null; markDirty();
     return;
   }
+  if (midiWiz) { midiWizFeed(kind, ch, d1, on); return; }
   const mapped = state.mappings[key];
   const desc = mapped ? mapTargetName(mapped)
     : kind === 'note' ? nanoDescribe(d1)
@@ -2899,6 +2909,158 @@ function nanoDescribe(note) {
   if (block === 1) return (top ? 'C4' : 'C3') + '·c' + col;
   if (block === 2) return 'columna ' + (col + (top ? 8 : 0));
   return top ? 'FX ' + col : ['blackout', 'flash', 'tap', 'autopilot', '✕C1', '✕C2', '✕C3', '✕C4'][col - 1];
+}
+/* ---------------- asistente de mapeo: sirve para CUALQUIER controlador ---------------- */
+let midiWiz = null;
+function wizardSteps() {
+  const s = [];
+  for (let l = 0; l < 4; l++) for (let c = 0; c < 8; c++)
+    s.push({ id: `cell:${l}:${c}`, lbl: `pad para CAPA ${l + 1} · clip ${c + 1}`, sec: 'PADS — CAPA ' + (l + 1) });
+  for (let c = 0; c < 8; c++) s.push({ id: 'col:' + c, lbl: 'botón para COLUMNA ' + (c + 1), sec: 'COLUMNAS' });
+  for (let i = 0; i < 8; i++) s.push({ id: 'scene:' + i, lbl: 'botón para ESCENA ' + (i + 1), sec: 'ESCENAS' });
+  [['lop:0', 'fader OPACIDAD CAPA 1'], ['lop:1', 'fader OPACIDAD CAPA 2'], ['lop:2', 'fader OPACIDAD CAPA 3'],
+    ['lop:3', 'fader OPACIDAD CAPA 4'], ['master', 'fader MASTER'], ['xfade', 'fader CROSSFADER A⇄B'],
+    ['fade', 'perilla del tiempo de FADE'], ['gspeed', 'perilla VELOCIDAD global'],
+    ['x', 'perilla / eje X'], ['y', 'perilla / eje Y']]
+    .forEach(([id, lbl]) => s.push({ id, lbl, sec: 'FADERS Y PERILLAS' }));
+  [['flash', 'FLASH'], ['build', 'BUILD'], ['blackout', 'BLACKOUT'], ['tap', 'TAP'], ['dice', '🎲 FX'],
+    ['resync', '↻ RESYNC'], ['mono', 'modo 1×'], ['panic', '🚨 PÁNICO']]
+    .forEach(([id, lbl]) => s.push({ id, lbl, sec: 'MACROS' }));
+  return s;
+}
+function startMidiWizard() {
+  if (!midiOk) { toast('Conectá un controlador MIDI primero (botón 🎹)'); return; }
+  midiWiz = { steps: wizardSteps(), i: 0, done: 0, lastKey: '', lastT: 0 };
+  drawWiz();
+}
+function midiWizFeed(kind, ch, d1, on) {
+  if (kind === 'note' && !on) return;
+  const key = `${kind}:${ch}:${d1}`;
+  const now = performance.now();
+  if (key === midiWiz.lastKey) { midiWiz.lastT = now; return; } // el mismo fader sigue mandando su stream
+  if (now - midiWiz.lastT < 400) return; // respiro entre pasos
+  state.mappings[key] = midiWiz.steps[midiWiz.i].id;
+  midiWiz.lastKey = key; midiWiz.lastT = now; midiWiz.done++;
+  markDirty();
+  wizAdvance(1);
+}
+function wizAdvance(n) {
+  midiWiz.i += n;
+  if (midiWiz.i >= midiWiz.steps.length) endMidiWizard(); else drawWiz();
+}
+function wizSkipSection() {
+  const sec = midiWiz.steps[midiWiz.i].sec;
+  while (midiWiz.i < midiWiz.steps.length && midiWiz.steps[midiWiz.i].sec === sec) midiWiz.i++;
+  if (midiWiz.i >= midiWiz.steps.length) endMidiWizard(); else drawWiz();
+}
+function endMidiWizard() {
+  const n = midiWiz ? midiWiz.done : 0;
+  midiWiz = null;
+  const w = document.getElementById('wizbox');
+  if (w) w.remove();
+  toast(n ? `🧭 Mapeo listo: ${n} controles asignados a tu controlador` : 'Asistente cerrado');
+  if (document.getElementById('cpmaps')) buildCpMaps();
+}
+function drawWiz() {
+  let w = document.getElementById('wizbox');
+  if (!w) { w = el('div', ''); w.id = 'wizbox'; document.body.appendChild(w); }
+  const st = midiWiz.steps[midiWiz.i];
+  w.innerHTML = `
+    <h4>🧭 ASISTENTE DE MAPEO <span>${midiWiz.i + 1} / ${midiWiz.steps.length}</span></h4>
+    <div class="wsec">${st.sec}</div>
+    <div class="wlbl">Tocá / mové en tu controlador el<br><b>${st.lbl}</b></div>
+    <div class="wbtns">
+      <button id="wskip" class="mini">saltar control</button>
+      <button id="wskipsec" class="mini">saltar sección ▸</button>
+      <button id="wend" class="mini">✔ terminar</button>
+    </div>
+    <div class="wnote">sirve para cualquier controlador MIDI — salteá lo que el tuyo no tenga · ESC sale</div>`;
+  $('#wskip').onclick = () => wizAdvance(1);
+  $('#wskipsec').onclick = wizSkipSection;
+  $('#wend').onclick = endMidiWizard;
+}
+/* perfiles de fábrica de controladores comunes (editables después con learn) */
+const MIDI_PROFILES = {
+  nanokontrol2: {
+    name: 'Korg nanoKONTROL2', build() {
+      const m = {};
+      ['lop:0', 'lop:1', 'lop:2', 'lop:3', 'master', 'xfade', 'fade', 'gspeed'].forEach((t, i) => m['cc:0:' + i] = t);
+      ['lspd:0', 'lspd:1', 'lspd:2', 'lspd:3', 'x', 'y'].forEach((t, i) => m['cc:0:' + (16 + i)] = t);
+      for (let i = 0; i < 8; i++) m['cc:0:' + (32 + i)] = 'col:' + i;      // fila S
+      for (let i = 0; i < 8; i++) m['cc:0:' + (48 + i)] = 'scene:' + i;    // fila M
+      ['flash', 'build', 'blackout', 'tap', 'dice', 'resync', 'mono', 'panic']
+        .forEach((t, i) => m['cc:0:' + (64 + i)] = t);                     // fila R
+      return m;
+    },
+  },
+  apcmini: {
+    name: 'Akai APC Mini', build() {
+      const m = {};
+      for (let l = 0; l < 4; l++) for (let c = 0; c < 8; c++) m['note:0:' + (56 - l * 8 + c)] = `cell:${l}:${c}`;
+      for (let c = 0; c < 8; c++) m['note:0:' + (24 + c)] = 'col:' + c;
+      for (let i = 0; i < 8; i++) m['note:0:' + (16 + i)] = 'scene:' + i;
+      ['flash', 'build', 'blackout', 'tap', 'dice', 'resync', 'mono', 'panic']
+        .forEach((t, i) => m['note:0:' + (8 + i)] = t);
+      for (let i = 0; i < 4; i++) m['note:0:' + i] = 'deck:' + i;
+      for (let i = 0; i < 4; i++) m['note:0:' + (4 + i)] = 'lclear:' + i;
+      ['lop:0', 'lop:1', 'lop:2', 'lop:3', 'master', 'xfade', 'fade', 'gspeed', 'x']
+        .forEach((t, i) => m['cc:0:' + (48 + i)] = t);
+      for (let i = 0; i < 8; i++) m['note:0:' + (82 + i)] = 'scene:' + i;  // botones laterales
+      return m;
+    },
+  },
+  launchpad: {
+    name: 'Novation Launchpad Mini/MK1', build() {
+      const m = {};
+      for (let l = 0; l < 4; l++) for (let c = 0; c < 8; c++) m['note:0:' + (l * 16 + c)] = `cell:${l}:${c}`;
+      for (let c = 0; c < 8; c++) m['note:0:' + (64 + c)] = 'col:' + c;
+      for (let i = 0; i < 8; i++) m['note:0:' + (80 + i)] = 'scene:' + i;
+      ['flash', 'build', 'blackout', 'tap', 'dice', 'resync', 'mono', 'panic']
+        .forEach((t, i) => m['note:0:' + (96 + i)] = t);
+      for (let i = 0; i < 4; i++) m['note:0:' + (112 + i)] = 'deck:' + i;
+      for (let i = 0; i < 4; i++) m['note:0:' + (116 + i)] = 'lclear:' + i;
+      [8, 24, 40, 56, 72, 88, 104, 120].forEach((n, i) => m['note:0:' + n] =
+        ['flash', 'build', 'blackout', 'tap', 'dice', 'resync', 'mono', 'panic'][i]); // columna derecha
+      return m;
+    },
+  },
+};
+function loadMidiProfile(key) {
+  const p = MIDI_PROFILES[key];
+  if (!p) return;
+  Object.assign(state.mappings, p.build());
+  markDirty();
+  toast('🎹 Perfil ' + p.name + ' cargado — editalo en la lista o pisalo con MIDI learn');
+}
+function exportMidiMaps() {
+  const data = { app: 'ravenvj-midimap', v: 1, mappings: state.mappings, nanoDefaults: state.nanoDefaults };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = 'ravenvj-mapeo-midi.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('💾 Mapeos exportados — compartilos con quien quieras');
+}
+function importMidiMaps() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json,application/json';
+  inp.onchange = () => {
+    const f = inp.files[0];
+    if (!f) return;
+    f.text().then(tx => {
+      const d = JSON.parse(tx);
+      const maps = d.app === 'ravenvj-midimap' ? d.mappings : (d.mappings || d);
+      if (!maps || typeof maps !== 'object' || Array.isArray(maps)) throw 0;
+      const n = Object.keys(maps).length;
+      Object.assign(state.mappings, maps);
+      if (typeof d.nanoDefaults === 'boolean') state.nanoDefaults = d.nanoDefaults;
+      markDirty();
+      if (document.getElementById('cpmaps')) buildCpTab('midi');
+      toast(`📂 ${n} mapeos importados`);
+    }).catch(() => toast('Ese archivo no parece un mapeo MIDI de RAVEN VJ'));
+  };
+  inp.click();
 }
 function applyTarget(id, val, kind, on) {
   const [t, a, b] = id.split(':');
@@ -3612,6 +3774,7 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.altKey && (e.key === 't' || e.key === 'T')) {
     e.preventDefault(); togglePanel(); return;
   }
+  if (e.key === 'Escape' && midiWiz) { endMidiWizard(); return; }
   if (e.key === 'Escape') { togglePanel(false); return; }
   // learn de teclado: en modo learn, elegís un control y apretás una tecla
   if (midiLearn && midiPending && !e.ctrlKey && !e.altKey && e.key !== 'Escape') {
@@ -3777,11 +3940,24 @@ function buildCpTab(id) {
       <div class="cph">MONITOR EN VIVO (últimos 8)</div>
       <div id="cpmidilog" style="font-family:Consolas,monospace;font-size:11px;color:var(--acc);
         padding:7px 10px;background:#0a0a0d;border-radius:6px;min-height:76px;white-space:pre">(sin actividad)</div>
+      <div class="cph">CUALQUIER CONTROLADOR</div>
+      <div class="cprow"><b>Asistente de mapeo</b><span>
+        <button id="cpwiz" class="mini">🧭 mapear mi controlador…</button></span></div>
+      <div class="cprow"><b>Perfiles de fábrica</b><span>
+        <select id="cpprof"><option value="">elegir controlador…</option>${Object.entries(MIDI_PROFILES).map(([k, p]) =>
+          `<option value="${k}">${p.name}</option>`).join('')}</select></span></div>
+      <div class="cprow"><b>Compartir mapeos</b><span style="display:flex;gap:6px">
+        <button id="cpmexp" class="mini">💾 exportar</button>
+        <button id="cpmimp" class="mini">📂 importar</button></span></div>
       <div class="cph">MAPEOS DE MIDI LEARN
         <button id="cpmapsclear" class="mini" style="margin-left:8px">borrar todos</button></div>
       <div id="cpmaps"></div>
       ${nanoMapHTML()}`;
     $('#cpmidiretry').onclick = midiInit;
+    $('#cpwiz').onclick = () => { togglePanel(false); startMidiWizard(); };
+    $('#cpprof').onchange = e => { if (e.target.value) { loadMidiProfile(e.target.value); buildCpTab('midi'); } };
+    $('#cpmexp').onclick = exportMidiMaps;
+    $('#cpmimp').onclick = importMidiMaps;
     $('#cpmapsclear').onclick = () => { state.mappings = {}; markDirty(); buildCpMaps(); };
     const nd = el('div', 'cprow');
     nd.innerHTML = `<b>Mapa de fábrica nanoPAD2</b><span><button id="cpnanodef" class="mini${state.nanoDefaults ? ' on' : ''}">${state.nanoDefaults ? 'ON' : 'off'}</button></span>`;
