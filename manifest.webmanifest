@@ -1,0 +1,12 @@
+{
+  "name": "RAVEN VJ",
+  "short_name": "RAVEN VJ",
+  "description": "Mixer de video para VJing en vivo: capas, clips MP4, generadores GLSL, efectos, MIDI y salida fullscreen.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0c0c0e",
+  "theme_color": "#0c0c0e",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

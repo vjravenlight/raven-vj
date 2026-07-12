@@ -1,0 +1,255 @@
+RAVEN VJ — mixer de video para VJing en vivo, portable
+====================================================
+
+CÓMO ABRIR
+  Doble click en index.html (Chrome o Edge). No requiere instalar nada.
+  Podés copiar esta carpeta a un pendrive y usarla en cualquier PC.
+
+CARGAR CLIPS (MP4, WebM y GIFs animados)
+  - Arrastrá archivos sobre una celda (o varios: llenan la fila hacia la derecha).
+  - Arrastralos sobre el fondo o usá "+ VIDEOS": llenan todas las celdas vacías.
+  - "＋" en las columnas agrega más columnas (todas las que necesites).
+  - REORDENAR: arrastrá cualquier celda (video, generador, texto, gif)
+    a otra celda y se intercambian.
+
+CONTROL REMOTO DESDE EL CELULAR 📱  
+  Panel (Ctrl+Alt+T) → pestaña Remoto → ACTIVAR: aparece un código y un QR.
+  En el celu: www.ravenlight.net/ravenvj/remote.html (o escaneá el QR).
+  4 pestañas:
+  - 🎛 GRILLA: celdas, columnas, escenas y decks A/B/C/D.
+  - 🎚 MEZCLA: pad XY, crossfader, master, FADE, velocidad global y
+    faders de opacidad + velocidad POR CAPA.
+  - 🥁 BUCLES: secuenciador de 16 pasos × 4 filas. Cada fila elige qué
+    dispara (columna, escena, FLASH, 🎲) y los pasos encendidos suenan
+    en loop al BPM de la compu (llega solo; también podés cambiarlo).
+    División: negras / corcheas / semicorcheas. Se guarda en el celu.
+  - ⚡ MACROS: BUILD, FLASH, TAP, RESYNC, 🎲, BLACKOUT, PÁNICO.
+  VARIAS PERSONAS A LA VEZ sin pisarse: arriba de todo cada celu elige
+  su ROL (control total / solo capa 1-4 / solo secuenciador / solo
+  macros) y la interfaz muestra únicamente lo suyo.
+  El remoto toma los COLORES del tema que tengas puesto en la compu.
+  Necesita internet solo para conectar (sirve el hotspot del celu);
+  después el control va directo por WiFi.
+
+TECLAS ASIGNABLES ⌨
+  El mismo learn del MIDI sirve para el teclado: activá 🎹, tocá un
+  control de la UI y apretá una tecla. Se administra en el panel MIDI.
+
+GENERADORES (34 presets)
+  Arrastrá cualquier generador del panel inferior izquierdo a una celda.
+  Reaccionan al audio (bass/mid/high/beat) y al pad XY.
+  Nuevos: Metaballs, Aurora, Fuego vivo, Matrix, Rayos ⚡, Sonar,
+  Damero, Cintas, Starburst, Plexo, Túnel² y Rombos 3D.
+
+RESOLUCIÓN DE LA COMPOSICIÓN
+  Menú de arriba (o panel Render / Propiedades → COMPOSICIÓN):
+  16:9 (960/1280/1920), VERTICAL 9:16 (540×960, 720×1280, 1080×1920),
+  CUADRADA (720×720, 1080×1080), 4:3 (1024×768) y "✏ personalizada…"
+  donde escribís lo que quieras (ej: 1920x600 para una pantalla LED).
+  La resolución se guarda con el set y la salida siempre se adapta.
+
+MODO 1× (MONO) — un solo clip a la vez
+  El botón 1× al lado del FADE: dispares la celda que dispares, se
+  reproduce UN solo clip y cada disparo reemplaza al anterior con la
+  transición del FADE. Ideal si la PC se pone pesada con varios videos
+  a la vez, o si querés VJear simple: un video → transición → otro.
+  Apagalo para volver al modo de capas (los clips se superponen).
+
+DECKS (bancos de grilla A/B/C/D)
+  Los botones A B C D en la esquina de la grilla son 4 grillas
+  independientes (como los "discos" de un DJ): armá tu set
+  psy en A, techno en B, visuales chill en C... Al cambiar de deck,
+  lo que está sonando SIGUE sonando. Los 4 se guardan en el set.
+
+MEZCLA
+  - Click en una celda = disparar con fundido (tiempo = perilla FADE).
+  - CLICK DERECHO = menú de opciones del programa: disparar, previa,
+    cargar video en esa celda, poner/editar texto, vaciar celda.
+    También en las escenas (guardar/disparar/vaciar), en los controles
+    de capa, y en el fondo (menú general con PÁNICO, OUTPUT, sets...).
+  - Números de columna (o teclas 1-9,0) = disparar la columna completa.
+  - Cada capa: blend mode, opacidad, 〰 modulador, velocidad, ✕ (fade a negro).
+
+EFECTOS
+  "＋ agregar efecto" en el rack. Cada parámetro tiene modulador:
+  lfo1/lfo2 (sincronizados al BPM), bass/mid/high/beat (audio), x/y (pad XY).
+
+AUDIO-RÍTMICO
+  Botón 🎤 AUDIO: usa el micrófono. BPM con TAP (o tecla T).
+
+AUTOPILOT
+  AUTO: SECUENCIA (columnas en orden), COLUMNA AZAR, CAOS (clips al azar
+  por capa) o ESCENAS (rota tus snapshots guardados), cada N beats.
+
+AUTO-TRANSICIÓN POR CAPA
+  Cada capa tiene su propia automatización (última fila del control):
+  - AUTO: avanza al siguiente clip de esa capa cada 2-32 beats (♪, va
+    con el BPM), cada 2-30 segundos, o al terminar el clip (fin clip).
+  - ▸ / 🎲: orden secuencial o al azar.
+  - ⤓0: transición con brillo a cero — en vez de fundido cruzado, la
+    capa baja a negro y recién ahí entra el clip siguiente.
+  Todo se guarda en el set y en las escenas.
+
+ESCENAS (snapshots)
+  Los botones ESC 1-8 guardan y disparan fotos completas del estado:
+  clips activos, opacidades, blend modes, efectos con sus parámetros,
+  XY y master. Click derecho (o Shift+F1-F8) = guardar; click (o F1-F8)
+  = disparar con fundido. Se guardan dentro del JSON del set.
+
+ANIMACIÓN DE PARÁMETROS (por clip) 🆕
+  Propiedades del clip (doble click en la celda) → sección ANIMACIÓN:
+  elegí un parámetro (escala, posición X/Y, rotación — y P1/P2 si es
+  generativo) y animalo en loop:
+  - 〰 LOOP: onda sin/tri/saw/sqr sincronizada al BPM, ciclo de ½ a
+    16 beats — bucles infinitos que respiran con el tempo.
+  - 🔊 GRAVES/MEDIOS/AGUDOS o 💥 BEAT: el parámetro sigue el audio.
+  - 🎲 AZAR: salta a un valor nuevo cada ciclo.
+  CANTIDAD regula cuánto se mueve alrededor del valor del slider.
+  Cada parámetro tiene su propia animación (se marcan con ●), todas a
+  la vez si querés. Se guarda con el clip en el set.
+
+AUTOMATIZACIONES
+  - Cada parámetro de efecto tiene modulador: lfo1/lfo2 (sync BPM),
+    bass/mid/high/beat (audio), x/y (pad XY del nanoPAD2).
+  - El botón 〰 de cada capa modula su OPACIDAD (off → bass → mid →
+    high → lfo1 → lfo2 → beat).
+  - 🎲 randomiza los parámetros de los efectos activos; el selector
+    de al lado lo hace solo cada 4/8/16/32 beats.
+  - SYNC detecta el BPM automáticamente del audio (dejá sonar la
+    música unos segundos con 🎤 AUDIO activo).
+
+GRABAR TU SET
+  ⏺ REC graba la salida (con el audio del mic si está activo) y al
+  parar descarga un .webm listo para subir.
+
+CROSSFADER A/B
+  El slider A⇄B mezcla entre el grupo A (capas 1-2) y el B (capas 3-4),
+  En el centro se ven los dos. Mapealo al
+  XY del nanoPAD2 con MIDI learn y tenés crossfader táctil.
+
+VELOCIDAD POR CAPA
+  El slider chico de cada capa va de 0% a 300%: cambia la velocidad de
+  los videos Y de los generadores. En 0 la capa queda CONGELADA (freeze).
+
+EFECTO POR CAPA
+  La última fila de cada capa tiene su propio efecto (además del rack
+  master): elegí el FX y ajustá sus 2 parámetros. Ideal: Kaleido solo
+  en la capa del video mientras las demás quedan limpias.
+
+TEXTO ANIMADO
+  Click derecho en una celda de texto → "Animación": PULSO (late con el
+  beat), SCROLL (marquesina), ONDA (letras bailando), 3D (gira con
+  profundidad), ZOOM (vuela hacia la cámara).
+
+SETLIST 📋
+  Panel → Setlist: encadená escenas con minutos ("Escena 1 × 15 min →
+  Escena 3 × 40 min…"), START y la noche queda programada.
+
+TEXTO EN PANTALLA
+  Arrastrá el tile 💬 Texto a una celda y escribí lo que quieras
+  (nombre de la fiesta, drops). Late con el beat y cicla colores.
+  Se guarda dentro del JSON como cualquier clip.
+
+PÁNICO
+  Botón PÁNICO (o tecla P): apaga todas las capas con fade, desactiva
+  efectos y autopilot, y resetea el master. Para cuando se te fue de
+  las manos.
+
+EXTRAS EN VIVO
+  - Si el driver de video se resetea, la app se recupera sola.
+  - La pantalla no se apaga mientras VJeás (wake lock).
+  - Con 🎤 AUDIO activo aparece un selector de entrada (mic, Stereo
+    Mix / loopback, interfaz de audio).
+  - El navegador avisa antes de cerrar si tenés videos cargados.
+
+MIDI (nanoPAD2) — mapeo de fábrica completo
+  Enchufá el nanoPAD2 antes de abrir. Con la configuración de fábrica:
+  - ESCENA 1: fila de abajo → CAPA 1 (col 1-8), fila de arriba → CAPA 2.
+  - ESCENA 2: fila de abajo → CAPA 3, fila de arriba → CAPA 4.
+  - ESCENA 3: fila de abajo → dispara columnas 1-8, arriba → columnas 9-16.
+  - ESCENA 4: abajo = macros (blackout, flash, tap, autopilot,
+    apagar capas 1-4) · arriba = prender/apagar efectos 1-8 del rack.
+  - Pad XY → X/Y (moduladores de efectos y generadores).
+  El monitor verde al lado del botón MIDI muestra lo último que llega
+  (♪nota o CC), útil para chequear que el controlador esté hablando.
+  Para remapear cualquier cosa: botón 🎹 MIDI → click en un control → mové el pad.
+
+SALIDA (monitor extendido)
+  Botón 🖥 OUTPUT abre la ventana de salida. Apretá F (o doble click)
+  ahí para pantalla completa. La UI queda en tu monitor con PREVIA y
+  SALIDA. En la versión online, si refrescás la app la salida se
+  reconecta sola.
+
+  ELEGIR EN QUÉ PANTALLA SALE: panel (Ctrl+Alt+T) → Render → MONITOR
+  DE SALIDA → 🔍 detectar (aceptá el permiso). Te lista las pantallas
+  con resolución y cuál es la PRINCIPAL; con 👁 ver te muestra un
+  número gigante en cada una para identificarla, y con "usar" elegís
+  a cuál va el OUTPUT. Si no elegís, va sola a la primera extendida.
+  "＋ ventana de salida" abre salidas extra (varias pantallas a la vez).
+
+  MULTI-PROYECTOR: detectá las pantallas y cada una tiene su botón
+  "🖥 salida acá" — una ventana de salida por proyector (F en cada una
+  para fullscreen). Después, en el MAPPING, poné una superficie con
+  fuente "mitad izq" y otra "mitad der" (o cuartos) y repartís la
+  composición entre los proyectores. Botón 🆕 = set nuevo de cero.
+  La ventana ⚙ PROPIEDADES se puede ACOPLAR al panel de abajo (botón
+  ⇱ en su barra) o dejar flotante — el layout se recuerda.
+
+BARRA DE MENÚS
+  Arriba de todo: Archivo (sets), Composición (build/flash/blackout/
+  pánico/1×), Capas, Entrada (videos/cámara/audio/MIDI), Salida
+  (output/pantallas/mapping/REC), Ver (pestañas del panel) y Ayuda.
+  Los atajos aparecen a la derecha de cada opción.
+
+MAPPING MULTI-SUPERFICIE
+  Menú Salida → 🗺 Editor de mapping: se abre una VENTANA FLOTANTE con
+  la salida en grande. Ahí agregás superficies (hasta 8), cada una
+  proyecta una región de la composición (completa, mitades, cuartos):
+  arrastrás las esquinas para deformar, arrastrás por adentro para
+  mover, y click sobre una superficie para elegirla. Sirve para:
+  enderezar proyección torcida, partir la imagen entre 2 pantallas,
+  mapear cajas o paredes.
+
+GENERADORES CONFIGURABLES 🧪
+  - Click derecho en una celda generativa → "⚙ Parámetros": cada clip
+    puede tener sus propios P1 (velocidad) y P2 (tono) fijos, o seguir
+    el pad XY como siempre.
+  - CREAR LOS TUYOS: primer tile del estante (🧪 CREAR…) o menú
+    Entrada → Crear generador. Elegís por bloques: BASE (plasma,
+    anillos, rayas, ruido, voronoi, túnel) + DEFORMACIÓN (kaleido,
+    espejo, giro, onda, zoom al beat) + COLOR (arcoíris, duotono,
+    fuego, UV) + REACCIÓN (bajo, beat, agudos), con vista en vivo en
+    el monitor PREVIA. Le ponés nombre, queda en el estante y viaja
+    dentro del JSON del set. Click derecho en el tile: editar/eliminar.
+
+CÁMARA / CAPTURADORA EN VIVO 📷
+  Arrastrá el tile 📷 Cámara a una celda (o click derecho → Cámara) y
+  elegí el dispositivo: webcam o CAPTURADORA HDMI (entra como cámara —
+  podés meter la señal de otra laptop o consola). Se dispara como
+  cualquier clip, con efectos, capas y transiciones.
+
+GUARDAR / ABRIR SET
+  💾 guarda todo en un JSON (grilla, efectos, mapeos MIDI, BPM...).
+  📂 lo abre. Los videos no viajan dentro del JSON: usá 🔗 RELINK y
+  seleccioná los archivos (los matchea por nombre). La sesión también se
+  autoguarda sola en el navegador.
+
+MODO PSY 🍄 (recetas para la fiesta)
+  - BUILD/DROP: mantené ⚡ BUILD (o la BARRA ESPACIADORA, o un pad
+    mapeado): zoom + strobe acelerando + brillo subiendo. Soltalo en el
+    drop: flash + downbeat re-anclado. LA herramienta del subidón.
+  - Generadores psy: Mandala 🕉, Zoom Fractal 🌀 (zoom infinito),
+    Psy Túnel 🔯, Flor de Vida 🌸, Hipnosis 😵‍💫.
+  - Efecto "UV Neón": pinta cualquier video con paleta fluo/blacklight.
+  - El generador 💬 Texto acepta ॐ y emojis (🍄 👽 🔱).
+  - Receta mandala: cualquier video + efecto Kaleido con "rotación"
+    modulada por lfo1 = mandala giratorio del video.
+  - Receta bombo: efecto Zoom Pulso con "cantidad" alta = la imagen
+    golpea con el kick. Strobe con velocidad modulada por "beat".
+  - Túnel infinito: Feedback (cantidad ~0.7, zoom ~0.5) sobre
+    cualquier generador.
+  - SYNC clava el BPM del set (psytrance ≈ 138-150).
+
+ATAJOS
+  1-9,0 columnas · T tap · B blackout · F flash (mantener) ·
+  ESPACIO build/drop · P pánico · F1-F8 escenas · Ctrl+Alt+T panel

@@ -1,0 +1,454 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>RAVEN VJ — Remoto</title>
+<style>
+:root{--bg:#0d0705;--panel:#160e08;--panel2:#1e130b;--line:#3a2416;--txt:#f0e4d8;--dim:#9a7d64;
+  --acc:#ff7a1a;--acc2:#ff3d54;--grad:linear-gradient(135deg,#ff2d00,#ff8a00 55%,#ffd000)}
+*{box-sizing:border-box;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.3 system-ui,sans-serif;
+  min-height:100%;overflow-x:hidden;touch-action:manipulation;
+  color-scheme:dark;accent-color:var(--acc)}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{
+  -webkit-appearance:none;margin:0}
+h1{font-size:17px;margin:12px 14px 8px;letter-spacing:1px}
+h1 b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+#login{padding:22px 18px;max-width:380px;margin:0 auto;text-align:center}
+#login input{width:100%;font-size:28px;text-align:center;letter-spacing:8px;padding:12px;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;color:#fff;text-transform:uppercase}
+#login button{width:100%;margin-top:14px;font-size:18px;padding:14px;background:var(--grad);
+  border:none;border-radius:10px;font-weight:800;color:#000}
+#st{color:var(--dim);margin-top:12px;min-height:20px}
+#app{display:none;flex-direction:column;gap:8px;padding:8px;padding-bottom:26px}
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px}
+.sec h3{margin:0 0 6px;font-size:10px;color:var(--dim);letter-spacing:1px}
+#topline{display:flex;gap:6px;align-items:center;padding:0 4px}
+#rol{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--txt);
+  padding:7px 8px;font-size:13px}
+#conn{font-size:10px;color:var(--dim)}
+#conn.ok{color:var(--acc)}
+#rtabs{display:flex;gap:4px}
+#rtabs button{flex:1;padding:9px 0;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;color:var(--dim);font-weight:700;font-size:12px}
+#rtabs button.on{background:var(--grad);color:#000;border-color:transparent}
+.tab{display:none;flex-direction:column;gap:8px}
+.tab.on{display:flex}
+#grid{display:flex;flex-direction:column;gap:5px}
+.row{display:flex;gap:4px}
+.rowlbl{width:28px;font-size:10px;color:var(--dim);display:flex;align-items:center;justify-content:center}
+.cellb{flex:1;min-width:0;height:50px;background:#0c0c10;border:1px solid var(--line);border-radius:7px;
+  color:#bbb;font-size:9px;overflow:hidden;padding:2px}
+.cellb.gen{color:var(--acc);border-color:color-mix(in srgb,var(--acc) 35%,transparent)}
+.cellb.video,.cellb.gif{color:#7fc4ff}
+.cellb.text{color:var(--acc2)}
+.cellb.cam{color:#7fc4ff}
+.cellb:active{background:var(--grad);color:#000}
+.row.dim{opacity:.3;pointer-events:none}
+.cols,#decks,#scenes{display:flex;gap:4px}
+.cols button,#decks button,#scenes button{flex:1;height:38px;background:#0c0c10;
+  border:1px solid var(--line);border-radius:7px;color:var(--dim);font-weight:700}
+.cols button:active,#scenes button:active,#decks button:active{background:var(--grad);color:#000}
+#scenes button.has{color:var(--acc);border-color:var(--acc)}
+#decks button.cur{background:var(--grad);color:#000}
+#xy{position:relative;height:170px;background:#0c0c10;border:1px solid var(--line);border-radius:10px;touch-action:none}
+#xydot{position:absolute;width:22px;height:22px;border-radius:50%;background:var(--acc2);
+  transform:translate(-50%,-50%);left:50%;top:50%;box-shadow:0 0 14px var(--acc2);pointer-events:none}
+.fads label{display:flex;align-items:center;gap:8px;margin:7px 2px;font-size:11px;color:var(--dim)}
+.fads label b{width:58px;font-weight:600}
+.fads input{flex:1;height:32px}
+input[type=range]{-webkit-appearance:none;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:8px;background:var(--line);border-radius:4px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-9px;border-radius:50%;background:var(--acc)}
+.macros{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.macros button{height:52px;border-radius:10px;border:1px solid var(--line);background:#0c0c10;
+  color:#fff;font-weight:800;font-size:14px}
+#mBuild{border-color:var(--acc);color:var(--acc)}
+#mBuild.on,#mBuild:active{background:var(--grad);color:#000}
+#mFlash:active{background:#fff;color:#000}
+#mBlack.on{background:#f33;color:#fff;border-color:#f33}
+#mPanic{border-color:#f90;color:#fb6}
+/* secuenciador */
+#seqtrans{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--dim);flex-wrap:wrap}
+#seqtrans button{padding:8px 14px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;
+  color:var(--txt);font-weight:800}
+#seqPlay.on{background:var(--grad);color:#000}
+#seqtrans input{width:64px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  color:#fff;padding:6px;text-align:center;font-size:14px}
+#seqtrans select,.seqrow select{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  color:var(--txt);padding:5px;font-size:11px}
+.seqrow{display:flex;gap:4px;align-items:center;margin:5px 0}
+.seqrow select{width:88px}
+.steps{flex:1;display:grid;grid-template-columns:repeat(16,1fr);gap:2px}
+.stp{aspect-ratio:1;min-width:0;border-radius:4px;border:1px solid var(--line);background:#0c0c10;padding:0}
+.stp:nth-child(4n+1){border-left-color:var(--dim)}
+.stp.on{background:var(--acc);border-color:var(--acc)}
+.stp.now{box-shadow:0 0 0 2px var(--acc2) inset}
+.stp.on.now{background:var(--acc2)}
+</style>
+<h1>RAVEN<b>VJ</b> · remoto <span id="conn">●</span></h1>
+<div id="login">
+  <p>Código que muestra la compu<br>(panel Ctrl+Alt+T → 📱 Remoto):</p>
+  <input id="code" maxlength="4" placeholder="····" autocomplete="off">
+  <button id="go">CONECTAR</button>
+  <div id="st"></div>
+</div>
+<div id="app">
+  <div id="topline">
+    <select id="rol">
+      <option value="todo">🎛 Control total</option>
+      <option value="c1">Solo CAPA 1</option>
+      <option value="c2">Solo CAPA 2</option>
+      <option value="c3">Solo CAPA 3</option>
+      <option value="c4">Solo CAPA 4</option>
+      <option value="seq">🥁 Solo secuenciador</option>
+      <option value="macros">⚡ Solo macros</option>
+    </select>
+  </div>
+  <div id="rtabs">
+    <button data-rt="grilla" class="on">🎛 Grilla</button>
+    <button data-rt="mezcla">🎚 Mezcla</button>
+    <button data-rt="seq">🥁 Bucles</button>
+    <button data-rt="macros">⚡ Macros</button>
+  </div>
+
+  <div class="tab on" data-tab="grilla">
+    <div class="sec"><h3>DECKS</h3><div id="decks"></div></div>
+    <div class="sec"><h3>GRILLA — tocá para disparar</h3><div id="grid"></div>
+      <div style="height:6px"></div><div class="cols" id="cols"></div></div>
+    <div class="sec" id="scenesSec"><h3>ESCENAS</h3><div id="scenes"></div></div>
+  </div>
+
+  <div class="tab" data-tab="mezcla">
+    <div class="sec" id="xySec"><h3>PAD XY</h3><div id="xy"><div id="xydot"></div></div></div>
+    <div class="sec fads" id="globFads"><h3>GLOBAL</h3>
+      <label><b>A⇄B</b><input data-tgt="xfade" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+      <label><b>MASTER</b><input data-tgt="master" type="range" min="0" max="1" step="0.01" value="1"></label>
+      <label><b>FADE</b><input data-tgt="fade" type="range" min="0" max="1" step="0.01" value="0.2"></label>
+      <label><b>VELOC.</b><input data-tgt="gspeed" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+    </div>
+    <div class="sec fads"><h3>CAPAS — opacidad · velocidad</h3><div id="layFads"></div></div>
+  </div>
+
+  <div class="tab" data-tab="seq">
+    <div class="sec">
+      <h3>SECUENCIADOR — bucles al tempo</h3>
+      <div id="seqtrans">
+        <button id="seqPlay">▶</button>
+        <span>BPM</span><input id="seqBpm" type="number" min="40" max="240" value="130">
+        <select id="seqDiv">
+          <option value="1">♩ negras</option>
+          <option value="2" selected>♪ corcheas</option>
+          <option value="4">♬ semicorcheas</option>
+        </select>
+        <button id="seqClear" style="font-size:11px">limpiar</button>
+      </div>
+      <div id="seqrows"></div>
+      <div style="font-size:10px;color:var(--dim);margin-top:4px">
+        cada fila elige QUÉ dispara · los pasos encendidos suenan en loop · el BPM llega solo de la compu</div>
+    </div>
+  </div>
+
+  <div class="tab" data-tab="macros">
+    <div class="sec macros"><h3 style="grid-column:1/3">MACROS</h3>
+      <button id="mBuild">⚡ BUILD (mantener)</button>
+      <button id="mFlash">FLASH</button>
+      <button id="mTap">TAP</button>
+      <button id="mResync">↻ RESYNC</button>
+      <button id="mDice">🎲 FX</button>
+      <button id="mBlack">BLACKOUT</button>
+      <button id="mPanic" style="grid-column:1/3">🚨 PÁNICO</button>
+    </div>
+  </div>
+</div>
+<script src="peerjs.min.js"></script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+let conn = null, layout = null;
+const send = m => { if (conn && conn.open) { try { conn.send(m); } catch (e) { } } };
+const tgt = (id, val, on, kind) => send({ t: 'tgt', id, val, on: on === undefined ? 1 : on, kind: kind || 'cc' });
+
+const params = new URLSearchParams(location.search);
+if (params.get('r')) $('#code').value = params.get('r').toUpperCase();
+$('#go').onclick = connect;
+$('#code').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+
+/* rol: para que varias personas conectadas no se pisen */
+const store = JSON.parse(localStorage.getItem('ravenvj_remote') || '{}');
+let rol = store.rol || 'todo';
+$('#rol').value = rol;
+$('#rol').onchange = e => { rol = e.target.value; store.rol = rol; save(); applyRol(); };
+function save() { try { localStorage.setItem('ravenvj_remote', JSON.stringify(store)); } catch (e) { } }
+function may(what) { // qué puede tocar este rol
+  if (rol === 'todo') return true;
+  if (rol.startsWith('c')) return what === 'grilla' || what === 'mezcla' || what === 'capa' + rol[1];
+  return rol === what; // seq | macros
+}
+function applyRol() {
+  const tabs = { grilla: may('grilla'), mezcla: may('mezcla'), seq: may('seq') || rol === 'todo', macros: may('macros') || rol === 'todo' };
+  if (rol === 'seq') { tabs.grilla = tabs.mezcla = tabs.macros = false; tabs.seq = true; }
+  if (rol === 'macros') { tabs.grilla = tabs.mezcla = tabs.seq = false; tabs.macros = true; }
+  document.querySelectorAll('#rtabs button').forEach(b => {
+    b.style.display = tabs[b.dataset.rt] ? '' : 'none';
+  });
+  const cur = document.querySelector('#rtabs button.on');
+  if (cur && cur.style.display === 'none') {
+    const first = [...document.querySelectorAll('#rtabs button')].find(b => b.style.display !== 'none');
+    if (first) setTab(first.dataset.rt);
+  }
+  // dentro de grilla: solo su fila si es rol de capa
+  document.querySelectorAll('#grid .row').forEach(r => {
+    const l = +r.dataset.l;
+    r.classList.toggle('dim', rol.startsWith('c') && rol !== 'c' + (l + 1));
+  });
+  const soloCapa = rol.startsWith('c');
+  $('#scenesSec').style.display = soloCapa ? 'none' : '';
+  $('#cols').style.display = soloCapa ? 'none' : '';
+  $('#decks').parentElement.style.display = soloCapa ? 'none' : '';
+  $('#xySec').style.display = soloCapa ? 'none' : '';
+  $('#globFads').style.display = soloCapa ? 'none' : '';
+  document.querySelectorAll('#layFads label').forEach(lb => {
+    lb.style.display = soloCapa && lb.dataset.l !== rol[1] ? 'none' : '';
+  });
+}
+function setTab(t) {
+  document.querySelectorAll('#rtabs button').forEach(b => b.classList.toggle('on', b.dataset.rt === t));
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
+}
+document.querySelectorAll('#rtabs button').forEach(b => b.onclick = () => setTab(b.dataset.rt));
+
+function connect() {
+  const code = $('#code').value.trim().toLowerCase();
+  if (code.length < 3) { $('#st').textContent = 'poné el código de 4 letras'; return; }
+  $('#st').textContent = 'conectando…';
+  const peer = new Peer();
+  peer.on('error', e => { $('#st').textContent = 'error: ' + e.type + ' — ¿la compu tiene el remoto activo?'; });
+  peer.on('open', () => {
+    conn = peer.connect('ravenvj-' + code, { reliable: true });
+    conn.on('open', () => {
+      $('#login').style.display = 'none';
+      $('#app').style.display = 'flex';
+      $('#conn').textContent = '● conectado';
+      $('#conn').classList.add('ok');
+      applyRol();
+    });
+    conn.on('data', d => {
+      if (!d || d.t !== 'layout') return;
+      layout = d;
+      applyThemeBpm(d);
+      // reconstruir la UI solo si algo cambió (si no, roba toques cada 3s)
+      const key = JSON.stringify([d.grid, d.cols, d.scenes, d.deck]);
+      if (key !== renderLayout._key) { renderLayout._key = key; renderLayout(d); }
+    });
+    conn.on('close', () => {
+      $('#conn').textContent = '● desconectado';
+      $('#conn').classList.remove('ok');
+      $('#st').textContent = 'se cortó — recargá para reconectar';
+      $('#app').style.display = 'none';
+      $('#login').style.display = 'block';
+    });
+  });
+}
+function applyThemeBpm(d) {
+  // tema sincronizado con la sesión de la compu
+  if (d.theme) {
+    const rs = document.documentElement.style;
+    for (const [k, v] of Object.entries(d.theme.vars || {})) rs.setProperty('--' + k, v);
+    if (d.theme.grad) rs.setProperty('--grad', d.theme.grad);
+  }
+  if (d.bpm && !seq.bpmTouched && d.bpm !== seq.bpm) {
+    seq.bpm = d.bpm; $('#seqBpm').value = d.bpm;
+    if (seq.on) seqRestart();
+  }
+}
+function renderLayout(d) {
+  const dk = $('#decks');
+  dk.innerHTML = '';
+  ['A', 'B', 'C', 'D'].forEach((nm, i) => {
+    const b = document.createElement('button');
+    b.textContent = nm;
+    if (i === d.deck) b.className = 'cur';
+    b.onclick = () => tgt('deck:' + i, 1, 1, 'note');
+    dk.appendChild(b);
+  });
+  const g = $('#grid');
+  g.innerHTML = '';
+  for (let l = d.grid.length - 1; l >= 0; l--) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.dataset.l = l;
+    const lb = document.createElement('span'); lb.className = 'rowlbl'; lb.textContent = 'C' + (l + 1);
+    row.appendChild(lb);
+    d.grid[l].forEach((c, ci) => {
+      const b = document.createElement('button');
+      b.className = 'cellb ' + c.k;
+      b.textContent = c.n || '·';
+      b.onclick = () => send({ t: 'cell', l, c: ci });
+      row.appendChild(b);
+    });
+    g.appendChild(row);
+  }
+  const cols = $('#cols');
+  cols.innerHTML = '';
+  for (let c = 0; c < d.cols; c++) {
+    const b = document.createElement('button');
+    b.textContent = c + 1;
+    b.onclick = () => send({ t: 'col', c });
+    cols.appendChild(b);
+  }
+  const sc = $('#scenes');
+  sc.innerHTML = '';
+  d.scenes.forEach((has, i) => {
+    const b = document.createElement('button');
+    b.textContent = i + 1;
+    if (has) b.className = 'has';
+    b.onclick = () => send({ t: 'scene', i });
+    sc.appendChild(b);
+  });
+  if (!$('#layFads').children.length) buildLayFads();
+  buildSeqTargets();
+  applyRol();
+}
+function buildLayFads() {
+  const box = $('#layFads');
+  for (let l = 0; l < 4; l++) {
+    const lb = document.createElement('label');
+    lb.dataset.l = String(l + 1);
+    lb.innerHTML = `<b>CAPA ${l + 1}</b>
+      <input data-tgt="lop:${l}" type="range" min="0" max="1" step="0.01" value="1">
+      <input data-tgt="lspd:${l}" type="range" min="0" max="1" step="0.01" value="0.33" title="velocidad">`;
+    box.appendChild(lb);
+  }
+  document.querySelectorAll('[data-tgt]').forEach(inp => {
+    inp.oninput = () => tgt(inp.dataset.tgt, +inp.value);
+  });
+}
+/* XY */
+const xy = $('#xy'), dot = $('#xydot');
+let xyRaf = 0;
+xy.addEventListener('pointerdown', e => {
+  xy.setPointerCapture(e.pointerId);
+  const mv = ev => {
+    const r = xy.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+    const y = Math.min(1, Math.max(0, 1 - (ev.clientY - r.top) / r.height));
+    dot.style.left = x * 100 + '%'; dot.style.top = (1 - y) * 100 + '%';
+    if (!xyRaf) xyRaf = requestAnimationFrame(() => { xyRaf = 0; tgt('x', x); tgt('y', y); });
+  };
+  mv(e);
+  xy.onpointermove = mv;
+  xy.onpointerup = () => xy.onpointermove = null;
+});
+/* macros */
+const hold = (elm, id) => {
+  elm.addEventListener('pointerdown', () => { elm.classList.add('on'); tgt(id, 1, 1, 'note'); });
+  const off = () => { elm.classList.remove('on'); tgt(id, 0, 0, 'note'); };
+  elm.addEventListener('pointerup', off);
+  elm.addEventListener('pointerleave', off);
+};
+hold($('#mBuild'), 'build');
+hold($('#mFlash'), 'flash');
+$('#mTap').onclick = () => tgt('tap', 1, 1, 'note');
+$('#mResync').onclick = () => tgt('resync', 1, 1, 'note');
+$('#mDice').onclick = () => tgt('dice', 1, 1, 'note');
+$('#mBlack').onclick = e => { e.target.classList.toggle('on'); tgt('blackout', 1, 1, 'note'); };
+$('#mPanic').onclick = () => { if (confirm('¿PÁNICO? Apaga todas las capas y efectos.')) tgt('panic', 1, 1, 'note'); };
+
+/* ---- secuenciador de bucles ---- */
+const seq = Object.assign({
+  on: false, step: 0, bpm: 130, div: 2, bpmTouched: false,
+  rows: [
+    { tgt: 'col:0', steps: Array(16).fill(false) },
+    { tgt: 'col:1', steps: Array(16).fill(false) },
+    { tgt: 'flash', steps: Array(16).fill(false) },
+    { tgt: 'dice', steps: Array(16).fill(false) },
+  ],
+}, store.seq || {});
+seq.on = false; seq.step = 0; seq.bpmTouched = false; // el BPM del host vuelve a mandar en cada sesión
+let seqTimer = 0;
+function seqTargets() {
+  const t2 = [];
+  const nCols = layout ? layout.cols : 8;
+  for (let c = 0; c < Math.min(nCols, 12); c++) t2.push(['col:' + c, 'columna ' + (c + 1)]);
+  for (let i = 0; i < 8; i++) t2.push(['scene:' + i, 'escena ' + (i + 1)]);
+  t2.push(['flash', 'FLASH'], ['dice', '🎲 FX'], ['resync', '↻ resync']);
+  return t2;
+}
+function buildSeqTargets() {
+  document.querySelectorAll('.seqrow select').forEach((sel, ri) => {
+    const cur = seq.rows[ri].tgt;
+    sel.innerHTML = seqTargets().map(([v, lb]) =>
+      `<option value="${v}"${v === cur ? ' selected' : ''}>${lb}</option>`).join('');
+  });
+}
+function buildSeq() {
+  const box = $('#seqrows');
+  box.innerHTML = '';
+  seq.rows.forEach((row, ri) => {
+    const r = document.createElement('div');
+    r.className = 'seqrow';
+    const sel = document.createElement('select');
+    sel.onchange = () => { row.tgt = sel.value; store.seq = seq; save(); };
+    r.appendChild(sel);
+    const st = document.createElement('div');
+    st.className = 'steps';
+    row.steps.forEach((on, si) => {
+      const b = document.createElement('button');
+      b.className = 'stp' + (on ? ' on' : '');
+      b.onclick = () => {
+        row.steps[si] = !row.steps[si];
+        b.classList.toggle('on', row.steps[si]);
+        store.seq = seq; save();
+      };
+      st.appendChild(b);
+    });
+    r.appendChild(st);
+    box.appendChild(r);
+  });
+  buildSeqTargets();
+}
+function fireSeqTarget(t2) {
+  if (t2.startsWith('col:')) send({ t: 'col', c: +t2.slice(4) });
+  else if (t2.startsWith('scene:')) send({ t: 'scene', i: +t2.slice(6) });
+  else {
+    tgt(t2, 1, 1, 'note');
+    if (t2 === 'flash') setTimeout(() => tgt('flash', 0, 0, 'note'), 90);
+  }
+}
+function seqTick() {
+  document.querySelectorAll('.steps').forEach((st, ri) => {
+    [...st.children].forEach((b, si) => b.classList.toggle('now', si === seq.step));
+    if (seq.rows[ri].steps[seq.step]) fireSeqTarget(seq.rows[ri].tgt);
+  });
+  seq.step = (seq.step + 1) % 16;
+}
+function seqRestart() {
+  clearInterval(seqTimer);
+  if (!seq.on) return;
+  seqTimer = setInterval(seqTick, Math.max(40, 60000 / seq.bpm / seq.div));
+}
+$('#seqPlay').onclick = () => {
+  seq.on = !seq.on;
+  seq.step = 0;
+  $('#seqPlay').textContent = seq.on ? '⏹' : '▶';
+  $('#seqPlay').classList.toggle('on', seq.on);
+  seqRestart();
+  if (!seq.on) document.querySelectorAll('.stp.now').forEach(b => b.classList.remove('now'));
+};
+$('#seqBpm').value = seq.bpm;
+$('#seqBpm').onchange = e => {
+  seq.bpm = Math.min(240, Math.max(40, +e.target.value || 130));
+  seq.bpmTouched = true;
+  seqRestart();
+};
+$('#seqDiv').value = seq.div;
+$('#seqDiv').onchange = e => { seq.div = +e.target.value; seqRestart(); };
+$('#seqClear').onclick = () => {
+  seq.rows.forEach(r => r.steps.fill(false));
+  buildSeq(); store.seq = seq; save();
+};
+buildSeq();
+applyRol();
+</script>

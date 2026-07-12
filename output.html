@@ -1,0 +1,127 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAVEN VJ — SALIDA</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
+video{width:100vw;height:100vh;object-fit:contain;background:#000}
+#hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#8dff3f;
+  font:14px system-ui,sans-serif;background:#000b;padding:8px 20px;border-radius:20px;
+  cursor:default;text-align:center;transition:opacity .3s}
+#hint.hide{opacity:0;pointer-events:none}
+</style>
+<video id="v" autoplay muted playsinline></video>
+<div id="hint">conectando con RAVEN VJ…</div>
+<script>
+'use strict';
+const v = document.getElementById('v');
+const hint = document.getElementById('hint');
+const HELP = 'F = pantalla completa · H = este cartel';
+
+/* vía 1 (directa, sin costo): tomar el canvas por opener */
+function attachOpener() {
+  try {
+    const op = window.opener;
+    if (!op || op.closed) return false;
+    const c = op.document && op.document.getElementById('outCanvas');
+    if (!c) return false;
+    v.srcObject = c.captureStream(60);
+    v.play().catch(() => { });
+    return true;
+  } catch (e) { return false; }
+}
+
+/* vía 2 (robusta): WebRTC local señalizado por BroadcastChannel —
+   funciona aunque esta pestaña se arrastre a otra ventana o pierda el opener */
+let bc = null, pc = null, lastHello = 0;
+try { bc = new BroadcastChannel('ravenvj-out'); } catch (e) { }
+const myId = Math.random().toString(36).slice(2);
+function rtcConnect() {
+  if (!bc) return;
+  const now = performance.now();
+  if (now - lastHello < 2400) return;
+  lastHello = now;
+  bc.postMessage({ t: 'hello', id: myId });
+}
+if (bc) bc.onmessage = async e => {
+  const m = e.data;
+  if (!m || m.id !== myId) return;
+  try {
+    if (m.t === 'offer') {
+      if (pc) { try { pc.close(); } catch (e2) { } }
+      pc = new RTCPeerConnection();
+      pc._pendIce = [];
+      pc.ontrack = ev => {
+        v.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+        v.play().catch(() => { });
+      };
+      pc.onicecandidate = ev => {
+        if (ev.candidate) bc.postMessage({ t: 'ice', id: myId, from: 'out', c: ev.candidate.toJSON() });
+      };
+      await pc.setRemoteDescription(m.sdp);
+      await pc.setLocalDescription(await pc.createAnswer());
+      bc.postMessage({ t: 'answer', id: myId, sdp: pc.localDescription.toJSON() });
+      for (const c of pc._pendIce) { try { await pc.addIceCandidate(c); } catch (e2) { } }
+      pc._pendIce = [];
+    } else if (m.t === 'ice' && m.from === 'host' && pc) {
+      if (pc.remoteDescription) await pc.addIceCandidate(m.c);
+      else pc._pendIce.push(m.c);
+    }
+  } catch (err) { console.error(err); }
+};
+
+hint.textContent = 'conectando con RAVEN VJ…';
+if (!attachOpener()) rtcConnect();
+
+/* watchdog: reconecta solo, avisa si la principal está minimizada,
+   y esconde el cartel cuando la señal fluye */
+let lastCT = -1, stallN = 0;
+setInterval(() => {
+  const active = v.srcObject && v.srcObject.active;
+  if (!active) {
+    hint.textContent = 'conectando con RAVEN VJ… (abrila desde 🖥 OUTPUT o dejá la app abierta)';
+    hint.classList.remove('hide');
+    if (!attachOpener()) rtcConnect();
+    return;
+  }
+  if (v.currentTime === lastCT) {
+    if (++stallN === 3) {
+      hint.textContent = '⚠ dejá visible la ventana principal de RAVEN VJ (no la minimices)';
+      hint.classList.remove('hide');
+    }
+    if (stallN >= 8) { stallN = 0; if (!attachOpener()) rtcConnect(); }
+  } else {
+    if (stallN >= 3 || !hint.dataset.shown) {
+      hint.textContent = HELP;
+      hint.dataset.shown = '1';
+      setTimeout(() => hint.classList.add('hide'), 2200); // conectado → se esconde solo
+    }
+    stallN = 0;
+  }
+  lastCT = v.currentTime;
+}, 1000);
+
+const goFS = () => {
+  document.documentElement.requestFullscreen()
+    .then(() => hint.classList.add('hide'))
+    .catch(() => { });
+};
+// si el fullscreen se cae (Escape, cambio de foco raro), avisar cómo volver
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) {
+    hint.textContent = '⚠ salió de pantalla completa — F o doble click para volver';
+    hint.classList.remove('hide');
+  } else {
+    hint.classList.add('hide');
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'f' || e.key === 'F') goFS();
+  if (e.key === 'h' || e.key === 'H') { // H = mostrar/ocultar el asistente
+    if (hint.classList.contains('hide')) {
+      hint.textContent = HELP;
+      hint.classList.remove('hide');
+    } else hint.classList.add('hide');
+  }
+});
+document.addEventListener('dblclick', goFS);
+</script>

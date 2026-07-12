@@ -1,0 +1,19 @@
+# RAVEN VJ — overrides locales de esta carpeta
+# 1) El .htaccess global bloquea el micrófono: acá lo habilitamos (audio-reactivo).
+# 2) CSP propia: igual de estricta pero permite PeerJS (control remoto por WebRTC)
+#    y el QR de api.qrserver.com.
+<IfModule mod_headers.c>
+    Header set Permissions-Policy "geolocation=(), microphone=(self), camera=(self), display-capture=(self)"
+    Header set Content-Security-Policy "default-src 'self'; \
+        script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; \
+        style-src 'self' 'unsafe-inline'; \
+        font-src 'self' data:; \
+        img-src 'self' data: blob: https:; \
+        media-src 'self' blob:; \
+        connect-src 'self' wss://*.peerjs.com https://*.peerjs.com; \
+        worker-src 'self'; \
+        object-src 'none'; \
+        base-uri 'self'; \
+        frame-ancestors 'self';"
+</IfModule>
+AddType application/manifest+json .webmanifest
