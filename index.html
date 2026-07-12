@@ -65,6 +65,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #wizbox .wlbl b{color:var(--acc);font-size:16px}
 #wizbox .wbtns{display:flex;gap:6px;justify-content:center}
 #wizbox .wnote{margin-top:10px;font-size:9px;color:var(--dim)}
+#clock{position:fixed;right:8px;bottom:6px;z-index:60;font:600 12px/1 Consolas,monospace;
+  color:var(--dim);background:color-mix(in srgb,var(--bg) 72%,transparent);border:1px solid var(--line);
+  border-radius:6px;padding:4px 8px;cursor:pointer;user-select:none;backdrop-filter:blur(3px)}
+#clock:hover{color:var(--acc);border-color:var(--acc)}
+#clock b{color:var(--acc);font-weight:700}
 .meters{display:flex;gap:2px;align-items:flex-end;height:18px}
 .meters i{display:block;width:5px;height:2px;background:var(--acc);border-radius:1px}
 #midiBtn.learn{background:var(--acc2);border-color:var(--acc2);color:#000;font-weight:700}
@@ -433,6 +438,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 </div>
 <div id="toast"></div>
 <div id="dropveil"></div>
+<div id="clock" title="hora local — click: mostrar/ocultar fecha" data-noi18n>--:--</div>
 <input type="file" id="fileIn" accept="video/*,image/gif" multiple style="display:none">
 <input type="file" id="setIn" accept=".json,application/json" style="display:none">
 <input type="file" id="relinkIn" accept="video/*,image/gif" multiple style="display:none">
@@ -3877,6 +3883,10 @@ function buildCpTab(id) {
       ${cpRow('Mensajes MIDI', 'mcount')}${cpRow('Último MIDI', 'mlast')}</div>`;
   } else if (id === 'render') {
     b.innerHTML = `<div class="cph">APARIENCIA</div>
+      <div class="cprow"><b>Idioma</b><span><select id="cplang">
+        ${Object.entries(LANGS).map(([k, nm]) =>
+          `<option value="${k}"${curLang() === k ? ' selected' : ''}>${nm}</option>`).join('')}
+      </select></span></div>
       <div class="cprow"><b>Tema de colores</b><span><select id="cptheme">
         ${Object.entries(THEMES).map(([k, t]) =>
           `<option value="${k}"${state.theme === k ? ' selected' : ''}>${t.label}</option>`).join('')}
@@ -3903,6 +3913,7 @@ function buildCpTab(id) {
       <div class="cph">INFO</div>
       ${cpRow('GPU', '', gpuName)}
       ${cpRow('Contexto', '', 'WebGL2 · 8 texturas de capa · ping-pong FX')}`;
+    $('#cplang').onchange = e => { setLang(e.target.value); toast('Idioma: ' + LANGS[curLang()]); };
     $('#cptheme').onchange = e => {
       applyTheme(e.target.value);
       markDirty();
@@ -4623,6 +4634,7 @@ function showMenu(x, y, title, items) {
     ctxm.appendChild(d);
   }
   ctxm.style.display = 'block';
+  if (curLang() !== 'es') translateRoot(ctxm);
   const r = ctxm.getBoundingClientRect();
   ctxm.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
   ctxm.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
@@ -5867,6 +5879,172 @@ function applyUI() {
   $('#genPanel').style.width = uiPrefs.genW + 'px';
   $('#monPanel').style.width = uiPrefs.monW + 'px';
 }
+/* ---------------- reloj ---------------- */
+let clockDate = false;
+function tickClock() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const hm = `<b>${p(d.getHours())}:${p(d.getMinutes())}</b>:${p(d.getSeconds())}`;
+  const cl = $('#clock');
+  if (cl) cl.innerHTML = clockDate
+    ? `${p(d.getDate())}/${p(d.getMonth() + 1)} · ${hm}` : hm;
+}
+(() => {
+  const cl = $('#clock');
+  if (cl) cl.onclick = () => { clockDate = !clockDate; tickClock(); };
+  tickClock();
+  setInterval(tickClock, 1000);
+})();
+
+/* ---------------- multi-idioma (traductor de interfaz por diccionario) ---------------- */
+const LANGS = { es: 'Español', en: 'English', pt: 'Português', fr: 'Français', de: 'Deutsch', it: 'Italiano' };
+const I18N = {
+  en: {
+    'Archivo': 'File', 'Composición': 'Composition', 'Capas': 'Layers', 'Entrada': 'Input',
+    'Salida': 'Output', 'Ver': 'View', 'Ayuda': 'Help', '☕ Donar': '☕ Donate',
+    'SECUENCIA': 'SEQUENCE', 'COLUMNA AZAR': 'RANDOM COLUMN', 'CAOS': 'CHAOS', 'ESCENAS': 'SCENES',
+    'beats': 'beats', 'manual': 'manual', 'PÁNICO': 'PANIC', '＋ VIDEOS': '＋ VIDEOS',
+    'EFECTOS MASTER': 'MASTER EFFECTS', 'GENERADORES': 'GENERATORS', 'arrastrá a una celda': 'drag onto a cell',
+    '＋ agregar efecto…': '＋ add effect…', 'videos sin enlazar': 'unlinked videos', '🔗 RELINK': '🔗 RELINK',
+    'APARIENCIA': 'APPEARANCE', 'Tema de colores': 'Color theme', 'Idioma': 'Language', 'RENDER': 'RENDER',
+    'Resolución': 'Resolution', 'Límite de FPS': 'FPS limit', 'Motor gráfico': 'Graphics engine',
+    'MONITOR DE SALIDA': 'OUTPUT MONITOR', 'Pantallas conectadas': 'Connected screens',
+    '🔍 detectar': '🔍 detect', 'Mapping': 'Mapping', '🗺 abrir editor': '🗺 open editor',
+    '＋ ventana de salida': '＋ output window', 'INFO': 'INFO', 'ESTADO': 'STATUS',
+    'Dispositivo': 'Device', 'Conexión': 'Connection', '↻ Reintentar': '↻ Retry', 'borrar todos': 'clear all',
+    'exportar': 'export', 'importar': 'import', 'CUALQUIER CONTROLADOR': 'ANY CONTROLLER',
+    'Asistente de mapeo': 'Mapping wizard', 'Perfiles de fábrica': 'Factory presets',
+    'Compartir mapeos': 'Share mappings', 'AUDIO': 'AUDIO', 'Sensibilidad del beat': 'Beat sensitivity',
+    'TELEMETRÍA': 'TELEMETRY', 'SESIÓN': 'SESSION', 'ATAJOS': 'SHORTCUTS', 'SETLIST': 'SETLIST',
+    'REMOTO': 'REMOTE', 'Tema': 'Theme',
+  },
+  pt: {
+    'Archivo': 'Arquivo', 'Composición': 'Composição', 'Capas': 'Camadas', 'Entrada': 'Entrada',
+    'Salida': 'Saída', 'Ver': 'Ver', 'Ayuda': 'Ajuda', '☕ Donar': '☕ Doar',
+    'SECUENCIA': 'SEQUÊNCIA', 'COLUMNA AZAR': 'COLUNA ALEATÓRIA', 'CAOS': 'CAOS', 'ESCENAS': 'CENAS',
+    'beats': 'batidas', 'manual': 'manual', 'PÁNICO': 'PÂNICO', '＋ VIDEOS': '＋ VÍDEOS',
+    'EFECTOS MASTER': 'EFEITOS MASTER', 'GENERADORES': 'GERADORES', 'arrastrá a una celda': 'arraste até uma célula',
+    '＋ agregar efecto…': '＋ adicionar efeito…', 'videos sin enlazar': 'vídeos sem vínculo', '🔗 RELINK': '🔗 RELINK',
+    'APARIENCIA': 'APARÊNCIA', 'Tema de colores': 'Tema de cores', 'Idioma': 'Idioma', 'RENDER': 'RENDER',
+    'Resolución': 'Resolução', 'Límite de FPS': 'Limite de FPS', 'Motor gráfico': 'Motor gráfico',
+    'MONITOR DE SALIDA': 'MONITOR DE SAÍDA', 'Pantallas conectadas': 'Telas conectadas',
+    '🔍 detectar': '🔍 detectar', 'Mapping': 'Mapping', '🗺 abrir editor': '🗺 abrir editor',
+    '＋ ventana de salida': '＋ janela de saída', 'INFO': 'INFO', 'ESTADO': 'ESTADO',
+    'Dispositivo': 'Dispositivo', 'Conexión': 'Conexão', '↻ Reintentar': '↻ Tentar de novo', 'borrar todos': 'apagar todos',
+    'exportar': 'exportar', 'importar': 'importar', 'CUALQUIER CONTROLADOR': 'QUALQUER CONTROLADOR',
+    'Asistente de mapeo': 'Assistente de mapeamento', 'Perfiles de fábrica': 'Perfis de fábrica',
+    'Compartir mapeos': 'Compartilhar mapeamentos', 'AUDIO': 'ÁUDIO', 'Sensibilidad del beat': 'Sensibilidade da batida',
+    'TELEMETRÍA': 'TELEMETRIA', 'SESIÓN': 'SESSÃO', 'ATAJOS': 'ATALHOS', 'SETLIST': 'SETLIST',
+    'REMOTO': 'REMOTO', 'Tema': 'Tema',
+  },
+  fr: {
+    'Archivo': 'Fichier', 'Composición': 'Composition', 'Capas': 'Calques', 'Entrada': 'Entrée',
+    'Salida': 'Sortie', 'Ver': 'Affichage', 'Ayuda': 'Aide', '☕ Donar': '☕ Faire un don',
+    'SECUENCIA': 'SÉQUENCE', 'COLUMNA AZAR': 'COLONNE ALÉAT.', 'CAOS': 'CHAOS', 'ESCENAS': 'SCÈNES',
+    'beats': 'temps', 'manual': 'manuel', 'PÁNICO': 'PANIQUE', '＋ VIDEOS': '＋ VIDÉOS',
+    'EFECTOS MASTER': 'EFFETS MASTER', 'GENERADORES': 'GÉNÉRATEURS', 'arrastrá a una celda': 'glissez sur une cellule',
+    '＋ agregar efecto…': '＋ ajouter effet…', 'videos sin enlazar': 'vidéos non liées', '🔗 RELINK': '🔗 RELINK',
+    'APARIENCIA': 'APPARENCE', 'Tema de colores': 'Thème de couleurs', 'Idioma': 'Langue', 'RENDER': 'RENDU',
+    'Resolución': 'Résolution', 'Límite de FPS': 'Limite de FPS', 'Motor gráfico': 'Moteur graphique',
+    'MONITOR DE SALIDA': 'MONITEUR DE SORTIE', 'Pantallas conectadas': 'Écrans connectés',
+    '🔍 detectar': '🔍 détecter', 'Mapping': 'Mapping', '🗺 abrir editor': '🗺 ouvrir l’éditeur',
+    '＋ ventana de salida': '＋ fenêtre de sortie', 'INFO': 'INFO', 'ESTADO': 'ÉTAT',
+    'Dispositivo': 'Appareil', 'Conexión': 'Connexion', '↻ Reintentar': '↻ Réessayer', 'borrar todos': 'tout effacer',
+    'exportar': 'exporter', 'importar': 'importer', 'CUALQUIER CONTROLADOR': 'N’IMPORTE QUEL CONTRÔLEUR',
+    'Asistente de mapeo': 'Assistant de mapping', 'Perfiles de fábrica': 'Profils d’usine',
+    'Compartir mapeos': 'Partager les mappings', 'AUDIO': 'AUDIO', 'Sensibilidad del beat': 'Sensibilité du beat',
+    'TELEMETRÍA': 'TÉLÉMÉTRIE', 'SESIÓN': 'SESSION', 'ATAJOS': 'RACCOURCIS', 'SETLIST': 'SETLIST',
+    'REMOTO': 'À DISTANCE', 'Tema': 'Thème',
+  },
+  de: {
+    'Archivo': 'Datei', 'Composición': 'Komposition', 'Capas': 'Ebenen', 'Entrada': 'Eingang',
+    'Salida': 'Ausgang', 'Ver': 'Ansicht', 'Ayuda': 'Hilfe', '☕ Donar': '☕ Spenden',
+    'SECUENCIA': 'SEQUENZ', 'COLUMNA AZAR': 'ZUFALLSSPALTE', 'CAOS': 'CHAOS', 'ESCENAS': 'SZENEN',
+    'beats': 'Beats', 'manual': 'manuell', 'PÁNICO': 'PANIK', '＋ VIDEOS': '＋ VIDEOS',
+    'EFECTOS MASTER': 'MASTER-EFFEKTE', 'GENERADORES': 'GENERATOREN', 'arrastrá a una celda': 'auf eine Zelle ziehen',
+    '＋ agregar efecto…': '＋ Effekt hinzufügen…', 'videos sin enlazar': 'nicht verknüpfte Videos', '🔗 RELINK': '🔗 RELINK',
+    'APARIENCIA': 'DARSTELLUNG', 'Tema de colores': 'Farbthema', 'Idioma': 'Sprache', 'RENDER': 'RENDER',
+    'Resolución': 'Auflösung', 'Límite de FPS': 'FPS-Limit', 'Motor gráfico': 'Grafik-Engine',
+    'MONITOR DE SALIDA': 'AUSGABE-MONITOR', 'Pantallas conectadas': 'Verbundene Bildschirme',
+    '🔍 detectar': '🔍 erkennen', 'Mapping': 'Mapping', '🗺 abrir editor': '🗺 Editor öffnen',
+    '＋ ventana de salida': '＋ Ausgabefenster', 'INFO': 'INFO', 'ESTADO': 'STATUS',
+    'Dispositivo': 'Gerät', 'Conexión': 'Verbindung', '↻ Reintentar': '↻ Erneut', 'borrar todos': 'alle löschen',
+    'exportar': 'exportieren', 'importar': 'importieren', 'CUALQUIER CONTROLADOR': 'BELIEBIGER CONTROLLER',
+    'Asistente de mapeo': 'Mapping-Assistent', 'Perfiles de fábrica': 'Werksprofile',
+    'Compartir mapeos': 'Mappings teilen', 'AUDIO': 'AUDIO', 'Sensibilidad del beat': 'Beat-Empfindlichkeit',
+    'TELEMETRÍA': 'TELEMETRIE', 'SESIÓN': 'SITZUNG', 'ATAJOS': 'TASTEN', 'SETLIST': 'SETLIST',
+    'REMOTO': 'FERN', 'Tema': 'Thema',
+  },
+  it: {
+    'Archivo': 'File', 'Composición': 'Composizione', 'Capas': 'Livelli', 'Entrada': 'Ingresso',
+    'Salida': 'Uscita', 'Ver': 'Vista', 'Ayuda': 'Aiuto', '☕ Donar': '☕ Dona',
+    'SECUENCIA': 'SEQUENZA', 'COLUMNA AZAR': 'COLONNA CASUALE', 'CAOS': 'CAOS', 'ESCENAS': 'SCENE',
+    'beats': 'battiti', 'manual': 'manuale', 'PÁNICO': 'PANICO', '＋ VIDEOS': '＋ VIDEO',
+    'EFECTOS MASTER': 'EFFETTI MASTER', 'GENERADORES': 'GENERATORI', 'arrastrá a una celda': 'trascina su una cella',
+    '＋ agregar efecto…': '＋ aggiungi effetto…', 'videos sin enlazar': 'video non collegati', '🔗 RELINK': '🔗 RELINK',
+    'APARIENCIA': 'ASPETTO', 'Tema de colores': 'Tema colori', 'Idioma': 'Lingua', 'RENDER': 'RENDER',
+    'Resolución': 'Risoluzione', 'Límite de FPS': 'Limite FPS', 'Motor gráfico': 'Motore grafico',
+    'MONITOR DE SALIDA': 'MONITOR DI USCITA', 'Pantallas conectadas': 'Schermi collegati',
+    '🔍 detectar': '🔍 rileva', 'Mapping': 'Mapping', '🗺 abrir editor': '🗺 apri editor',
+    '＋ ventana de salida': '＋ finestra di uscita', 'INFO': 'INFO', 'ESTADO': 'STATO',
+    'Dispositivo': 'Dispositivo', 'Conexión': 'Connessione', '↻ Reintentar': '↻ Riprova', 'borrar todos': 'cancella tutti',
+    'exportar': 'esporta', 'importar': 'importa', 'CUALQUIER CONTROLADOR': 'QUALSIASI CONTROLLER',
+    'Asistente de mapeo': 'Assistente di mappatura', 'Perfiles de fábrica': 'Profili di fabbrica',
+    'Compartir mapeos': 'Condividi mappature', 'AUDIO': 'AUDIO', 'Sensibilidad del beat': 'Sensibilità del beat',
+    'TELEMETRÍA': 'TELEMETRIA', 'SESIÓN': 'SESSIONE', 'ATAJOS': 'SCORCIATOIE', 'SETLIST': 'SETLIST',
+    'REMOTO': 'REMOTO', 'Tema': 'Tema',
+  },
+};
+const I18N_ROOTS = ['#menubar', '#topbar', '#fxPanel', '#genPanel', '#cpanel', '#ctxmenu'];
+const I18N_SKIP = 'input,textarea,[data-noi18n],.cell,.gtile,#genShelf,.cname,#nowName';
+function curLang() { return uiPrefs.lang || 'es'; }
+function t(es) { const d = I18N[curLang()]; return (d && d[es]) || es; }
+function translateRoot(root) {
+  if (!root) return;
+  const dict = I18N[curLang()]; // null si 'es' → restaura original
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  for (let n; (n = walker.nextNode());) nodes.push(n);
+  for (const node of nodes) {
+    const pe = node.parentElement;
+    if (!pe || pe.closest(I18N_SKIP)) continue;
+    if (node.__es === undefined) node.__es = node.nodeValue;
+    const key = node.__es.trim();
+    if (!key) continue;
+    if (!dict) { node.nodeValue = node.__es; continue; }
+    const tr = dict[key];
+    node.nodeValue = tr !== undefined ? node.__es.replace(key, tr) : node.__es;
+  }
+  root.querySelectorAll('[title]').forEach(elx => {
+    if (elx.closest('[data-noi18n]')) return;
+    if (elx.__esTitle === undefined) elx.__esTitle = elx.getAttribute('title');
+    const key = (elx.__esTitle || '').trim();
+    if (!key) return;
+    elx.setAttribute('title', dict && dict[key] !== undefined ? dict[key] : elx.__esTitle);
+  });
+}
+function applyLang() {
+  document.documentElement.lang = curLang();
+  I18N_ROOTS.forEach(sel => translateRoot(document.querySelector(sel)));
+}
+// re-traducir el panel de opciones cada vez que se reconstruye (solo si no es español)
+(() => {
+  const cp = document.getElementById('cpanel');
+  if (!cp) return;
+  let pend = false;
+  new MutationObserver(() => {
+    if (curLang() === 'es' || pend) return;
+    pend = true;
+    requestAnimationFrame(() => { pend = false; translateRoot(cp); });
+  }).observe(cp, { childList: true, subtree: true });
+})();
+function setLang(l) {
+  uiPrefs.lang = LANGS[l] ? l : 'es';
+  saveUI();
+  applyLang();
+  if (cpTab === 'render' && $('#cpanel').style.display !== 'none') buildCpTab('render');
+}
+
 function mkSplitter(id, getV, setV) {
   $(id).addEventListener('pointerdown', e => {
     e.preventDefault();
@@ -5922,6 +6100,7 @@ if (saved) {
 buildFx();
 $('#monoBtn').classList.toggle('on', state.mono);
 applyTheme(state.theme);
+if (curLang() !== 'es') applyLang(); // idioma elegido (persistido en prefs de UI)
 if (uiPrefs.propDock) setPropDock(true); // arrancar con Propiedades acoplada si quedó así
 midiInit();
 requestAnimationFrame(frame);

@@ -15,7 +15,8 @@
 - 📱 **Control remoto desde el celular**: grilla, mezcla, macros y secuenciador de bucles de 16 pasos — con roles para que varias personas controlen a la vez sin pisarse
 - 📽 **Salida**: ventana OUTPUT para proyector (sobrevive refrescos y fullscreen), multi-pantalla, mapping multi-superficie con corner-pin, máscaras, soft edge y contornos animados
 - 📐 **Resoluciones**: 16:9, vertical 9:16, cuadrada, 4:3 o personalizada (ej. `1920x600` para tiras LED)
-- ⏺ **Grabación** de la salida a .webm, sets en JSON con relink de videos, autosave, temas de color
+- 🌐 **6 idiomas** (Español, English, Português, Français, Deutsch, Italiano), reloj en pantalla, temas de color
+- ⏺ **Grabación** de la salida a .webm, sets en JSON con relink de videos, autosave
 
 ## Cómo usarla
 

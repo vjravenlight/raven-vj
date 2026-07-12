@@ -31,6 +31,16 @@ CONTROL REMOTO DESDE EL CELULAR 📱
   Necesita internet solo para conectar (sirve el hotspot del celu);
   después el control va directo por WiFi.
 
+IDIOMA 🌐
+  Panel (Ctrl+Alt+T) → Render → APARIENCIA → Idioma. La interfaz está
+  en 6 idiomas: Español, English, Português, Français, Deutsch, Italiano.
+  Se traduce menús, topbar y opciones — nunca los nombres de tus clips.
+  El idioma se recuerda en cada PC (como el tema).
+
+RELOJ 🕐
+  Abajo a la derecha ves la hora local (útil para respetar el horario
+  de tu set). Click en el reloj = mostrar/ocultar la fecha.
+
 TECLAS ASIGNABLES ⌨
   El mismo learn del MIDI sirve para el teclado: activá 🎹, tocá un
   control de la UI y apretá una tecla. Se administra en el panel MIDI.
