@@ -13,7 +13,7 @@
 - 🤖 **Automatización**: autopilot, auto-transición por capa (beats/segundos/fin de clip, con paso por negro), animación de parámetros por clip (loops sync BPM, audio, azar), escenas, setlist programado, randomizer de FX
 - 🎹 **Cualquier controlador MIDI**: asistente de mapeo guiado, perfiles de fábrica (nanoPAD2, nanoKONTROL2, APC Mini, Launchpad), MIDI learn universal, mapeos exportables/importables y teclas asignables
 - 📱 **Control remoto desde el celular**: grilla, mezcla, macros y secuenciador de bucles de 16 pasos — con roles para que varias personas controlen a la vez sin pisarse
-- 📽 **Salida**: ventana OUTPUT para proyector (sobrevive refrescos y fullscreen), multi-pantalla, mapping multi-superficie con corner-pin, máscaras, soft edge y contornos animados
+- 📽 **Salida**: ventana OUTPUT para proyector (sobrevive refrescos y fullscreen), multi-pantalla, mapping multi-superficie con corner-pin, **warp de malla para superficies curvas**, máscaras (con invertir), soft edge, flip H/V, patrón de calibración y contornos animados
 - 📐 **Resoluciones**: 16:9, vertical 9:16, cuadrada, 4:3 o personalizada (ej. `1920x600` para tiras LED)
 - 🌐 **12 idiomas** (ES, EN, PT, FR, DE, IT, 日本語, 中文, 한국어, Русский, עברית y العربية con RTL), reloj en pantalla, temas de color
 - ⏺ **Grabación** de la salida a .webm, sets en JSON con relink de videos, autosave

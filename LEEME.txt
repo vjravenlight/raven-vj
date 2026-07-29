@@ -250,6 +250,14 @@ MAPPING MULTI-SUPERFICIE
   quede derecha sobre el objeto real, y después lo apagás. Es la forma
   pro de alinear un proyector (como el test pattern de MadMapper).
 
+  WARP DE MALLA (superficies curvas) 🕸: en el editor 🗺 (o en el panel)
+  elegí "malla: 2×2 … 5×5" y la superficie se subdivide en una grilla
+  de puntos. Arrastrás CADA punto (no solo las 4 esquinas) para mapear
+  columnas, cilindros, telas, domos o cualquier cosa curva — como el
+  mesh warping de MadMapper/Resolume. "malla: plana" vuelve al modo de
+  4 esquinas. Cuantas más divisiones, más suave la curva. Se guarda en
+  el set.
+
 GENERADORES CONFIGURABLES 🧪
   - Click derecho en una celda generativa → "⚙ Parámetros": cada clip
     puede tener sus propios P1 (velocidad) y P2 (tono) fijos, o seguir

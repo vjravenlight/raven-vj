@@ -549,6 +549,55 @@ function computeWarp(sf) {
   sf._m = new Float32Array([A, D, G, B, E, H2, C, F, I]);
 }
 function computeAllWarps() { state.map.surfaces.forEach(computeWarp); }
+/* malla: puntos de control (N+1)² por interpolación bilineal de las 4 esquinas */
+function setMeshSub(sf, N) {
+  if (N <= 1) { sf.mesh = null; computeWarp(sf); return; }
+  const [BL, BR, TR, TL] = sf.pts;
+  const pts = [];
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+    const u = i / N, v = j / N;
+    const bx = BL[0] + (BR[0] - BL[0]) * u, by = BL[1] + (BR[1] - BL[1]) * u;
+    const tx = TL[0] + (TR[0] - TL[0]) * u, ty = TL[1] + (TR[1] - TL[1]) * u;
+    pts.push([bx + (tx - bx) * v, by + (ty - by) * v]);
+  }
+  sf.mesh = { sub: N, pts };
+}
+function syncMeshCorners(sf) { // mantener sf.pts = las 4 esquinas de la malla (para selección/dibujo)
+  const N = sf.mesh.sub, p = sf.mesh.pts;
+  sf.pts = [p[0], p[N], p[(N + 1) * (N + 1) - 1], p[N * (N + 1)]];
+}
+/* geometría triangulada de una superficie con malla */
+let meshBuf = null, meshVAO = null;
+function ensureMeshGL(gl) {
+  if (meshVAO) return;
+  meshVAO = gl.createVertexArray();
+  gl.bindVertexArray(meshVAO);
+  meshBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, meshBuf);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
+  gl.bindVertexArray(null);
+}
+function meshVerts(sf) {
+  const N = sf.mesh.sub, pts = sf.mesh.pts, arr = [];
+  const P = (i, j) => pts[j * (N + 1) + i];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const u0 = i / N, u1 = (i + 1) / N, v0 = j / N, v1 = (j + 1) / N;
+    const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+    arr.push(a[0], a[1], u0, v0, b[0], b[1], u1, v0, c[0], c[1], u1, v1);
+    arr.push(a[0], a[1], u0, v0, c[0], c[1], u1, v1, d[0], d[1], u0, v1);
+  }
+  return new Float32Array(arr);
+}
+function drawMeshSurface(gl, sf) {
+  ensureMeshGL(gl);
+  const data = meshVerts(sf);
+  gl.bindVertexArray(meshVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, meshBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+  gl.drawArrays(gl.TRIANGLES, 0, data.length / 4);
+  gl.bindVertexArray(null);
+}
 const telemetry = {
   frames: new Float32Array(120), fi: 0, dropped: 0,
   startT: performance.now(), beats: 0, midiCount: 0, midiLog: [],
@@ -1062,6 +1111,46 @@ void main(){
  vec3 outc=mix(c*u_master,vec3(1.),u_flash*inQ)*inQ*u_sop;
  o=vec4(outc,1.); }`;
 
+/* warp de malla (superficies curvas): geometría triangulada con puntos de control */
+const MESH_VS = `#version 300 es
+layout(location=0) in vec2 a_pos; layout(location=1) in vec2 a_luv;
+out vec2 v_luv;
+void main(){ v_luv=a_luv; gl_Position=vec4(a_pos*2.-1.,0.,1.); }`;
+const MESH_FS = `#version 300 es
+precision highp float;
+in vec2 v_luv; out vec4 o;
+uniform sampler2D u_tex; uniform float u_master,u_flash,u_build,u_time;
+uniform vec4 u_srcRect;
+uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test;
+uniform vec2 u_flip;
+void main(){
+ vec2 base=v_luv; float inQ=1.; float m=1.;
+ float eb=min(min(base.x,1.-base.x),min(base.y,1.-base.y));
+ if(u_soft>0.001) inQ*=smoothstep(0.,u_soft,eb);
+ if(u_mask>.5){
+   vec2 mp=base-.5; float sft=max(u_soft,.012);
+   if(u_mask<1.5) m=smoothstep(.5,.5-sft,length(mp));
+   else if(u_mask<2.5) m=smoothstep(.48,.48-sft,abs(mp.x)+abs(mp.y));
+   else if(u_mask<3.5){ float d=max(abs(mp.x)*1.15+mp.y*.58,-mp.y)-.44; m=smoothstep(0.,sft,-d); }
+   else if(u_mask<4.5){ vec2 a2=abs(mp); float d=max(a2.x*.866+a2.y*.5,a2.y)-.46; m=smoothstep(0.,sft,-d); }
+   else { float ang=atan(mp.y,mp.x); float rr=length(mp); float f=.36+.13*cos(5.*ang); m=smoothstep(0.,sft,f-rr); }
+   if(u_minv>.5) m=1.-m;
+   inQ*=m;
+ }
+ float b=u_build;
+ vec2 uv=(base-.5)*(1.-b*.22)+.5;
+ uv+=b*.006*vec2(sin(u_time*47.),cos(u_time*61.));
+ if(u_flip.x>.5) uv.x=1.-uv.x;
+ if(u_flip.y>.5) uv.y=1.-uv.y;
+ vec2 suv=u_srcRect.xy+uv*u_srcRect.zw;
+ vec3 c=texture(u_tex,clamp(suv,u_srcRect.xy,u_srcRect.xy+u_srcRect.zw)).rgb;
+ c*=1.+b*.7;
+ c*=mix(1.,.55+.6*step(.45,fract(u_time*(4.+b*22.))),b);
+ if(u_line>0.001){ float band=1.-smoothstep(u_line*.5,u_line,eb); vec3 lc=.5+.5*cos(6.2832*(u_time*.12+vec3(0.,.33,.66))); c=mix(c,lc*(1.2+u_beat*1.3),band*m*step(0.,eb)); }
+ if(u_test>.5){ vec2 g=abs(fract(base*10.)-.5); float grid=step(.44,max(g.x,g.y)); float bord=step(.985,max(abs(base.x-.5),abs(base.y-.5))*2.); float cr=step(abs(base.x-base.y),.004)+step(abs(base.x+base.y-1.),.004); c=vec3(.04,.10,.14)+vec3(grid)*vec3(.15,.6,.85)+vec3(bord)*vec3(1.,.5,0.)+vec3(cr)*vec3(1.,0.,.35); }
+ vec3 outc=mix(c*u_master,vec3(1.),u_flash*inQ)*inQ*u_sop;
+ o=vec4(outc,1.); }`;
+
 const BLIT_FS = `#version 300 es
 precision highp float;
 in vec2 v_uv; out vec4 o; uniform sampler2D u_tex;
@@ -1093,11 +1182,11 @@ function compile(gl, type, src) {
   }
   return s;
 }
-function program(ctx, key, fsSrc) {
+function program(ctx, key, fsSrc, vsSrc) {
   if (ctx.progs.has(key)) return ctx.progs.get(key);
   const gl = ctx.gl;
   const p = gl.createProgram();
-  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, VS));
+  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vsSrc || VS));
   gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fsSrc));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
@@ -2074,8 +2163,34 @@ function renderTick() {
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.uniform1f(U(gl, fp, 'u_beat'), beatEnv);
     const testOn = state.map.test ? 1 : 0;
+    const srcTex = ping[cur].tex;
+    let mp = null; // programa de malla, se compila la 1ª vez que hace falta
     for (const sf of state.map.surfaces) {
       if (!sf.on) continue;
+      if (sf.mesh) {
+        // superficie con malla: geometría triangulada (superficies curvas)
+        if (!mp) mp = program(main, 'mesh', MESH_FS, MESH_VS);
+        gl.useProgram(mp);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
+        gl.uniform1i(U(gl, mp, 'u_tex'), 0);
+        gl.uniform1f(U(gl, mp, 'u_master'), state.blackout ? 0 : state.master);
+        gl.uniform1f(U(gl, mp, 'u_flash'), state.flash);
+        gl.uniform1f(U(gl, mp, 'u_build'), state.build);
+        gl.uniform1f(U(gl, mp, 'u_time'), nowSec);
+        gl.uniform1f(U(gl, mp, 'u_beat'), beatEnv);
+        gl.uniform4f(U(gl, mp, 'u_srcRect'), sf.src[0], sf.src[1], sf.src[2], sf.src[3]);
+        gl.uniform1f(U(gl, mp, 'u_mask'), sf.mask || 0);
+        gl.uniform1f(U(gl, mp, 'u_soft'), sf.soft || 0);
+        gl.uniform1f(U(gl, mp, 'u_line'), sf.line || 0);
+        gl.uniform1f(U(gl, mp, 'u_sop'), sf.op == null ? 1 : sf.op);
+        gl.uniform1f(U(gl, mp, 'u_minv'), sf.maskInv ? 1 : 0);
+        gl.uniform1f(U(gl, mp, 'u_test'), testOn);
+        gl.uniform2f(U(gl, mp, 'u_flip'), sf.flipX ? 1 : 0, sf.flipY ? 1 : 0);
+        drawMeshSurface(gl, sf);
+        gl.useProgram(fp); // volver al programa de pantalla completa para las quad
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
+        continue;
+      }
       gl.uniform1f(U(gl, fp, 'u_warpOn'), 1);
       gl.uniformMatrix3fv(U(gl, fp, 'u_warp'), false, sf._m || WARP_ID);
       gl.uniform4f(U(gl, fp, 'u_srcRect'), sf.src[0], sf.src[1], sf.src[2], sf.src[3]);
@@ -3378,6 +3493,7 @@ function serialize() {
         mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
         op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
         flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
+        mesh: sf.mesh ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
       })),
     },
     fxPresets: state.fxPresets,
@@ -3473,12 +3589,17 @@ function deserialize(d) {
     state.map.on = !!d.map.on;
     state.map.test = !!d.map.test;
     state.map.sel = Math.min(d.map.sel || 0, d.map.surfaces.length - 1);
-    state.map.surfaces = d.map.surfaces.map(sf => ({
-      pts: sf.pts, src: sf.src || [0, 0, 1, 1], on: sf.on !== false, _m: null,
-      mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
-      op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
-      flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
-    }));
+    state.map.surfaces = d.map.surfaces.map(sf => {
+      const s = {
+        pts: sf.pts, src: sf.src || [0, 0, 1, 1], on: sf.on !== false, _m: null,
+        mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
+        op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
+        flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
+        mesh: sf.mesh && Array.isArray(sf.mesh.pts) ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
+      };
+      if (s.mesh) syncMeshCorners(s);
+      return s;
+    });
   } else if (d.warp && Array.isArray(d.warp.pts) && d.warp.pts.length === 4) {
     // migración del warp simple viejo
     state.map.on = !!d.warp.on;
@@ -4235,7 +4356,12 @@ function buildSurfList() {
     line.value = sf.line || 0;
     line.oninput = () => { sf.line = +line.value; markDirty(); };
     lineL.append(document.createTextNode('contorno'), line);
-    r2.append(maskSel, inv, fh, fv, opL, softL, lineL);
+    const meshSel = el('select'); meshSel.title = 'malla: subdividir para deformar superficies curvas';
+    [['1', 'malla: plana'], ['2', 'malla: 2×2'], ['3', 'malla: 3×3'], ['4', 'malla: 4×4'], ['5', 'malla: 5×5']]
+      .forEach(([v, txt]) => { const o = el('option'); o.value = v; o.textContent = txt; meshSel.appendChild(o); });
+    meshSel.value = sf.mesh ? sf.mesh.sub : 1;
+    meshSel.onchange = () => { setMeshSub(sf, +meshSel.value); markDirty(); if (mapWinOn) rebuildMapHandles(); };
+    r2.append(maskSel, inv, fh, fv, opL, softL, lineL, meshSel);
     box.appendChild(r2);
   });
 }
@@ -4452,6 +4578,7 @@ function warpReset() {
   const sf = state.map.surfaces[state.map.sel];
   if (!sf) return;
   sf.pts = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  if (sf.mesh) setMeshSub(sf, sf.mesh.sub); // regenerar la malla plana desde las esquinas
   computeWarp(sf); positionWarpDots(); markDirty();
 }
 const SRC_PRESETS = [
@@ -4562,9 +4689,16 @@ function mapEditorSync() {
   line.value = sf.line || 0; line.style.width = '80px';
   line.title = 'contorno animado de la superficie: color ciclando que late con el beat';
   line.oninput = () => { sf.line = +line.value; markDirty(); };
-  row2.append(msel, softL, soft, lineL, line);
+  const meshL = el('span'); meshL.textContent = 'malla';
+  meshL.title = 'subdividir en una grilla de puntos para deformar superficies curvas (columnas, cilindros, telas)';
+  const msub = el('select');
+  [['1', 'plana (4 esquinas)'], ['2', '2×2'], ['3', '3×3'], ['4', '4×4'], ['5', '5×5']]
+    .forEach(([v, txt]) => { const o = el('option'); o.value = v; o.textContent = txt; msub.appendChild(o); });
+  msub.value = sf.mesh ? sf.mesh.sub : 1;
+  msub.onchange = () => { setMeshSub(sf, +msub.value); markDirty(); rebuildMapHandles(); buildSurfList(); };
+  row2.append(msel, softL, soft, lineL, line, meshL, msub);
   tb.appendChild(row2);
-  syncMapHandles();
+  rebuildMapHandles();
 }
 function pointInQuad(p, pts) {
   let inside = false;
@@ -4575,30 +4709,39 @@ function pointInQuad(p, pts) {
   }
   return inside;
 }
-const mapHandles = [];
-{
-  const stage = $('#mapstage');
-  for (let i = 0; i < 4; i++) {
+let mapHandles = [];
+function editPts(sf) { return sf.mesh ? sf.mesh.pts : sf.pts; } // puntos editables: malla o 4 esquinas
+const mapStageEl = $('#mapstage');
+function rebuildMapHandles() {
+  mapHandles.forEach(h => h.remove());
+  mapHandles = [];
+  const sf = state.map.surfaces[state.map.sel];
+  if (!sf) return;
+  editPts(sf).forEach((p, idx) => {
     const h = el('div', 'maph');
-    h.style.display = 'none';
-    stage.appendChild(h);
+    mapStageEl.appendChild(h);
     mapHandles.push(h);
     h.addEventListener('pointerdown', e => {
       e.stopPropagation(); e.preventDefault();
       const mv = ev => {
-        const r = stage.getBoundingClientRect();
-        const sf = state.map.surfaces[state.map.sel]; if (!sf) return;
-        sf.pts[i] = [
+        const r = mapStageEl.getBoundingClientRect();
+        const s2 = state.map.surfaces[state.map.sel]; if (!s2) return;
+        editPts(s2)[idx] = [
           clamp01((ev.clientX - r.left) / r.width),
           clamp01(1 - (ev.clientY - r.top) / r.height),
         ];
-        computeWarp(sf); syncMapHandles(); markDirty();
+        if (s2.mesh) syncMeshCorners(s2); else computeWarp(s2);
+        syncMapHandles(); markDirty();
       };
       const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
       addEventListener('pointermove', mv);
       addEventListener('pointerup', up);
     });
-  }
+  });
+  syncMapHandles();
+}
+{
+  const stage = $('#mapstage');
   stage.addEventListener('pointerdown', e => {
     if (e.target !== stage && e.target !== mapPrev) return;
     const r = stage.getBoundingClientRect();
@@ -4611,13 +4754,15 @@ const mapHandles = [];
     const mv = ev => {
       const nu = [(ev.clientX - r.left) / r.width, 1 - (ev.clientY - r.top) / r.height];
       let dx = nu[0] - last[0], dy = nu[1] - last[1];
-      for (const p of sf.pts) { // que ninguna esquina se escape
+      const pts = editPts(sf);
+      for (const p of pts) { // que ningún punto se escape del área
         dx = Math.max(-p[0], Math.min(1 - p[0], dx));
         dy = Math.max(-p[1], Math.min(1 - p[1], dy));
       }
-      sf.pts = sf.pts.map(p => [p[0] + dx, p[1] + dy]);
+      for (const p of pts) { p[0] += dx; p[1] += dy; }
       last = [last[0] + dx, last[1] + dy];
-      computeWarp(sf); syncMapHandles(); markDirty();
+      if (sf.mesh) syncMeshCorners(sf); else computeWarp(sf);
+      syncMapHandles(); markDirty();
     };
     const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
     addEventListener('pointermove', mv);
@@ -4626,28 +4771,36 @@ const mapHandles = [];
 }
 function syncMapHandles() {
   const sf = state.map.surfaces[state.map.sel];
+  const pts = sf && editPts(sf);
+  if (sf && mapHandles.length !== pts.length) { rebuildMapHandles(); return; }
   mapHandles.forEach((h, i) => {
     h.style.display = mapWinOn && sf ? '' : 'none';
-    if (sf) {
-      h.style.left = sf.pts[i][0] * 100 + '%';
-      h.style.top = (1 - sf.pts[i][1]) * 100 + '%';
-    }
+    if (sf && pts[i]) { h.style.left = pts[i][0] * 100 + '%'; h.style.top = (1 - pts[i][1]) * 100 + '%'; }
   });
 }
 function drawMapPrev() {
   mapCtx.drawImage(main.canvas, 0, 0, mapPrev.width, mapPrev.height);
   state.map.surfaces.forEach((sf, i) => {
-    mapCtx.beginPath();
-    sf.pts.forEach((p, pi) => {
-      const x = p[0] * mapPrev.width, y = (1 - p[1]) * mapPrev.height;
-      pi ? mapCtx.lineTo(x, y) : mapCtx.moveTo(x, y);
-    });
-    mapCtx.closePath();
-    mapCtx.lineWidth = i === state.map.sel ? 2.5 : 1.2;
-    mapCtx.strokeStyle = i === state.map.sel ? '#ff3d54' : '#ffffff66';
-    mapCtx.stroke();
+    const sel = i === state.map.sel;
+    mapCtx.strokeStyle = sel ? '#ff3d54' : '#ffffff66';
+    mapCtx.lineWidth = sel ? 2.5 : 1.2;
+    if (sf.mesh) { // dibujar la grilla de la malla
+      const N = sf.mesh.sub, p = sf.mesh.pts, W = mapPrev.width, H = mapPrev.height;
+      const px = k => p[k][0] * W, py = k => (1 - p[k][1]) * H;
+      mapCtx.lineWidth = sel ? 1.6 : 1;
+      for (let j = 0; j <= N; j++) { mapCtx.beginPath(); for (let ii = 0; ii <= N; ii++) { const k = j * (N + 1) + ii; ii ? mapCtx.lineTo(px(k), py(k)) : mapCtx.moveTo(px(k), py(k)); } mapCtx.stroke(); }
+      for (let ii = 0; ii <= N; ii++) { mapCtx.beginPath(); for (let j = 0; j <= N; j++) { const k = j * (N + 1) + ii; j ? mapCtx.lineTo(px(k), py(k)) : mapCtx.moveTo(px(k), py(k)); } mapCtx.stroke(); }
+    } else {
+      mapCtx.beginPath();
+      sf.pts.forEach((p, pi) => {
+        const x = p[0] * mapPrev.width, y = (1 - p[1]) * mapPrev.height;
+        pi ? mapCtx.lineTo(x, y) : mapCtx.moveTo(x, y);
+      });
+      mapCtx.closePath();
+      mapCtx.stroke();
+    }
     const cx = sf.pts.reduce((a, p) => a + p[0] / 4, 0), cy = sf.pts.reduce((a, p) => a + p[1] / 4, 0);
-    mapCtx.fillStyle = i === state.map.sel ? '#ff3d54' : '#ffffffaa';
+    mapCtx.fillStyle = sel ? '#ff3d54' : '#ffffffaa';
     mapCtx.font = 'bold 14px sans-serif';
     mapCtx.fillText('S' + (i + 1), cx * mapPrev.width - 9, (1 - cy) * mapPrev.height + 5);
   });
