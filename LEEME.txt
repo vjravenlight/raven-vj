@@ -5,8 +5,10 @@ CÓMO ABRIR
   Doble click en index.html (Chrome o Edge). No requiere instalar nada.
   Podés copiar esta carpeta a un pendrive y usarla en cualquier PC.
 
-CARGAR CLIPS (MP4, WebM y GIFs animados)
+CARGAR CLIPS (MP4, WebM, GIFs animados e IMÁGENES PNG/JPG)
   - Arrastrá archivos sobre una celda (o varios: llenan la fila hacia la derecha).
+  - Las IMÁGENES FIJAS (PNG, JPG, WebP) entran como clip 🖼 — logos,
+    flyers, fotos. Usá el TRANSFORM del clip para escala/posición/rotación.
   - Arrastralos sobre el fondo o usá "+ VIDEOS": llenan todas las celdas vacías.
   - "＋" en las columnas agrega más columnas (todas las que necesites).
   - REORDENAR: arrastrá cualquier celda (video, generador, texto, gif)
@@ -163,6 +165,20 @@ EFECTO POR CAPA
   La última fila de cada capa tiene su propio efecto (además del rack
   master): elegí el FX y ajustá sus 2 parámetros. Ideal: Kaleido solo
   en la capa del video mientras las demás quedan limpias.
+
+CHROMA / LUMA KEY 🟢 (pantalla verde)
+  En el rack de efectos o como FX de capa:
+  - "Chroma Key (verde)": saca el fondo verde de la cámara/capturadora
+    (fuerza + suavidad). Poné esa capa en blend "Add" o "Screen" y el
+    presentador/objeto queda recortado sobre las capas de abajo.
+  - "Luma Key (oscuro)": saca los píxeles oscuros (fondo negro) igual.
+  Ideal para meter una cámara en vivo sin fondo, o recortar visuales.
+
+LUCES EN LA CONTROLADORA 💡 (MIDI OUT)
+  Panel (Ctrl+Alt+T) → MIDI → "Luces en la controladora": los pads del
+  clip que está al aire se ENCIENDEN en tu APC Mini / Launchpad / etc.
+  (usa la salida MIDI del controlador). Andá viendo qué está sonando sin
+  mirar la pantalla. Funciona con los pads mapeados (learn o perfiles).
 
 TEXTO ANIMADO
   Click derecho en una celda de texto → "Animación": PULSO (late con el

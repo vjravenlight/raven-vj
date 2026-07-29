@@ -6,12 +6,12 @@
 
 ## Qué hace
 
-- 🎬 **Clips**: MP4/WebM y GIFs animados por drag & drop, 4 capas × columnas ilimitadas, decks A/B/C/D
+- 🎬 **Clips**: MP4/WebM, GIFs animados e **imágenes fijas (PNG/JPG)** por drag & drop, 4 capas × columnas ilimitadas, decks A/B/C/D, disparo cuantizado al beat, modos de reproducción (loop/una vez/rebote)
 - ✨ **34 generadores GLSL** audio-reactivos + creador por bloques, editor de nodos con cables y import de shaders (`.frag` / formato Shadertoy)
-- 🎛 **Mezcla**: blend modes, crossfader A/B, fundidos, modo 1× (un clip a la vez con transiciones), efectos master y por capa con moduladores (LFO sync BPM, audio, pad XY)
+- 🎛 **Mezcla**: blend modes, crossfader A/B, fundidos, modo 1× (un clip a la vez con transiciones), efectos master y por capa con moduladores (LFO sync BPM, audio, pad XY), **chroma/luma key (pantalla verde)**
 - 🥁 **Audio-rítmico**: beat detect por micrófono, BPM automático (SYNC) o TAP, BUILD/DROP para levantar la pista
 - 🤖 **Automatización**: autopilot, auto-transición por capa (beats/segundos/fin de clip, con paso por negro), animación de parámetros por clip (loops sync BPM, audio, azar), escenas, setlist programado, randomizer de FX
-- 🎹 **Cualquier controlador MIDI**: asistente de mapeo guiado, perfiles de fábrica (nanoPAD2, nanoKONTROL2, APC Mini, Launchpad), MIDI learn universal, mapeos exportables/importables y teclas asignables
+- 🎹 **Cualquier controlador MIDI**: asistente de mapeo guiado, perfiles de fábrica (nanoPAD2, nanoKONTROL2, APC Mini, Launchpad), MIDI learn universal, **feedback de luces en la controladora (MIDI OUT)**, mapeos exportables/importables y teclas asignables
 - 📱 **Control remoto desde el celular**: grilla, mezcla, macros y secuenciador de bucles de 16 pasos — con roles para que varias personas controlen a la vez sin pisarse
 - 📽 **Salida**: ventana OUTPUT para proyector (sobrevive refrescos y fullscreen), multi-pantalla, mapping multi-superficie con corner-pin, **warp de malla para superficies curvas**, máscaras (con invertir), soft edge, flip H/V, patrón de calibración y contornos animados
 - 📐 **Resoluciones**: 16:9, vertical 9:16, cuadrada, 4:3 o personalizada (ej. `1920x600` para tiras LED)

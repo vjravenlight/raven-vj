@@ -446,9 +446,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <div id="toast"></div>
 <div id="dropveil"></div>
 <div id="clock" title="hora local — click: mostrar/ocultar fecha" data-noi18n>--:--</div>
-<input type="file" id="fileIn" accept="video/*,image/gif" multiple style="display:none">
+<input type="file" id="fileIn" accept="video/*,image/*" multiple style="display:none">
 <input type="file" id="setIn" accept=".json,application/json" style="display:none">
-<input type="file" id="relinkIn" accept="video/*,image/gif" multiple style="display:none">
+<input type="file" id="relinkIn" accept="video/*,image/*" multiple style="display:none">
 
 <script>
 'use strict';
@@ -1040,6 +1040,18 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  float lum=dot(c,vec3(.299,.587,.114));
  vec3 neon=hsv2rgb(vec3(fract(u_p2+lum*.6),1.,pow(lum,.7)*1.35));
  o=vec4(clamp(mix(c,neon,u_p1),0.,1.),1.);}` },
+{ id: 'chroma', name: 'Chroma Key (verde)', p: ['fuerza', 'suavidad'], fs: `void main(){
+ vec3 c=texture(u_tex,v_uv).rgb;
+ float greenness=c.g-max(c.r,c.b); // >0 = verdoso
+ float thr=mix(0.35,0.0,u_p1);     // más fuerza → saca más verde
+ float k=smoothstep(thr,thr+0.02+u_p2*0.4,greenness);
+ o=vec4(c*(1.-k),1.);}` },      // el verde se vuelve negro → con blend Add/Screen deja pasar las capas de abajo
+{ id: 'luma', name: 'Luma Key (oscuro)', p: ['umbral', 'suavidad'], fs: `void main(){
+ vec3 c=texture(u_tex,v_uv).rgb;
+ float l=dot(c,vec3(.299,.587,.114));
+ float thr=u_p1*0.6;
+ float k=1.-smoothstep(thr,thr+0.02+u_p2*0.4,l); // por debajo del umbral → negro (transparente en Add/Screen)
+ o=vec4(c*(1.-k),1.);}` },
 ];
 
 const COMP_FS = `#version 300 es
@@ -2566,7 +2578,7 @@ function renderCell(d, cell) {
   if (cell.kind !== 'empty') {
     const nm = el('div', 'cname');
     nm.textContent = (cell.kind === 'gen' ? genIcon(cell.presetIdx) + ' ' :
-      cell.kind === 'text' ? '💬 ' : cell.kind === 'gif' ? '🎞 ' :
+      cell.kind === 'text' ? '💬 ' : cell.kind === 'gif' ? (cell.isImage ? '🖼 ' : '🎞 ') :
       cell.kind === 'cam' ? '📷 ' : '') + cell.name;
     d.appendChild(nm);
     const cb = el('div', 'colbadge');
@@ -2595,6 +2607,7 @@ function updateActiveClasses() {
     if (a) cellEl(a.l, a.c)?.classList.add('active');
     if (f) cellEl(f.l, f.c)?.classList.add('fading');
   }
+  updateMidiLeds(); // reflejar los clips activos en las luces de la controladora
 }
 function flashColHead(c) {
   const b = document.querySelector(`[data-map="col:${c}"]`);
@@ -2726,10 +2739,34 @@ async function camPicker(cell, x, y) {
     fn: () => assignCam(cell, d.deviceId, d.label || 'cámara ' + (i + 1)),
   })));
 }
-const isMediaFile = f => f.type.startsWith('video') || f.type === 'image/gif';
+const isMediaFile = f => f.type.startsWith('video') || f.type.startsWith('image');
 function assignMedia(cell, file) {
   if (file.type === 'image/gif') return assignGif(cell, file);
+  if (file.type.startsWith('image')) return assignImage(cell, file); // PNG, JPG, WebP, etc.
   return assignVideo(cell, file);
+}
+async function assignImage(cell, file) {
+  // imagen fija: se trata como un GIF de un solo frame (reutiliza render/serialize/relink)
+  if (cell.url) URL.revokeObjectURL(cell.url);
+  cell.kind = 'gif'; cell.isImage = true; cell.file = file;
+  cell.name = file.name.replace(/\.[^.]+$/, '');
+  cell.video = null; cell.url = null; cell.presetIdx = -1; cell.thumb = ''; cell.gframes = null;
+  refreshCell(cell.l, cell.c); markDirty();
+  try {
+    const bmp = await createImageBitmap(file);
+    cell.gframes = [{ bmp, dur: 1e9 }];
+    cell.gtotal = 1e9;
+    const cv = document.createElement('canvas'); cv.width = 160; cv.height = 90;
+    const x = cv.getContext('2d');
+    const vAR = bmp.width / bmp.height, cAR = 160 / 90;
+    let sw = bmp.width, sh = bmp.height, sx = 0, sy = 0;
+    if (vAR > cAR) { sw = sh * cAR; sx = (bmp.width - sw) / 2; } else { sh = sw / cAR; sy = (bmp.height - sh) / 2; }
+    x.drawImage(bmp, sx, sy, sw, sh, 0, 0, 160, 90);
+    cell.thumb = cv.toDataURL('image/jpeg', .6);
+  } catch (err) {
+    console.error(err); toast('Imagen: no se pudo cargar'); cell.kind = 'empty';
+  }
+  refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
 }
 async function assignGif(cell, file) {
   if (cell.url) URL.revokeObjectURL(cell.url);
@@ -3010,7 +3047,37 @@ xypad.addEventListener('pointerdown', e => {
 
 /* ---------------- MIDI ---------------- */
 const midiRefs = {};
-let midiLearn = false, midiPending = null, midiOk = false;
+let midiLearn = false, midiPending = null, midiOk = false, midiOuts = [];
+/* ---- MIDI OUT: feedback de luces en la controladora (pads activos se encienden) ---- */
+const _ledPrev = new Map();
+function sendMidiAll(bytes) { midiOuts.forEach(o => { try { o.send(bytes); } catch (e) { } }); }
+function activeCellKeys() {
+  const s = new Set();
+  for (let l = 0; l < LAYERS; l++) {
+    const cell = state.layers[l].slots[state.layers[l].target].cell;
+    if (cell) s.add('cell:' + cell.l + ':' + cell.c);
+  }
+  return s;
+}
+function updateMidiLeds(force) {
+  if (!uiPrefs.midiFeedback || !midiOuts.length) return;
+  const active = activeCellKeys();
+  for (const [key, val] of Object.entries(state.mappings)) {
+    if (!key.startsWith('note:') || !String(val).startsWith('cell:')) continue;
+    const [, ch, num] = key.split(':');
+    const vel = active.has(val) ? 127 : 0; // encendido / apagado (el color depende de la controladora)
+    const pk = ch + ':' + num;
+    if (force || _ledPrev.get(pk) !== vel) { _ledPrev.set(pk, vel); sendMidiAll([0x90 | (+ch & 0x0f), +num, vel]); }
+  }
+}
+function clearMidiLeds() { // apagar todas las luces que hayamos prendido
+  for (const [key, val] of Object.entries(state.mappings)) {
+    if (!key.startsWith('note:') || !String(val).startsWith('cell:')) continue;
+    const [, ch, num] = key.split(':');
+    sendMidiAll([0x90 | (+ch & 0x0f), +num, 0]);
+  }
+  _ledPrev.clear();
+}
 function midiInit() {
   if (!navigator.requestMIDIAccess) { $('#midiSt').textContent = 'no soportado'; return; }
   $('#midiSt').textContent = 'pidiendo permiso…';
@@ -3019,6 +3086,7 @@ function midiInit() {
     const bind = () => {
       let names = [];
       for (const inp of acc.inputs.values()) { inp.onmidimessage = onMIDI; names.push(inp.name); }
+      midiOuts = acc.outputs ? [...acc.outputs.values()] : []; // puertos de salida → luces de la controladora
       $('#midiSt').textContent = names.length ? names.join(', ').slice(0, 28) : 'sin dispositivo';
     };
     bind(); acc.onstatechange = bind;
@@ -3553,7 +3621,7 @@ function serialize() {
       anim: c.anim && Object.values(c.anim).some(a => a && a.m !== 'off') ? c.anim : null,
       spd: c.spd != null && c.spd !== 1 ? c.spd : null,
       textStyle: c.textStyle, inT: c.inT || 0, outT: c.outT || 0, camId: c.camId || '',
-      play: c.play && c.play !== 'loop' ? c.play : null,
+      play: c.play && c.play !== 'loop' ? c.play : null, isImage: c.isImage ? 1 : 0,
       fileName: c.file ? c.file.name : (c.kind === 'video' || c.kind === 'gif' ? c.name : null),
       thumb: c.thumb,
     })),
@@ -3614,6 +3682,7 @@ function deserialize(d) {
     cell.spd = cd.spd != null ? cd.spd : undefined;
     cell.anim = cd.anim || undefined;
     cell.inT = cd.inT || 0; cell.outT = cd.outT || 0; cell.play = cd.play || undefined;
+    cell.isImage = cd.isImage ? true : undefined;
     cell.camId = cd.camId || '';
     if (cd.kind === 'video' || cd.kind === 'gif')
       cell.name = cd.fileName ? cd.fileName.replace(/\.[^.]+$/, '') : cd.name;
@@ -4195,6 +4264,9 @@ function buildCpTab(id) {
       <div class="cprow"><b>Compartir mapeos</b><span style="display:flex;gap:6px">
         <button id="cpmexp" class="mini">💾 exportar</button>
         <button id="cpmimp" class="mini">📂 importar</button></span></div>
+      <div class="cprow"><b>Luces en la controladora</b><span>
+        <button id="cpmidifb" class="mini${uiPrefs.midiFeedback ? ' on' : ''}" title="MIDI OUT: enciende los pads del clip que está al aire (APC, Launchpad, etc.)">${uiPrefs.midiFeedback ? 'ON' : 'off'}</button>
+        <span class="v" style="margin-left:6px">${midiOuts.length ? midiOuts.length + ' salida(s)' : 'sin salida MIDI'}</span></span></div>
       <div class="cph">MAPEOS DE MIDI LEARN
         <button id="cpmapsclear" class="mini" style="margin-left:8px">borrar todos</button></div>
       <div id="cpmaps"></div>
@@ -4204,6 +4276,12 @@ function buildCpTab(id) {
     $('#cpprof').onchange = e => { if (e.target.value) { loadMidiProfile(e.target.value); buildCpTab('midi'); } };
     $('#cpmexp').onclick = exportMidiMaps;
     $('#cpmimp').onclick = importMidiMaps;
+    $('#cpmidifb').onclick = () => {
+      uiPrefs.midiFeedback = !uiPrefs.midiFeedback; saveUI();
+      if (uiPrefs.midiFeedback) updateMidiLeds(true); else clearMidiLeds();
+      buildCpTab('midi');
+      toast(uiPrefs.midiFeedback ? (midiOuts.length ? '💡 Luces de la controladora ON' : '⚠ No hay salida MIDI detectada') : 'Luces off');
+    };
     $('#cpmapsclear').onclick = () => { state.mappings = {}; markDirty(); buildCpMaps(); };
     const nd = el('div', 'cprow');
     nd.innerHTML = `<b>Mapa de fábrica nanoPAD2</b><span><button id="cpnanodef" class="mini${state.nanoDefaults ? ' on' : ''}">${state.nanoDefaults ? 'ON' : 'off'}</button></span>`;
@@ -4917,7 +4995,7 @@ function layoutMsg() {
     grid: state.grid.map(row => row.map(c => ({
       k: c.kind,
       n: c.kind === 'empty' ? '' :
-        ((c.kind === 'gen' ? genIcon(c.presetIdx) + ' ' : c.kind === 'text' ? '💬' : c.kind === 'gif' ? '🎞' : c.kind === 'cam' ? '📷' : '') +
+        ((c.kind === 'gen' ? genIcon(c.presetIdx) + ' ' : c.kind === 'text' ? '💬' : c.kind === 'gif' ? (c.isImage ? '🖼' : '🎞') : c.kind === 'cam' ? '📷' : '') +
           c.name).slice(0, 12),
     }))),
     scenes: state.scenes.map(s => !!s),
@@ -5033,7 +5111,7 @@ document.addEventListener('contextmenu', e => {
           if (tc < 0) { addColumns(1); tc = COLS - 1; }
           const dst = state.grid[l][tc];
           if (cell.kind === 'video' && cell.file) assignVideo(dst, cell.file);
-          else if (cell.kind === 'gif' && cell.file) assignGif(dst, cell.file);
+          else if (cell.kind === 'gif' && cell.file) assignMedia(dst, cell.file);
           else {
             emptyCell(dst);
             Object.assign(dst, {
@@ -5680,7 +5758,7 @@ function buildPropClip(b) {
   }
   cell.tr = cell.tr || { sc: 1, x: 0, y: 0, rot: 0 };
   const t = cell.tr;
-  const tipo = { video: '🎬 video', gen: '✨ generativo', text: '💬 texto', gif: '🎞 gif', cam: '📷 cámara' }[cell.kind] || cell.kind;
+  const tipo = cell.isImage ? '🖼 imagen' : { video: '🎬 video', gen: '✨ generativo', text: '💬 texto', gif: '🎞 gif', cam: '📷 cámara' }[cell.kind] || cell.kind;
   let extra = '';
   if (cell.kind === 'video') {
     extra = `<div class="cph">RECORTE (loop)</div>
@@ -5693,6 +5771,9 @@ function buildPropClip(b) {
       ${pRow('Reproducción', `<select id="ppplay">
         <option value="loop"${(cell.play || 'loop') === 'loop' ? ' selected' : ''}>🔁 bucle</option>
         <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez (queda en el último frame)</option></select>`)}`;
+  } else if (cell.kind === 'gif' && cell.isImage) {
+    extra = `<div class="cph">IMAGEN 🖼</div>
+      <div class="cprow"><span class="v">Imagen fija. Usá el TRANSFORM de arriba para escala/posición/rotación.</span></div>`;
   } else if (cell.kind === 'gif') {
     extra = `<div class="cph">GIF</div>
       ${pRow('Reproducción', `<select id="ppplay">
