@@ -123,6 +123,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .cell.gen .cname{color:var(--acc)}
 .cell.text .cname{color:var(--acc2)}
 .cell.dragover{border-color:var(--acc2);box-shadow:0 0 10px #ff3fd466}
+.cell.snapwait{animation:snapwait .5s ease-in-out infinite}
+@keyframes snapwait{0%,100%{box-shadow:0 0 0 0 var(--acc)}50%{box-shadow:0 0 0 2px var(--acc) inset,0 0 12px var(--acc)}}
+#snapSel.armed{border-color:var(--acc);color:var(--acc);animation:snapwait .5s ease-in-out infinite}
 .cell .kind{position:absolute;top:2px;left:4px;font-size:9px;color:#0009;
   text-shadow:0 0 2px #000}
 
@@ -353,6 +356,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       <select id="autoBeats"><option>1</option><option>2</option><option selected>4</option>
         <option>8</option><option>16</option><option>32</option></select>
       <label>beats</label></span>
+    <span class="grp"><label>SNAP</label>
+      <select id="snapSel" title="disparo cuantizado: los clips entran recién en el próximo beat/compás (quedan armados y titilando)">
+        <option value="0">off</option><option value="1">beat</option>
+        <option value="4">1 compás</option><option value="8">2 comp.</option></select></span>
     <span class="grp"><label>FADE</label>
       <input id="fadeIn" type="range" min="0" max="5" step="0.05" value="1" style="width:70px" data-map="fade">
       <label id="fadeLbl">1.0s</label>
@@ -1692,6 +1699,7 @@ function clockTick(dt) {
   beatFloat += dt * state.bpm / 60;
   const nb = Math.floor(beatFloat);
   if (nb !== prevBeat) {
+    if (state.snap > 0 && nb % state.snap === 0) flushSnap(); // beat-snap: soltar lo encolado en el beat/compás
     for (const L of state.lfo) {
       const per = 1 / L.rate;
       if (Math.floor(beatFloat / per) !== Math.floor((beatFloat - dt * state.bpm / 60) / per)) L._v = Math.random();
@@ -1837,6 +1845,31 @@ function triggerColumn(c) {
   for (let l = 0; l < LAYERS; l++) if (state.grid[l][c] && state.grid[l][c].kind !== 'empty') triggerCell(l, c);
   flashColHead(c);
 }
+/* ---------------- beat-snap: disparo cuantizado al beat/compás (estilo Resolume) ---------------- */
+let snapQueue = [];
+function markSnapPending() {
+  document.querySelectorAll('.cell.snapwait').forEach(e => e.classList.remove('snapwait'));
+  snapQueue.forEach(q => { const e = q.mark && q.mark(); if (e) e.classList.add('snapwait'); });
+  const lbl = $('#snapSel');
+  if (lbl) lbl.classList.toggle('armed', snapQueue.length > 0);
+}
+function flushSnap() {
+  if (!snapQueue.length) return;
+  const q = snapQueue; snapQueue = [];
+  document.querySelectorAll('.cell.snapwait').forEach(e => e.classList.remove('snapwait'));
+  const s = $('#snapSel'); if (s) s.classList.remove('armed');
+  q.forEach(x => x.run());
+}
+function qTriggerCell(l, c) {
+  if (!(state.snap > 0)) { triggerCell(l, c); return; }
+  snapQueue.push({ run: () => triggerCell(l, c), mark: () => cellEl(l, c) });
+  markSnapPending();
+}
+function qTriggerColumn(c) {
+  if (!(state.snap > 0)) { triggerColumn(c); return; }
+  snapQueue.push({ run: () => triggerColumn(c), mark: () => cellEl(0, c) });
+  markSnapPending();
+}
 function monoToggle() {
   state.mono = !state.mono;
   $('#monoBtn').classList.toggle('on', state.mono);
@@ -1968,8 +2001,13 @@ function uploadGif(gl, s, dtEff) {
   const fr = s.cell && s.cell.gframes;
   if (!fr || !fr.length) return 0;
   s._gt = (s._gt || 0) + dtEff;
-  let t = s._gt % s.cell.gtotal, i = 0;
-  while (t > fr[i].dur) { t -= fr[i].dur; i = (i + 1) % fr.length; }
+  const play = s.cell.play || 'loop', tot = s.cell.gtotal;
+  let te; // tiempo efectivo según el modo de reproducción
+  if (play === 'once') te = Math.min(s._gt, tot - 1e-4); // se queda en el último frame
+  else if (play === 'bounce') { const p = tot * 2; let x = s._gt % p; te = x > tot ? p - x : x; } // ida y vuelta
+  else te = s._gt % tot; // loop
+  let t = te, i = 0;
+  while (t > fr[i].dur && i < fr.length - 1) { t -= fr[i].dur; i++; }
   if (i !== s._gidx) {
     s._gidx = i;
     if (!s.tex) s.tex = makeTex(gl, 2, 2);
@@ -2338,7 +2376,7 @@ function buildGrid() {
     const h = el('div', 'colhead');
     const b = el('button'); b.textContent = c + 1;
     b.dataset.map = 'col:' + c;
-    b.onclick = () => triggerColumn(c);
+    b.onclick = () => qTriggerColumn(c);
     h.appendChild(b); g.appendChild(h);
   }
   const addC = el('div', 'colhead');
@@ -2468,7 +2506,7 @@ function cellDom(l, c) {
   d.dataset.l = l; d.dataset.c = c;
   d.dataset.map = `cell:${l}:${c}`;
   renderCell(d, cell);
-  d.onclick = () => triggerCell(l, c);
+  d.onclick = () => qTriggerCell(l, c);
   d.ondblclick = () => {
     const cl = state.grid[l][c];
     if (cl.kind !== 'empty') openProps('clip', cl, l);
@@ -2576,11 +2614,20 @@ function uiTick(t) {
     const L = state.layers[l];
     const s = L.slots[L.target];
     if (s.kind === 'video' && s.video && s.cell) {
-      // recorte in/out: loop dentro del rango marcado
+      // recorte in/out + modo de reproducción por clip
       const cIn = s.cell.inT || 0, cOut = s.cell.outT || 0;
+      const end = cOut || (s.video.duration || 0);
+      const play = s.cell.play || 'loop';
+      s.video.loop = play !== 'once'; // apagar el loop nativo cuando es "una vez"
       try {
-        if (cOut && s.video.currentTime >= cOut) s.video.currentTime = cIn;
-        else if (cIn && s.video.currentTime < cIn - .35) s.video.currentTime = cIn;
+        if (play === 'once') {
+          // reproduce una vez y se queda en el último frame
+          if (end && s.video.currentTime >= end - .04) { s.video.pause(); s.video.currentTime = Math.max(0, end - .04); }
+          else if (cIn && s.video.currentTime < cIn - .35) s.video.currentTime = cIn;
+        } else {
+          if (cOut && s.video.currentTime >= cOut) s.video.currentTime = cIn;
+          else if (cIn && s.video.currentTime < cIn - .35) s.video.currentTime = cIn;
+        }
       } catch (e) { }
       const d = cellEl(s.cell.l, s.cell.c)?.querySelector('.prog');
       if (d && s.video.duration) d.style.width = (s.video.currentTime / s.video.duration * 100) + '%';
@@ -3228,8 +3275,8 @@ function importMidiMaps() {
 function applyTarget(id, val, kind, on) {
   const [t, a, b] = id.split(':');
   switch (t) {
-    case 'cell': if (on) triggerCell(+a, +b); break;
-    case 'col': if (on) triggerColumn(+a); break;
+    case 'cell': if (on) qTriggerCell(+a, +b); break;
+    case 'col': if (on) qTriggerColumn(+a); break;
     case 'lclear': if (on) clearLayer(+a); break;
     case 'lop': {
       state.layers[+a].opacity = val;
@@ -3470,7 +3517,7 @@ function serialize() {
     bpm: state.bpm, fade: state.fade, master: state.master, cols: COLS,
     auto: { mode: state.auto.mode, beats: state.auto.beats },
     lfo: state.lfo.map(l => ({ wave: l.wave, rate: l.rate })),
-    scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade,
+    scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap,
     beatSens: state.beatSens, fpsCap: state.fpsCap, mono: state.mono, monoV: 2,
     outScreen: state.outScreen, theme: state.theme, gSpeed: state.gSpeed,
     res: state.res,
@@ -3506,6 +3553,7 @@ function serialize() {
       anim: c.anim && Object.values(c.anim).some(a => a && a.m !== 'off') ? c.anim : null,
       spd: c.spd != null && c.spd !== 1 ? c.spd : null,
       textStyle: c.textStyle, inT: c.inT || 0, outT: c.outT || 0, camId: c.camId || '',
+      play: c.play && c.play !== 'loop' ? c.play : null,
       fileName: c.file ? c.file.name : (c.kind === 'video' || c.kind === 'gif' ? c.name : null),
       thumb: c.thumb,
     })),
@@ -3565,7 +3613,7 @@ function deserialize(d) {
     cell.tr = cd.tr || undefined;
     cell.spd = cd.spd != null ? cd.spd : undefined;
     cell.anim = cd.anim || undefined;
-    cell.inT = cd.inT || 0; cell.outT = cd.outT || 0;
+    cell.inT = cd.inT || 0; cell.outT = cd.outT || 0; cell.play = cd.play || undefined;
     cell.camId = cd.camId || '';
     if (cd.kind === 'video' || cd.kind === 'gif')
       cell.name = cd.fileName ? cd.fileName.replace(/\.[^.]+$/, '') : cd.name;
@@ -3577,6 +3625,7 @@ function deserialize(d) {
   state.mappings = d.mappings || {};
   state.scenes = Array.isArray(d.scenes) && d.scenes.length === 8 ? d.scenes : new Array(8).fill(null);
   state.rndBeats = d.rndBeats || 0;
+  state.snap = d.snap || 0; if ($('#snapSel')) $('#snapSel').value = state.snap;
   $('#rndSel').value = state.rndBeats;
   state.xfade = d.xfade ?? .5;
   $('#xfadeIn').value = state.xfade;
@@ -3861,6 +3910,12 @@ function resync() { beatFloat = Math.floor(beatFloat) + 0.0001; beatEnv = 1; }
 $('#resyncBtn').onclick = resync;
 $('#autoMode').onchange = e => { state.auto.mode = e.target.value; state.auto.count = 0; markDirty(); };
 $('#autoBeats').onchange = e => { state.auto.beats = +e.target.value; markDirty(); };
+$('#snapSel').onchange = e => {
+  state.snap = +e.target.value;
+  if (!(state.snap > 0)) flushSnap(); // apagar SNAP dispara lo que estaba en cola
+  markDirty();
+  toast(state.snap > 0 ? '⏱ SNAP: los clips entran al ' + (state.snap === 1 ? 'próximo beat' : (state.snap / 4) + ' compás(es)') : 'SNAP off (disparo inmediato)');
+};
 $('#fadeIn').oninput = e => { state.fade = +e.target.value; $('#fadeLbl').textContent = state.fade.toFixed(1) + 's'; markDirty(); };
 $('#monoBtn').onclick = monoToggle;
 $('#audioBtn').onclick = audioToggle;
@@ -3975,8 +4030,8 @@ document.addEventListener('keydown', e => {
     if (e.shiftKey) captureScene(i); else recallScene(i);
     return;
   }
-  if (e.key >= '1' && e.key <= '9') triggerColumn(+e.key - 1);
-  else if (e.key === '0') triggerColumn(9);
+  if (e.key >= '1' && e.key <= '9') qTriggerColumn(+e.key - 1);
+  else if (e.key === '0') qTriggerColumn(9);
   else if (e.key === 't' || e.key === 'T') tap();
   else if (e.key === 'h' || e.key === 'H') { togglePanel(true); buildCpTab('keys'); }
   else if (e.key === 'p' || e.key === 'P') panic();
@@ -4872,8 +4927,8 @@ function sendLayout(conn) { try { conn.send(layoutMsg()); } catch (e) { } }
 function remoteBroadcastLayout() { if (remote.on) remote.conns.forEach(sendLayout); }
 function remoteMsg(d) {
   if (!d || !d.t) return;
-  if (d.t === 'cell') triggerCell(+d.l, +d.c);
-  else if (d.t === 'col') triggerColumn(+d.c);
+  if (d.t === 'cell') qTriggerCell(+d.l, +d.c);
+  else if (d.t === 'col') qTriggerColumn(+d.c);
   else if (d.t === 'scene') recallScene(+d.i);
   else if (d.t === 'tgt') applyTarget(String(d.id), +d.val || 0, d.kind || 'cc', d.on ? 1 : 0);
 }
@@ -4991,7 +5046,7 @@ document.addEventListener('contextmenu', e => {
           dst.gp = cell.gp ? { ...cell.gp } : undefined;
           dst.tr = cell.tr ? { ...cell.tr } : undefined;
           dst.anim = cell.anim ? JSON.parse(JSON.stringify(cell.anim)) : undefined;
-          dst.spd = cell.spd; dst.inT = cell.inT || 0; dst.outT = cell.outT || 0;
+          dst.spd = cell.spd; dst.inT = cell.inT || 0; dst.outT = cell.outT || 0; dst.play = cell.play;
           refreshCell(l, tc); markDirty();
           toast('Clip duplicado en la columna ' + (tc + 1));
         }
@@ -5634,7 +5689,16 @@ function buildPropClip(b) {
         <div id="pptlph" style="position:absolute;top:0;bottom:0;width:2px;background:var(--acc)"></div>
       </div>
       ${pRow('Inicio (seg)', `<input type="number" id="ppin" min="0" step="0.1" value="${cell.inT || 0}">`)}
-      ${pRow('Fin (seg)', `<input type="number" id="ppout" min="0" step="0.1" value="${cell.outT || 0}">`)}`;
+      ${pRow('Fin (seg)', `<input type="number" id="ppout" min="0" step="0.1" value="${cell.outT || 0}">`)}
+      ${pRow('Reproducción', `<select id="ppplay">
+        <option value="loop"${(cell.play || 'loop') === 'loop' ? ' selected' : ''}>🔁 bucle</option>
+        <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez (queda en el último frame)</option></select>`)}`;
+  } else if (cell.kind === 'gif') {
+    extra = `<div class="cph">GIF</div>
+      ${pRow('Reproducción', `<select id="ppplay">
+        <option value="loop"${(cell.play || 'loop') === 'loop' ? ' selected' : ''}>🔁 bucle</option>
+        <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez</option>
+        <option value="bounce"${cell.play === 'bounce' ? ' selected' : ''}>🔄 rebote (ida y vuelta)</option></select>`)}`;
   } else if (cell.kind === 'gen') {
     const gp = cell.gp = cell.gp || { xy: true, p1: .5, p2: .5 };
     extra = `<div class="cph">GENERADOR</div>
@@ -5674,6 +5738,12 @@ function buildPropClip(b) {
   $('#ppspd').oninput = e => { cell.spd = +e.target.value; applyAllSpeeds(); markDirty(); };
   $('#pptr0').onclick = () => { cell.tr = { sc: 1, x: 0, y: 0, rot: 0 }; cell.spd = 1; applyAllSpeeds(); markDirty(); buildProps(); };
   wireAnimUI(cell);
+  if ($('#ppplay')) $('#ppplay').onchange = e => {
+    cell.play = e.target.value;
+    // reiniciar el clip para que el modo nuevo se note de una
+    state.layers.forEach(L => L.slots.forEach(s => { if (s.cell === cell) { s._gt = 0; if (s.video) { try { s.video.currentTime = cell.inT || 0; if (cell.play !== 'once') s.video.play().catch(() => { }); } catch (er) { } } } }));
+    markDirty();
+  };
   if (cell.kind === 'video') {
     const upd = () => {
       const i = Math.max(0, +$('#ppin').value || 0);

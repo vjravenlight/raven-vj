@@ -61,6 +61,21 @@ RESOLUCIÓN DE LA COMPOSICIÓN
   donde escribís lo que quieras (ej: 1920x600 para una pantalla LED).
   La resolución se guarda con el set y la salida siempre se adapta.
 
+BEAT-SNAP (disparo cuantizado) ⏱
+  Selector SNAP arriba (al lado de AUTO): off / beat / 1 compás / 2 comp.
+  Con SNAP armado, cuando disparás una celda o columna el clip NO entra
+  al toque: queda ARMADO (titilando) y entra recién en el próximo beat
+  o compás, así todo cae clavado al ritmo — como en Resolume. Apagar
+  SNAP dispara al instante lo que quedó en cola.
+
+MODO DE REPRODUCCIÓN POR CLIP 🔁
+  Propiedades del clip (doble click) → Reproducción:
+  - 🔁 bucle: se repite (lo de siempre).
+  - 1️⃣ una vez: reproduce hasta el final y se queda en el último frame
+    (ideal para un logo o un sting que no querés que loopee).
+  - 🔄 rebote (solo GIF): ida y vuelta, ping-pong.
+  Se guarda con el clip.
+
 MODO 1× (MONO) — un solo clip a la vez
   El botón 1× al lado del FADE: dispares la celda que dispares, se
   reproduce UN solo clip y cada disparo reemplaza al anterior con la
