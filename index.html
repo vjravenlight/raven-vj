@@ -483,7 +483,7 @@ const state = {
     surfaces: [{ pts: [[0, 0], [1, 0], [1, 1], [0, 1]], src: [0, 0, 1, 1], on: true, _m: null }],
   },
   fxPresets: {}, mono: true, outScreen: -1, theme: 'fenix',
-  customGens: [], gSpeed: 1,
+  customGens: [], gSpeed: 1, snap: 0,
   decks: null, deckIdx: 0,
 };
 const DECK_NAMES = ['A', 'B', 'C', 'D'];
@@ -519,7 +519,8 @@ function applyTheme(name) {
 }
 const WARP_ID = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 function newSurface() {
-  return { pts: [[0, 0], [1, 0], [1, 1], [0, 1]], src: [0, 0, 1, 1], on: true, _m: null };
+  return { pts: [[0, 0], [1, 0], [1, 1], [0, 1]], src: [0, 0, 1, 1], on: true, _m: null,
+    op: 1, mask: 0, maskInv: 0, soft: 0, line: 0, flipX: 0, flipY: 0 };
 }
 /* homografía: cuadrado unitario → 4 esquinas, invertida para el shader */
 function computeWarp(sf) {
@@ -1015,7 +1016,8 @@ precision highp float;
 in vec2 v_uv; out vec4 o;
 uniform sampler2D u_tex; uniform float u_master,u_flash,u_build,u_time,u_warpOn;
 uniform mat3 u_warp; uniform vec4 u_srcRect;
-uniform float u_mask,u_soft,u_line,u_beat;
+uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test;
+uniform vec2 u_flip;
 void main(){
  vec2 base=v_uv; float inQ=1.; float eb=1.; float m=1.;
  if(u_warpOn>.5){
@@ -1030,13 +1032,17 @@ void main(){
      if(u_mask<1.5) m=smoothstep(.5,.5-sft,length(mp));
      else if(u_mask<2.5) m=smoothstep(.48,.48-sft,abs(mp.x)+abs(mp.y));
      else if(u_mask<3.5){ float d=max(abs(mp.x)*1.15+mp.y*.58,-mp.y)-.44; m=smoothstep(0.,sft,-d); }
-     else { vec2 a2=abs(mp); float d=max(a2.x*.866+a2.y*.5,a2.y)-.46; m=smoothstep(0.,sft,-d); }
+     else if(u_mask<4.5){ vec2 a2=abs(mp); float d=max(a2.x*.866+a2.y*.5,a2.y)-.46; m=smoothstep(0.,sft,-d); }
+     else { float ang=atan(mp.y,mp.x); float rr=length(mp); float f=.36+.13*cos(5.*ang); m=smoothstep(0.,sft,f-rr); } // estrella
+     if(u_minv>.5) m=1.-m; // invertir máscara
      inQ*=m;
    }
  }
  float b=u_build;
  vec2 uv=(base-.5)*(1.-b*.22)+.5;
  uv+=b*.006*vec2(sin(u_time*47.),cos(u_time*61.));
+ if(u_flip.x>.5) uv.x=1.-uv.x; // flip horizontal (retroproyección)
+ if(u_flip.y>.5) uv.y=1.-uv.y; // flip vertical
  vec2 suv=u_srcRect.xy+uv*u_srcRect.zw;
  vec3 c=texture(u_tex,clamp(suv,u_srcRect.xy,u_srcRect.xy+u_srcRect.zw)).rgb;
  c*=1.+b*.7;
@@ -1046,8 +1052,15 @@ void main(){
    vec3 lc=.5+.5*cos(6.2832*(u_time*.12+vec3(0.,.33,.66)));
    c=mix(c,lc*(1.2+u_beat*1.3),band*m*step(0.,eb));
  }
- c*=inQ;
- o=vec4(mix(c*u_master,vec3(1.),u_flash*inQ),1.); }`;
+ if(u_test>.5){ // patrón de calibración para alinear el proyector sobre la superficie
+   vec2 g=abs(fract(base*10.)-.5);
+   float grid=step(.44,max(g.x,g.y));
+   float bord=step(.985,max(abs(base.x-.5),abs(base.y-.5))*2.);
+   float cr=step(abs(base.x-base.y),.004)+step(abs(base.x+base.y-1.),.004);
+   c=vec3(.04,.10,.14)+vec3(grid)*vec3(.15,.6,.85)+vec3(bord)*vec3(1.,.5,0.)+vec3(cr)*vec3(1.,0.,.35);
+ }
+ vec3 outc=mix(c*u_master,vec3(1.),u_flash*inQ)*inQ*u_sop;
+ o=vec4(outc,1.); }`;
 
 const BLIT_FS = `#version 300 es
 precision highp float;
@@ -1113,6 +1126,7 @@ function makeTarget(gl, w, h) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   return { fbo, tex, w, h };
 }
+function freeTarget(gl, t) { if (t) { try { gl.deleteFramebuffer(t.fbo); gl.deleteTexture(t.tex); } catch (e) { } } }
 function draw(gl) { gl.drawArrays(gl.TRIANGLES, 0, 3); }
 
 const main = makeCtx($('#outCanvas'));
@@ -1123,11 +1137,15 @@ let ping = [], fbTgt = null, blackTex = null;
 function allocTargets() {
   const gl = main.gl, [w, h] = state.res;
   main.canvas.width = w; main.canvas.height = h;
+  // liberar los framebuffers viejos antes de recrear (si no, cada cambio de resolución los filtra)
+  ping.forEach(t => freeTarget(gl, t));
+  freeTarget(gl, fbTgt);
   ping = [makeTarget(gl, w, h), makeTarget(gl, w, h)];
   fbTgt = makeTarget(gl, w, h);
   if (!blackTex) blackTex = makeTex(gl, 2, 2);
   for (const L of state.layers) for (const s of L.slots) {
-    if (s.tgt) s.tgt = makeTarget(gl, w, h);
+    if (s.tgt) { freeTarget(gl, s.tgt); s.tgt = makeTarget(gl, w, h); }
+    freeTarget(gl, s.nT); freeTarget(gl, s.fxT);
     s.nT = null; s.fxT = null;
   }
 }
@@ -1875,16 +1893,29 @@ function uploadGif(gl, s, dtEff) {
   }
   return 1;
 }
+function ensureRVFC(v) {
+  // marca cada frame nuevo del video → así no re-subimos la misma imagen a la GPU a 60fps
+  if (v._rvfcOn || typeof v.requestVideoFrameCallback !== 'function') return;
+  v._rvfcOn = true; v._fc = 0;
+  const cb = () => { v._fc++; if (v._rvfcOn) v.requestVideoFrameCallback(cb); };
+  v.requestVideoFrameCallback(cb);
+}
 function uploadVideo(gl, s) {
   const v = s.video;
   if (!v || v.readyState < 2) return 0;
+  ensureRVFC(v);
   if (!s.tex) s.tex = makeTex(gl, 2, 2);
-  gl.bindTexture(gl.TEXTURE_2D, s.tex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  const vAR = v.videoWidth / Math.max(1, v.videoHeight), cAR = state.res[0] / state.res[1];
-  s.fit = vAR > cAR ? [cAR / vAR, 1] : [1, vAR / cAR];
+  // si el navegador soporta rVFC y no hay frame nuevo, saltamos el texImage2D (mantiene fit y textura)
+  const rvfc = v._rvfcOn === true;
+  if (!(rvfc && s._fcUp === v._fc && s.fit)) {
+    gl.bindTexture(gl.TEXTURE_2D, s.tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    const vAR = v.videoWidth / Math.max(1, v.videoHeight), cAR = state.res[0] / state.res[1];
+    s.fit = vAR > cAR ? [cAR / vAR, 1] : [1, vAR / cAR];
+    s._fcUp = v._fc;
+  }
   return 1;
 }
 function frame() {
@@ -2042,6 +2073,7 @@ function renderTick() {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.uniform1f(U(gl, fp, 'u_beat'), beatEnv);
+    const testOn = state.map.test ? 1 : 0;
     for (const sf of state.map.surfaces) {
       if (!sf.on) continue;
       gl.uniform1f(U(gl, fp, 'u_warpOn'), 1);
@@ -2050,6 +2082,10 @@ function renderTick() {
       gl.uniform1f(U(gl, fp, 'u_mask'), sf.mask || 0);
       gl.uniform1f(U(gl, fp, 'u_soft'), sf.soft || 0);
       gl.uniform1f(U(gl, fp, 'u_line'), sf.line || 0);
+      gl.uniform1f(U(gl, fp, 'u_sop'), sf.op == null ? 1 : sf.op);
+      gl.uniform1f(U(gl, fp, 'u_minv'), sf.maskInv ? 1 : 0);
+      gl.uniform1f(U(gl, fp, 'u_test'), testOn);
+      gl.uniform2f(U(gl, fp, 'u_flip'), sf.flipX ? 1 : 0, sf.flipY ? 1 : 0);
       draw(gl);
     }
     gl.disable(gl.BLEND);
@@ -2060,6 +2096,10 @@ function renderTick() {
     gl.uniform1f(U(gl, fp, 'u_mask'), 0);
     gl.uniform1f(U(gl, fp, 'u_soft'), 0);
     gl.uniform1f(U(gl, fp, 'u_line'), 0);
+    gl.uniform1f(U(gl, fp, 'u_sop'), 1);
+    gl.uniform1f(U(gl, fp, 'u_minv'), 0);
+    gl.uniform1f(U(gl, fp, 'u_test'), 0);
+    gl.uniform2f(U(gl, fp, 'u_flip'), 0, 0);
     draw(gl);
   }
 
@@ -2649,7 +2689,9 @@ function buildShelf() {
   // customs del usuario
   state.customGens.forEach((cg, i) => {
     const t = el('div', 'gtile');
-    t.innerHTML = `<span>${cg.type === 'glsl' ? '📜' : cg.type === 'nodes' ? '🕸' : '🧪'}</span>${cg.name}`;
+    // el nombre viene de sets compartidos → textContent, NUNCA innerHTML (evita XSS)
+    t.innerHTML = `<span>${cg.type === 'glsl' ? '📜' : cg.type === 'nodes' ? '🕸' : '🧪'}</span>`;
+    t.appendChild(document.createTextNode(cg.name || 'gen'));
     t.style.color = 'var(--warn)';
     t.draggable = true;
     t.ondragstart = e => e.dataTransfer.setData('text/preset', 1000 + i);
@@ -3330,10 +3372,12 @@ function serialize() {
       return c ? { l: c.l, c: c.c, dk: c.dk || 0 } : null;
     }),
     map: {
-      on: state.map.on, sel: state.map.sel,
+      on: state.map.on, sel: state.map.sel, test: !!state.map.test,
       surfaces: state.map.surfaces.map(sf => ({
         pts: sf.pts, src: sf.src, on: sf.on,
         mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
+        op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
+        flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
       })),
     },
     fxPresets: state.fxPresets,
@@ -3427,10 +3471,13 @@ function deserialize(d) {
   state.nanoDefaults = d.nanoDefaults !== false;
   if (d.map && Array.isArray(d.map.surfaces) && d.map.surfaces.length) {
     state.map.on = !!d.map.on;
+    state.map.test = !!d.map.test;
     state.map.sel = Math.min(d.map.sel || 0, d.map.surfaces.length - 1);
     state.map.surfaces = d.map.surfaces.map(sf => ({
       pts: sf.pts, src: sf.src || [0, 0, 1, 1], on: sf.on !== false, _m: null,
       mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
+      op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
+      flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
     }));
   } else if (d.warp && Array.isArray(d.warp.pts) && d.warp.pts.length === 4) {
     // migración del warp simple viejo
@@ -3907,6 +3954,9 @@ function buildCpTab(id) {
         <button id="cpwarp" class="mini${state.map.on ? ' on' : ''}">${state.map.on ? 'ON' : 'off'}</button>
         <button id="cpmapedit" class="mini">🗺 abrir editor</button>
         <button id="cpout2" class="mini">＋ ventana de salida</button></span></div>
+      <div class="cprow"><b>Patrón de calibración</b><span style="display:flex;gap:6px">
+        <button id="cptest" class="mini${state.map.test ? ' on' : ''}" title="grilla + cruz sobre cada superficie para alinear el proyector">${state.map.test ? 'ON' : 'off'}</button>
+        <button id="cpaddsurf" class="mini">＋ superficie</button></span></div>
       <div id="cpsurfs"></div>
       <div class="cprow"><span class="v">El editor flotante 🗺 muestra la salida en grande: ahí agregás
         superficies, las movés y les arrastrás las esquinas con la vista en vivo.</span></div>
@@ -3941,6 +3991,15 @@ function buildCpTab(id) {
     $('#cpwarp').onclick = () => { mapToggle(); buildCpTab('render'); };
     $('#cpmapedit').onclick = () => toggleMapWin(true);
     $('#cpout2').onclick = () => openOutput('ravenvj_out' + Math.floor(Math.random() * 1e4));
+    $('#cptest').onclick = () => { state.map.test = !state.map.test; markDirty(); buildCpTab('render');
+      toast(state.map.test ? '🎯 Patrón de calibración ON — alineá el proyector con la grilla' : 'Patrón de calibración off'); };
+    $('#cpaddsurf').onclick = () => {
+      if (state.map.surfaces.length >= 8) { toast('Máximo 8 superficies'); return; }
+      state.map.surfaces.push(newSurface());
+      state.map.sel = state.map.surfaces.length - 1;
+      computeAllWarps(); positionWarpDots(); markDirty(); buildSurfList();
+      toast('Superficie ' + state.map.surfaces.length + ' agregada');
+    };
     buildSurfList();
     $('#cpscr').onclick = async () => { await detectScreens(); buildScrList(); };
     buildScrList();
@@ -4128,6 +4187,15 @@ function buildSurfList() {
     const onb = el('button', 'mini' + (sf.on ? ' on' : ''));
     onb.textContent = sf.on ? 'ON' : 'off';
     onb.onclick = () => { sf.on = !sf.on; markDirty(); buildSurfList(); };
+    const dup = el('button', 'mini'); dup.textContent = '⧉'; dup.title = 'duplicar superficie';
+    dup.onclick = () => {
+      if (state.map.surfaces.length >= 8) { toast('Máximo 8 superficies'); return; }
+      const clone = JSON.parse(JSON.stringify({ ...sf, _m: null }));
+      clone.pts = clone.pts.map(p => [Math.min(1, p[0] + .05), Math.min(1, p[1] + .05)]);
+      state.map.surfaces.splice(i + 1, 0, clone);
+      state.map.sel = i + 1;
+      computeAllWarps(); positionWarpDots(); markDirty(); buildSurfList();
+    };
     const del = el('button', 'mini'); del.textContent = '✕';
     del.onclick = () => {
       if (state.map.surfaces.length <= 1) { toast('Tiene que quedar al menos una superficie'); return; }
@@ -4136,9 +4204,39 @@ function buildSurfList() {
       positionWarpDots(); markDirty(); buildSurfList();
     };
     const btns = el('span'); btns.style.display = 'flex'; btns.style.gap = '4px';
-    btns.append(src, onb, del);
+    btns.append(src, onb, dup, del);
     r.append(nm, btns);
     box.appendChild(r);
+    // segunda fila: controles finos de la superficie (estilo Advanced Output)
+    const r2 = el('div', 'cprow'); r2.style.flexWrap = 'wrap'; r2.style.gap = '6px';
+    const maskSel = el('select');
+    ['sin máscara', '● círculo', '◆ rombo', '▲ triángulo', '⬡ hexágono', '★ estrella']
+      .forEach((lb, mi) => { const o = el('option'); o.value = mi; o.textContent = lb; maskSel.appendChild(o); });
+    maskSel.value = sf.mask || 0;
+    maskSel.onchange = () => { sf.mask = +maskSel.value; markDirty(); };
+    const inv = el('button', 'mini' + (sf.maskInv ? ' on' : '')); inv.textContent = 'invertir'; inv.title = 'invertir la máscara';
+    inv.onclick = () => { sf.maskInv = sf.maskInv ? 0 : 1; markDirty(); buildSurfList(); };
+    const fh = el('button', 'mini' + (sf.flipX ? ' on' : '')); fh.textContent = '⇋H'; fh.title = 'espejar horizontal (retroproyección)';
+    fh.onclick = () => { sf.flipX = sf.flipX ? 0 : 1; markDirty(); buildSurfList(); };
+    const fv = el('button', 'mini' + (sf.flipY ? ' on' : '')); fv.textContent = '⇅V'; fv.title = 'espejar vertical';
+    fv.onclick = () => { sf.flipY = sf.flipY ? 0 : 1; markDirty(); buildSurfList(); };
+    const opL = el('label'); opL.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:10px;color:var(--dim)';
+    const op = el('input'); op.type = 'range'; op.min = 0; op.max = 1; op.step = .01; op.style.width = '64px';
+    op.value = sf.op == null ? 1 : sf.op;
+    op.oninput = () => { sf.op = +op.value; markDirty(); };
+    opL.append(document.createTextNode('opac'), op);
+    const softL = el('label'); softL.style.cssText = opL.style.cssText;
+    const soft = el('input'); soft.type = 'range'; soft.min = 0; soft.max = .3; soft.step = .005; soft.style.width = '56px';
+    soft.value = sf.soft || 0;
+    soft.oninput = () => { sf.soft = +soft.value; markDirty(); };
+    softL.append(document.createTextNode('borde'), soft);
+    const lineL = el('label'); lineL.style.cssText = opL.style.cssText;
+    const line = el('input'); line.type = 'range'; line.min = 0; line.max = .3; line.step = .005; line.style.width = '56px';
+    line.value = sf.line || 0;
+    line.oninput = () => { sf.line = +line.value; markDirty(); };
+    lineL.append(document.createTextNode('contorno'), line);
+    r2.append(maskSel, inv, fh, fv, opL, softL, lineL);
+    box.appendChild(r2);
   });
 }
 function buildScrList() {
@@ -4557,6 +4655,14 @@ function drawMapPrev() {
 
 /* ---------------- control remoto (celular, WebRTC vía PeerJS) ---------------- */
 const remote = { peer: null, code: '', conns: [], on: false };
+function genRemoteCode() {
+  // 6 caracteres con crypto (sin 0/O/1/I/L ambiguos) → ~730M combos, no adivinable como los 4 de antes
+  const cs = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+  const a = new Uint8Array(6);
+  try { crypto.getRandomValues(a); }
+  catch (e) { for (let i = 0; i < 6; i++) a[i] = Math.floor(Math.random() * 256); }
+  return Array.from(a, x => cs[x % cs.length]).join('');
+}
 function remoteToggle() {
   if (remote.on || remote.peer) {
     remote.conns.forEach(c => { try { c.close(); } catch (e) { } });
@@ -4567,7 +4673,7 @@ function remoteToggle() {
     return;
   }
   const boot = () => {
-    remote.code = Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(0, 4).toUpperCase() || 'RAVN';
+    remote.code = genRemoteCode();
     remote.peer = new Peer('ravenvj-' + remote.code.toLowerCase());
     remote.peer.on('open', () => { remote.on = true; buildCpTab('remote'); toast('📱 Remoto ACTIVO — código ' + remote.code); });
     remote.peer.on('error', err => { toast('⚠ Remoto: ' + (err.type || err.message) + ' — reintentá'); buildCpTab('remote'); });
@@ -4576,7 +4682,7 @@ function remoteToggle() {
     }, 10000);
     remote.peer.on('connection', conn => {
       remote.conns.push(conn);
-      conn.on('open', () => { sendLayout(conn); toast('📱 Celular conectado'); buildCpTab('remote'); });
+      conn.on('open', () => { sendLayout(conn); toast('📱 Un celular se conectó al remoto (' + remote.conns.length + ' en total)'); buildCpTab('remote'); });
       conn.on('data', d => { try { remoteMsg(d); } catch (e) { console.error(e); } });
       conn.on('close', () => { remote.conns = remote.conns.filter(c => c !== conn); buildCpTab('remote'); });
     });
@@ -4654,7 +4760,7 @@ function emptyCell(cell) {
   if (cell.cvstream) { cell.cvstream.getTracks().forEach(tr => tr.stop()); cell.cvstream = null; }
   Object.assign(cell, {
     kind: 'empty', name: '', presetIdx: -1, file: null, video: null, url: null,
-    thumb: '', tcanvas: null, gframes: null, camId: '', inT: 0, outT: 0,
+    thumb: '', tcanvas: null, gframes: null, camId: '', inT: 0, outT: 0, play: null,
   });
   refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
 }
@@ -5879,21 +5985,32 @@ function applyUI() {
   $('#genPanel').style.width = uiPrefs.genW + 'px';
   $('#monPanel').style.width = uiPrefs.monW + 'px';
 }
-/* ---------------- reloj ---------------- */
-let clockDate = false;
+/* ---------------- reloj + timecode SMPTE interno ---------------- */
+let clockMode = 0; // 0 hora · 1 fecha+hora · 2 timecode SMPTE (HH:MM:SS:FF @30)
 function tickClock() {
-  const d = new Date();
-  const p = n => String(n).padStart(2, '0');
-  const hm = `<b>${p(d.getHours())}:${p(d.getMinutes())}</b>:${p(d.getSeconds())}`;
   const cl = $('#clock');
-  if (cl) cl.innerHTML = clockDate
-    ? `${p(d.getDate())}/${p(d.getMonth() + 1)} · ${hm}` : hm;
+  if (!cl) return;
+  const p = n => String(n).padStart(2, '0');
+  if (clockMode === 2) {
+    // timecode SMPTE-style derivado del reloj de la sesión (30 fps)
+    const ms = performance.now();
+    const totalF = Math.floor(ms / 1000 * 30);
+    const ff = totalF % 30, ss = Math.floor(ms / 1000) % 60,
+      mm = Math.floor(ms / 60000) % 60, hh = Math.floor(ms / 3600000) % 24;
+    cl.innerHTML = `TC <b>${p(hh)}:${p(mm)}:${p(ss)}</b>:${p(ff)}`;
+    return;
+  }
+  const d = new Date();
+  const hm = `<b>${p(d.getHours())}:${p(d.getMinutes())}</b>:${p(d.getSeconds())}`;
+  cl.innerHTML = clockMode === 1 ? `${p(d.getDate())}/${p(d.getMonth() + 1)} · ${hm}` : hm;
 }
 (() => {
   const cl = $('#clock');
-  if (cl) cl.onclick = () => { clockDate = !clockDate; tickClock(); };
+  if (cl) cl.onclick = () => { clockMode = (clockMode + 1) % 3; tickClock(); };
   tickClock();
-  setInterval(tickClock, 1000);
+  setInterval(tickClock, clockMode === 2 ? 40 : 1000);
+  // el timecode necesita refresco más fino → un tick rápido que solo actúa en modo TC
+  setInterval(() => { if (clockMode === 2) tickClock(); }, 40);
 })();
 
 /* ---------------- multi-idioma (traductor de interfaz por diccionario) ---------------- */

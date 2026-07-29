@@ -235,6 +235,21 @@ MAPPING MULTI-SUPERFICIE
   enderezar proyección torcida, partir la imagen entre 2 pantallas,
   mapear cajas o paredes.
 
+  CONTROLES POR SUPERFICIE (panel Ctrl+Alt+T → Render → MAPPING):
+  - Fuente (completa/mitades/cuartos), ON/off, ⧉ duplicar, ✕ borrar.
+  - Máscara de forma: círculo, rombo, triángulo, hexágono o estrella,
+    con "invertir" (recorta el centro en vez del borde).
+  - Opacidad de la superficie (para fundir capas de proyección).
+  - Borde suave (edge blending, para pegar 2 proyectores) y contorno
+    animado que late con el beat (estilo HeavyM).
+  - ⇋H / ⇅V: espejar horizontal o vertical (retroproyección).
+  - ＋ superficie agrega una nueva.
+
+  🎯 PATRÓN DE CALIBRACIÓN: botón que dibuja una grilla + cruz sobre
+  cada superficie. Encendelo, movés las esquinas hasta que la grilla
+  quede derecha sobre el objeto real, y después lo apagás. Es la forma
+  pro de alinear un proyector (como el test pattern de MadMapper).
+
 GENERADORES CONFIGURABLES 🧪
   - Click derecho en una celda generativa → "⚙ Parámetros": cada clip
     puede tener sus propios P1 (velocidad) y P2 (tono) fijos, o seguir
