@@ -221,6 +221,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #mapprev{display:block;width:100%}
 .maph{position:absolute;width:16px;height:16px;border-radius:4px;background:var(--acc2);
   transform:translate(-50%,-50%);cursor:move;box-shadow:0 0 10px var(--acc2);touch-action:none;z-index:3}
+.maph.bezh{width:12px;height:12px;border-radius:50%;background:#2fd8ff;box-shadow:0 0 8px #2fd8ff}
 #genwin{position:fixed;top:90px;left:calc(50% - 190px);width:380px;background:var(--panel);
   border:1px solid var(--line);border-radius:10px;z-index:62;display:none;flex-direction:column;
   overflow:hidden;box-shadow:0 18px 60px #000d}
@@ -557,7 +558,12 @@ function computeWarp(sf) {
 }
 function computeAllWarps() { state.map.surfaces.forEach(computeWarp); }
 /* malla: puntos de control (N+1)² por interpolación bilineal de las 4 esquinas */
+function applyMeshMode(sf, mode) { // 'bez' | '1'..'5'
+  if (mode === 'bez') setBezier(sf, true);
+  else { sf.bez = null; setMeshSub(sf, +mode); }
+}
 function setMeshSub(sf, N) {
+  sf.bez = null;
   if (N <= 1) { sf.mesh = null; computeWarp(sf); return; }
   const [BL, BR, TR, TL] = sf.pts;
   const pts = [];
@@ -572,6 +578,40 @@ function setMeshSub(sf, N) {
 function syncMeshCorners(sf) { // mantener sf.pts = las 4 esquinas de la malla (para selección/dibujo)
   const N = sf.mesh.sub, p = sf.mesh.pts;
   sf.pts = [p[0], p[N], p[(N + 1) * (N + 1) - 1], p[N * (N + 1)]];
+}
+/* warp Bézier: 4 esquinas + 8 manijas de curvatura → parche de Coons → malla 8×8 */
+function bez3(t, p0, p1, p2, p3) {
+  const m = 1 - t, a = m * m * m, b = 3 * m * m * t, c = 3 * m * t * t, d = t * t * t;
+  return [a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]];
+}
+function bezToMesh(sf) {
+  const N = 8, c = sf.bez.c, h = sf.bez.h;
+  const [BL, BR, TR, TL] = c, pts = [];
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+    const u = i / N, v = j / N;
+    const Cb = bez3(u, BL, h[0], h[1], BR); // borde inferior BL→BR
+    const Ct = bez3(u, TL, h[4], h[5], TR); // borde superior TL→TR
+    const Cl = bez3(v, BL, h[6], h[7], TL); // borde izquierdo BL→TL
+    const Cr = bez3(v, BR, h[2], h[3], TR); // borde derecho BR→TR
+    const bilx = (1 - u) * (1 - v) * BL[0] + u * (1 - v) * BR[0] + (1 - u) * v * TL[0] + u * v * TR[0];
+    const bily = (1 - u) * (1 - v) * BL[1] + u * (1 - v) * BR[1] + (1 - u) * v * TL[1] + u * v * TR[1];
+    pts.push([(1 - v) * Cb[0] + v * Ct[0] + (1 - u) * Cl[0] + u * Cr[0] - bilx,
+    (1 - v) * Cb[1] + v * Ct[1] + (1 - u) * Cl[1] + u * Cr[1] - bily]);
+  }
+  sf.mesh = { sub: N, pts };
+}
+function setBezier(sf, on) {
+  if (!on) { sf.bez = null; return; }
+  const [BL, BR, TR, TL] = sf.pts;
+  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  sf.bez = {
+    c: [BL.slice(), BR.slice(), TR.slice(), TL.slice()],
+    h: [lerp(BL, BR, 1 / 3), lerp(BL, BR, 2 / 3), // inferior
+    lerp(BR, TR, 1 / 3), lerp(BR, TR, 2 / 3),     // derecho
+    lerp(TL, TR, 1 / 3), lerp(TL, TR, 2 / 3),     // superior
+    lerp(BL, TL, 1 / 3), lerp(BL, TL, 2 / 3)],    // izquierdo
+  };
+  bezToMesh(sf);
 }
 /* geometría triangulada de una superficie con malla */
 let meshBuf = null, meshVAO = null;
@@ -3708,7 +3748,8 @@ function serialize() {
         mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
         op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
         flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
-        mesh: sf.mesh ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
+        mesh: sf.mesh && !sf.bez ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
+        bez: sf.bez ? { c: sf.bez.c, h: sf.bez.h } : null,
       })),
     },
     fxPresets: state.fxPresets,
@@ -3817,8 +3858,9 @@ function deserialize(d) {
         op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
         flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
         mesh: sf.mesh && Array.isArray(sf.mesh.pts) ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
+        bez: sf.bez && Array.isArray(sf.bez.c) && Array.isArray(sf.bez.h) ? { c: sf.bez.c, h: sf.bez.h } : null,
       };
-      if (s.mesh) syncMeshCorners(s);
+      if (s.bez) bezToMesh(s); else if (s.mesh) syncMeshCorners(s);
       return s;
     });
   } else if (d.warp && Array.isArray(d.warp.pts) && d.warp.pts.length === 4) {
@@ -4603,11 +4645,11 @@ function buildSurfList() {
     line.value = sf.line || 0;
     line.oninput = () => { sf.line = +line.value; markDirty(); };
     lineL.append(document.createTextNode('contorno'), line);
-    const meshSel = el('select'); meshSel.title = 'malla: subdividir para deformar superficies curvas';
-    [['1', 'malla: plana'], ['2', 'malla: 2×2'], ['3', 'malla: 3×3'], ['4', 'malla: 4×4'], ['5', 'malla: 5×5']]
+    const meshSel = el('select'); meshSel.title = 'malla/bézier: deformar superficies curvas';
+    [['1', 'malla: plana'], ['bez', 'malla: bézier'], ['2', 'malla: 2×2'], ['3', 'malla: 3×3'], ['4', 'malla: 4×4'], ['5', 'malla: 5×5']]
       .forEach(([v, txt]) => { const o = el('option'); o.value = v; o.textContent = txt; meshSel.appendChild(o); });
-    meshSel.value = sf.mesh ? sf.mesh.sub : 1;
-    meshSel.onchange = () => { setMeshSub(sf, +meshSel.value); markDirty(); if (mapWinOn) rebuildMapHandles(); };
+    meshSel.value = sf.bez ? 'bez' : sf.mesh ? sf.mesh.sub : 1;
+    meshSel.onchange = () => { applyMeshMode(sf, meshSel.value); markDirty(); if (mapWinOn) rebuildMapHandles(); };
     r2.append(maskSel, inv, fh, fv, opL, softL, lineL, meshSel);
     box.appendChild(r2);
   });
@@ -4825,7 +4867,8 @@ function warpReset() {
   const sf = state.map.surfaces[state.map.sel];
   if (!sf) return;
   sf.pts = [[0, 0], [1, 0], [1, 1], [0, 1]];
-  if (sf.mesh) setMeshSub(sf, sf.mesh.sub); // regenerar la malla plana desde las esquinas
+  if (sf.bez) setBezier(sf, true); // regenerar el Bézier plano desde las esquinas
+  else if (sf.mesh) setMeshSub(sf, sf.mesh.sub); // regenerar la malla plana desde las esquinas
   computeWarp(sf); positionWarpDots(); markDirty();
 }
 const SRC_PRESETS = [
@@ -4937,12 +4980,12 @@ function mapEditorSync() {
   line.title = 'contorno animado de la superficie: color ciclando que late con el beat';
   line.oninput = () => { sf.line = +line.value; markDirty(); };
   const meshL = el('span'); meshL.textContent = 'malla';
-  meshL.title = 'subdividir en una grilla de puntos para deformar superficies curvas (columnas, cilindros, telas)';
+  meshL.title = 'deformar superficies curvas: grilla de puntos, o Bézier (4 esquinas + manijas de curvatura)';
   const msub = el('select');
-  [['1', 'plana (4 esquinas)'], ['2', '2×2'], ['3', '3×3'], ['4', '4×4'], ['5', '5×5']]
+  [['1', 'plana (4 esquinas)'], ['bez', 'bézier (curvas)'], ['2', '2×2'], ['3', '3×3'], ['4', '4×4'], ['5', '5×5']]
     .forEach(([v, txt]) => { const o = el('option'); o.value = v; o.textContent = txt; msub.appendChild(o); });
-  msub.value = sf.mesh ? sf.mesh.sub : 1;
-  msub.onchange = () => { setMeshSub(sf, +msub.value); markDirty(); rebuildMapHandles(); buildSurfList(); };
+  msub.value = sf.bez ? 'bez' : sf.mesh ? sf.mesh.sub : 1;
+  msub.onchange = () => { applyMeshMode(sf, msub.value); markDirty(); rebuildMapHandles(); buildSurfList(); };
   row2.append(msel, softL, soft, lineL, line, meshL, msub);
   tb.appendChild(row2);
   // fila 3: imagen de guía (foto del escenario para alinear las superficies)
@@ -4981,7 +5024,16 @@ function pointInQuad(p, pts) {
   return inside;
 }
 let mapHandles = [];
-function editPts(sf) { return sf.mesh ? sf.mesh.pts : sf.pts; } // puntos editables: malla o 4 esquinas
+// puntos editables: Bézier (4 esquinas + 8 manijas) · malla (grilla) · 4 esquinas
+function editPts(sf) { return sf.bez ? [...sf.bez.c, ...sf.bez.h] : sf.mesh ? sf.mesh.pts : sf.pts; }
+function setEditPt(sf, idx, xy) { // mutar el punto real y regenerar lo que corresponda
+  if (sf.bez) {
+    if (idx < 4) { sf.bez.c[idx] = xy; sf.pts = sf.bez.c.map(p => p.slice()); }
+    else sf.bez.h[idx - 4] = xy;
+    bezToMesh(sf);
+  } else if (sf.mesh) { sf.mesh.pts[idx] = xy; syncMeshCorners(sf); }
+  else { sf.pts[idx] = xy; computeWarp(sf); }
+}
 const mapStageEl = $('#mapstage');
 function rebuildMapHandles() {
   mapHandles.forEach(h => h.remove());
@@ -4989,7 +5041,8 @@ function rebuildMapHandles() {
   const sf = state.map.surfaces[state.map.sel];
   if (!sf) return;
   editPts(sf).forEach((p, idx) => {
-    const h = el('div', 'maph');
+    const isBezHandle = sf.bez && idx >= 4;
+    const h = el('div', 'maph' + (isBezHandle ? ' bezh' : ''));
     mapStageEl.appendChild(h);
     mapHandles.push(h);
     h.addEventListener('pointerdown', e => {
@@ -4997,11 +5050,7 @@ function rebuildMapHandles() {
       const mv = ev => {
         const r = mapStageEl.getBoundingClientRect();
         const s2 = state.map.surfaces[state.map.sel]; if (!s2) return;
-        editPts(s2)[idx] = [
-          clamp01((ev.clientX - r.left) / r.width),
-          clamp01(1 - (ev.clientY - r.top) / r.height),
-        ];
-        if (s2.mesh) syncMeshCorners(s2); else computeWarp(s2);
+        setEditPt(s2, idx, [clamp01((ev.clientX - r.left) / r.width), clamp01(1 - (ev.clientY - r.top) / r.height)]);
         syncMapHandles(); markDirty();
       };
       const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
@@ -5025,14 +5074,15 @@ function rebuildMapHandles() {
     const mv = ev => {
       const nu = [(ev.clientX - r.left) / r.width, 1 - (ev.clientY - r.top) / r.height];
       let dx = nu[0] - last[0], dy = nu[1] - last[1];
-      const pts = editPts(sf);
+      const pts = sf.bez ? [...sf.bez.c, ...sf.bez.h] : editPts(sf);
       for (const p of pts) { // que ningún punto se escape del área
         dx = Math.max(-p[0], Math.min(1 - p[0], dx));
         dy = Math.max(-p[1], Math.min(1 - p[1], dy));
       }
       for (const p of pts) { p[0] += dx; p[1] += dy; }
       last = [last[0] + dx, last[1] + dy];
-      if (sf.mesh) syncMeshCorners(sf); else computeWarp(sf);
+      if (sf.bez) { sf.pts = sf.bez.c.map(p => p.slice()); bezToMesh(sf); }
+      else if (sf.mesh) syncMeshCorners(sf); else computeWarp(sf);
       syncMapHandles(); markDirty();
     };
     const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
@@ -5061,6 +5111,28 @@ function drawMapPrev() {
     const sel = i === state.map.sel;
     mapCtx.strokeStyle = sel ? '#ff3d54' : '#ffffff66';
     mapCtx.lineWidth = sel ? 2.5 : 1.2;
+    const W = mapPrev.width, H = mapPrev.height;
+    if (sf.bez) { // dibujar el contorno Bézier + las líneas de control
+      const c = sf.bez.c, h = sf.bez.h, X = p => p[0] * W, Y = p => (1 - p[1]) * H;
+      mapCtx.beginPath();
+      mapCtx.moveTo(X(c[0]), Y(c[0]));
+      mapCtx.bezierCurveTo(X(h[0]), Y(h[0]), X(h[1]), Y(h[1]), X(c[1]), Y(c[1])); // inferior
+      mapCtx.bezierCurveTo(X(h[2]), Y(h[2]), X(h[3]), Y(h[3]), X(c[2]), Y(c[2])); // derecho
+      mapCtx.bezierCurveTo(X(h[5]), Y(h[5]), X(h[4]), Y(h[4]), X(c[3]), Y(c[3])); // superior (TR→TL)
+      mapCtx.bezierCurveTo(X(h[7]), Y(h[7]), X(h[6]), Y(h[6]), X(c[0]), Y(c[0])); // izquierdo (TL→BL)
+      mapCtx.stroke();
+      if (sel) { // líneas punteadas de las manijas
+        mapCtx.save(); mapCtx.setLineDash([3, 3]); mapCtx.strokeStyle = '#2fd8ff88'; mapCtx.lineWidth = 1;
+        const link = (ci, hi) => { mapCtx.beginPath(); mapCtx.moveTo(X(c[ci]), Y(c[ci])); mapCtx.lineTo(X(h[hi]), Y(h[hi])); mapCtx.stroke(); };
+        link(0, 0); link(1, 1); link(1, 2); link(2, 3); link(3, 4); link(2, 5); link(0, 6); link(3, 7);
+        mapCtx.restore();
+      }
+      const cx = c.reduce((a, p) => a + p[0] / 4, 0), cy = c.reduce((a, p) => a + p[1] / 4, 0);
+      mapCtx.fillStyle = sel ? '#ff3d54' : '#ffffffaa';
+      mapCtx.font = 'bold 14px sans-serif';
+      mapCtx.fillText('S' + (i + 1), cx * W - 9, (1 - cy) * H + 5);
+      return;
+    }
     if (sf.mesh) { // dibujar la grilla de la malla
       const N = sf.mesh.sub, p = sf.mesh.pts, W = mapPrev.width, H = mapPrev.height;
       const px = k => p[k][0] * W, py = k => (1 - p[k][1]) * H;
