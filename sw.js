@@ -25,8 +25,15 @@ self.addEventListener('fetch', e => {
       }
       return res;
     }).catch(() =>
-      caches.match(e.request, { ignoreSearch: true })
-        .then(hit => hit || caches.match('./index.html'))
+      caches.match(e.request, { ignoreSearch: true }).then(hit => {
+        if (hit) return hit;
+        // fallback por tipo: cada página cae a SÍ misma, no a la app entera
+        const p = new URL(e.request.url).pathname;
+        if (p.endsWith('/remote.html')) return caches.match('./remote.html');
+        if (p.endsWith('/output.html')) return caches.match('./output.html');
+        if (e.request.mode === 'navigate') return caches.match('./index.html'); // solo navegaciones a la app
+        return Response.error(); // assets fallidos: error claro, no HTML de la app
+      })
     )
   );
 });

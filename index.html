@@ -639,6 +639,7 @@ function ensureDeckSize(g, dk) {
 }
 function switchDeck(i) {
   if (!state.decks || !state.decks[i]) return;
+  clearSnapQueue(); // los disparos armados apuntaban al deck viejo → descartarlos
   state.deckIdx = i;
   state.grid = state.decks[i];
   ensureDeckSize(state.grid, i);
@@ -1872,6 +1873,11 @@ function flushSnap() {
   const s = $('#snapSel'); if (s) s.classList.remove('armed');
   q.forEach(x => x.run());
 }
+function clearSnapQueue() { // descartar disparos encolados (PÁNICO, cambio de deck, cargar set)
+  snapQueue = [];
+  document.querySelectorAll('.cell.snapwait').forEach(e => e.classList.remove('snapwait'));
+  const s = $('#snapSel'); if (s) s.classList.remove('armed');
+}
 function qTriggerCell(l, c) {
   if (!(state.snap > 0)) { triggerCell(l, c); return; }
   snapQueue.push({ run: () => triggerCell(l, c), mark: () => cellEl(l, c) });
@@ -2021,11 +2027,13 @@ function uploadGif(gl, s, dtEff) {
   let t = te, i = 0;
   while (t > fr[i].dur && i < fr.length - 1) { t -= fr[i].dur; i++; }
   if (i !== s._gidx) {
+    const bmp = fr[i].bmp;
+    if (!bmp || bmp.width === 0) return 1; // bitmap cerrado (celda liberada) → mantener el frame anterior, no crashear
     s._gidx = i;
     if (!s.tex) s.tex = makeTex(gl, 2, 2);
     gl.bindTexture(gl.TEXTURE_2D, s.tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fr[i].bmp);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     const b = fr[i].bmp, vAR = b.width / b.height, cAR = state.res[0] / state.res[1];
     s.fit = vAR > cAR ? [cAR / vAR, 1] : [1, vAR / cAR];
@@ -2739,6 +2747,14 @@ async function camPicker(cell, x, y) {
     fn: () => assignCam(cell, d.deviceId, d.label || 'cámara ' + (i + 1)),
   })));
 }
+/* libera la memoria de una celda: cierra los ImageBitmaps del GIF, revoca URL y frena la cámara */
+function freeCellMedia(cell) {
+  if (!cell) return;
+  if (cell.gframes) { for (const f of cell.gframes) { try { f.bmp && f.bmp.close(); } catch (e) { } } cell.gframes = null; }
+  if (cell.url) { try { URL.revokeObjectURL(cell.url); } catch (e) { } cell.url = null; }
+  if (cell.cvstream) { try { cell.cvstream.getTracks().forEach(t => t.stop()); } catch (e) { } cell.cvstream = null; }
+}
+function freeAllMedia() { (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(freeCellMedia))); }
 const isMediaFile = f => f.type.startsWith('video') || f.type.startsWith('image');
 function assignMedia(cell, file) {
   if (file.type === 'image/gif') return assignGif(cell, file);
@@ -2747,13 +2763,18 @@ function assignMedia(cell, file) {
 }
 async function assignImage(cell, file) {
   // imagen fija: se trata como un GIF de un solo frame (reutiliza render/serialize/relink)
-  if (cell.url) URL.revokeObjectURL(cell.url);
+  freeCellMedia(cell);
   cell.kind = 'gif'; cell.isImage = true; cell.file = file;
   cell.name = file.name.replace(/\.[^.]+$/, '');
-  cell.video = null; cell.url = null; cell.presetIdx = -1; cell.thumb = ''; cell.gframes = null;
+  cell.video = null; cell.presetIdx = -1; cell.thumb = ''; cell.gframes = null;
   refreshCell(cell.l, cell.c); markDirty();
   try {
-    const bmp = await createImageBitmap(file);
+    let bmp = await createImageBitmap(file);
+    const maxW = state.res[0] * 2; // no subir texturas gigantes a la GPU (protege PCs flojas)
+    if (bmp.width > maxW) {
+      const rz = await createImageBitmap(bmp, { resizeWidth: maxW, resizeHeight: Math.round(bmp.height * maxW / bmp.width) });
+      bmp.close(); bmp = rz;
+    }
     cell.gframes = [{ bmp, dur: 1e9 }];
     cell.gtotal = 1e9;
     const cv = document.createElement('canvas'); cv.width = 160; cv.height = 90;
@@ -2769,9 +2790,9 @@ async function assignImage(cell, file) {
   refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
 }
 async function assignGif(cell, file) {
-  if (cell.url) URL.revokeObjectURL(cell.url);
-  cell.kind = 'gif'; cell.file = file; cell.name = file.name.replace(/\.[^.]+$/, '');
-  cell.video = null; cell.url = null; cell.presetIdx = -1; cell.thumb = ''; cell.gframes = null;
+  freeCellMedia(cell);
+  cell.kind = 'gif'; cell.isImage = false; cell.file = file; cell.name = file.name.replace(/\.[^.]+$/, '');
+  cell.video = null; cell.presetIdx = -1; cell.thumb = ''; cell.gframes = null;
   refreshCell(cell.l, cell.c); markDirty();
   try {
     if (!('ImageDecoder' in window)) throw new Error('este navegador no decodifica GIFs (usá Chrome)');
@@ -2802,8 +2823,8 @@ async function assignGif(cell, file) {
   refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
 }
 function assignVideo(cell, file) {
-  if (cell.url) URL.revokeObjectURL(cell.url);
-  cell.kind = 'video'; cell.file = file; cell.name = file.name.replace(/\.[^.]+$/, '');
+  freeCellMedia(cell);
+  cell.kind = 'video'; cell.isImage = false; cell.file = file; cell.name = file.name.replace(/\.[^.]+$/, '');
   cell.url = URL.createObjectURL(file);
   cell.video = makeVideoEl(cell.url);
   cell.presetIdx = -1; cell.thumb = '';
@@ -3635,10 +3656,12 @@ function serialize() {
 function deserialize(d) {
   if (!d || d.app !== 'raven-vj') { toast('JSON no válido'); return; }
   setPreview(null);
-  for (const row of state.grid) for (const c of row) {
-    if (c.video) c.video.pause();
-    if (c.url) URL.revokeObjectURL(c.url);
-  }
+  clearSnapQueue(); // no arrastrar disparos armados al set nuevo
+  if (typeof clearMidiLeds === 'function') clearMidiLeds();
+  (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => {
+    if (c.video) { try { c.video.pause(); } catch (e) { } }
+    freeCellMedia(c); // cierra bitmaps de GIF/imagen de TODOS los decks (evita fuga de RAM)
+  })));
   state.bpm = d.bpm || 120; $('#bpmIn').value = state.bpm;
   state.fade = d.fade ?? 1; $('#fadeIn').value = state.fade; $('#fadeLbl').textContent = state.fade.toFixed(1) + 's';
   state.master = d.master ?? 1; $('#masterIn').value = state.master;
@@ -3913,6 +3936,7 @@ $('#recBtn').onclick = toggleRec;
 
 /* ---------------- pánico ---------------- */
 function panic() {
+  clearSnapQueue(); // que no entre un clip fantasma medio compás después
   for (let l = 0; l < LAYERS; l++) clearLayer(l);
   state.effects.forEach(f => f.enabled = false);
   buildFx();
@@ -3949,6 +3973,7 @@ document.addEventListener('visibilitychange', () => {
 keepAwake();
 // no cerrar el set cargado por accidente
 window.addEventListener('beforeunload', e => {
+  try { clearMidiLeds(); } catch (er) { } // apagar las luces de la controladora al cerrar
   if (state.grid.flat().some(c => c.kind === 'video' && c.video)) {
     e.preventDefault(); e.returnValue = '';
   }
@@ -5042,8 +5067,7 @@ function pickVideoFor(cell) {
 }
 function emptyCell(cell) {
   state.layers.forEach((L, l) => { if (L.slots[L.target].cell === cell) clearLayer(l); });
-  if (cell.url) URL.revokeObjectURL(cell.url);
-  if (cell.cvstream) { cell.cvstream.getTracks().forEach(tr => tr.stop()); cell.cvstream = null; }
+  freeCellMedia(cell); // cierra los ImageBitmaps del GIF/imagen, revoca URL y frena cámara (evita fuga de RAM)
   Object.assign(cell, {
     kind: 'empty', name: '', presetIdx: -1, file: null, video: null, url: null,
     thumb: '', tcanvas: null, gframes: null, camId: '', inT: 0, outT: 0, play: null,
