@@ -975,6 +975,25 @@ void main(){
  float h=hash(g)+.3*sin(u_time*1.5+hash(g)*6.28)+u_bass*.4;
  float face=step(f.x,.93)*step(f.y,.93);
  o=vec4(hsv2rgb(vec3(fract(hash(g+3.)*.3+u_p2+u_time*.02),.7,clamp(h,0.,1.)))*face,1.);}` },
+{ name: 'Onda audio', icon: '〰️', fs: `void main(){
+ float bx=v_uv.x*15.; int i0=clamp(int(bx),0,15); int i1=clamp(i0+1,0,15);
+ float v=mix(u_fft[i0],u_fft[i1],fract(bx));
+ float y=.5+(v-.35)*(.5+u_p1);
+ float line=smoothstep(.02+u_p1*.04,0.,abs(v_uv.y-y));
+ float glow=smoothstep(.16,0.,abs(v_uv.y-y))*.25;
+ vec3 c=hsv2rgb(vec3(fract(u_p2+v_uv.x*.35+u_time*.05),.8,1.));
+ o=vec4(c*(line+glow)*(.7+u_bass*.6),1.);}` },
+{ name: 'Radar FFT', icon: '📡', fs: `void main(){
+ vec2 p=(v_uv-.5)*vec2(AR,1.);
+ float ang=atan(p.y,p.x)/6.2832+.5;
+ int i0=clamp(int(ang*16.),0,15);
+ float v=u_fft[i0];
+ float r=length(p);
+ float ring=.16+.30*(.4+u_p1)*v;
+ float m=smoothstep(.022,0.,abs(r-ring));
+ vec3 c=hsv2rgb(vec3(fract(ang+u_p2+u_time*.03),.85,1.))*m;
+ c+=hsv2rgb(vec3(fract(ang+u_p2),.9,.4))*smoothstep(ring,ring-.15,r)*u_p1*.5;
+ o=vec4(c*(.65+u_beat*.7),1.);}` },
 ];
 
 /* ---------------- efectos master ---------------- */
@@ -1807,7 +1826,7 @@ function triggerCell(l, c, dk) {
     toast('Clip sin enlazar — usá 🔗 RELINK'); return;
   }
   if (cell.kind === 'cam' && !cell.video) {
-    startCam(cell).then(ok => { if (ok) triggerCell(l, c); });
+    (cell.isScreen ? startScreen(cell) : startCam(cell)).then(ok => { if (ok) triggerCell(l, c); });
     return;
   }
   if (state.mono) l = 0; // modo 1×: todo se reproduce en un solo canal
@@ -2551,6 +2570,10 @@ function cellDom(l, c) {
       camPicker(cell, e.clientX, e.clientY);
       return;
     }
+    if (e.dataTransfer.getData('text/screen')) {
+      assignScreen(cell);
+      return;
+    }
     const mv = e.dataTransfer.getData('text/cellmove');
     if (mv) {
       const [fl, fc] = mv.split(':').map(Number);
@@ -2587,7 +2610,7 @@ function renderCell(d, cell) {
     const nm = el('div', 'cname');
     nm.textContent = (cell.kind === 'gen' ? genIcon(cell.presetIdx) + ' ' :
       cell.kind === 'text' ? '💬 ' : cell.kind === 'gif' ? (cell.isImage ? '🖼 ' : '🎞 ') :
-      cell.kind === 'cam' ? '📷 ' : '') + cell.name;
+      cell.kind === 'cam' ? (cell.isScreen ? '🖥 ' : '📷 ') : '') + cell.name;
     d.appendChild(nm);
     const cb = el('div', 'colbadge');
     cb.textContent = (cell.c + 1);
@@ -2732,12 +2755,37 @@ async function startCam(cell) {
 }
 function assignCam(cell, devId, label) {
   emptyCell(cell);
-  cell.kind = 'cam';
+  cell.kind = 'cam'; cell.isScreen = false;
   cell.camId = devId || '';
   cell.name = (label || 'cámara').replace(/\s*\([0-9a-f:]+\)\s*$/i, '').slice(0, 22);
   refreshCell(cell.l, cell.c);
   markDirty();
   startCam(cell);
+}
+/* captura de pantalla/ventana como fuente (getDisplayMedia) — se comporta como una cámara */
+async function startScreen(cell) {
+  try {
+    if (cell.cvstream) cell.cvstream.getTracks().forEach(t => t.stop());
+    const st = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const v = document.createElement('video');
+    v.srcObject = st; v.muted = true; v.playsInline = true;
+    await v.play().catch(() => { });
+    cell.cvstream = st; cell.video = v;
+    st.getVideoTracks()[0].onended = () => { toast('🖥 Compartir pantalla terminado'); emptyCell(cell); };
+    refreshCell(cell.l, cell.c); markDirty();
+    return true;
+  } catch (e) {
+    toast('🖥 ' + (e.name === 'NotAllowedError' ? 'cancelaste el compartir pantalla' : 'no se pudo capturar la pantalla'));
+    return false;
+  }
+}
+function assignScreen(cell) {
+  emptyCell(cell);
+  cell.kind = 'cam'; cell.isScreen = true; cell.camId = '';
+  cell.name = 'pantalla';
+  refreshCell(cell.l, cell.c);
+  markDirty();
+  startScreen(cell);
 }
 async function camPicker(cell, x, y) {
   const cams = await getCams();
@@ -2958,6 +3006,13 @@ function buildShelf() {
   cam.draggable = true;
   cam.ondragstart = e => e.dataTransfer.setData('text/cam', '1');
   sh.appendChild(cam);
+  const scr = el('div', 'gtile');
+  scr.innerHTML = '<span>🖥</span>Pantalla';
+  scr.title = 'capturar una app, pestaña o pantalla entera como fuente (arrastrá a una celda)';
+  scr.style.color = '#7fc4ff';
+  scr.draggable = true;
+  scr.ondragstart = e => e.dataTransfer.setData('text/screen', '1');
+  sh.appendChild(scr);
 }
 
 /* ---------------- rack de efectos ---------------- */
@@ -3116,8 +3171,32 @@ function midiInit() {
     $('#midiSt').textContent = 'denegado — click 🎹 para reintentar';
   });
 }
+const midiClock = { ticks: 0, lastBeat: 0, intervals: [], lock: false };
 function onMIDI(e) {
   const [st, d1, d2] = e.data;
+  // MIDI Clock in (esclavo del DJ/DAW): 0xF8 tick (24 por negra), 0xFA start, 0xFC stop
+  if (st === 0xF8) {
+    if (!uiPrefs.midiClock) return;
+    if (++midiClock.ticks >= 24) {
+      midiClock.ticks = 0;
+      const now = performance.now();
+      if (midiClock.lastBeat) {
+        const iv = now - midiClock.lastBeat;
+        if (iv > 120 && iv < 2000) { // 30–500 BPM válido
+          midiClock.intervals.push(iv); if (midiClock.intervals.length > 8) midiClock.intervals.shift();
+          const s = [...midiClock.intervals].sort((a, b) => a - b);
+          state.bpm = Math.min(240, Math.max(40, Math.round(60000 / s[s.length >> 1])));
+          $('#bpmIn').value = state.bpm;
+          midiClock.lock = true;
+        }
+      }
+      midiClock.lastBeat = now;
+      beatFloat = Math.round(beatFloat); // re-anclar el pulso al clock externo
+    }
+    return;
+  }
+  if (st === 0xFA) { midiClock.ticks = 0; midiClock.lastBeat = 0; midiClock.intervals = []; beatFloat = 0; return; }
+  if (st === 0xFC) { midiClock.lock = false; return; }
   const type = st & 0xf0, ch = st & 0x0f;
   let kind = null, on = 0, val = 0;
   if (type === 0x90 && d2 > 0) { kind = 'note'; on = 1; val = d2 / 127; }
@@ -3642,7 +3721,7 @@ function serialize() {
       anim: c.anim && Object.values(c.anim).some(a => a && a.m !== 'off') ? c.anim : null,
       spd: c.spd != null && c.spd !== 1 ? c.spd : null,
       textStyle: c.textStyle, inT: c.inT || 0, outT: c.outT || 0, camId: c.camId || '',
-      play: c.play && c.play !== 'loop' ? c.play : null, isImage: c.isImage ? 1 : 0,
+      play: c.play && c.play !== 'loop' ? c.play : null, isImage: c.isImage ? 1 : 0, isScreen: c.isScreen ? 1 : 0,
       fileName: c.file ? c.file.name : (c.kind === 'video' || c.kind === 'gif' ? c.name : null),
       thumb: c.thumb,
     })),
@@ -3710,7 +3789,8 @@ function deserialize(d) {
     if (cd.kind === 'video' || cd.kind === 'gif')
       cell.name = cd.fileName ? cd.fileName.replace(/\.[^.]+$/, '') : cd.name;
     cell._fileName = cd.fileName;
-    if (cd.kind === 'cam') startCam(cell); // reconectar la cámara al cargar
+    cell.isScreen = cd.isScreen ? true : undefined;
+    if (cd.kind === 'cam' && !cell.isScreen) startCam(cell); // reconectar la cámara (la pantalla necesita gesto → se re-dispara)
   }
   state.effects = (d.effects || []).map(f => ({ ...f, params: f.params.map(p => ({ ...p })) }));
   fxUid = Math.max(1, ...state.effects.map(f => f.uid + 1));
@@ -4292,6 +4372,9 @@ function buildCpTab(id) {
       <div class="cprow"><b>Luces en la controladora</b><span>
         <button id="cpmidifb" class="mini${uiPrefs.midiFeedback ? ' on' : ''}" title="MIDI OUT: enciende los pads del clip que está al aire (APC, Launchpad, etc.)">${uiPrefs.midiFeedback ? 'ON' : 'off'}</button>
         <span class="v" style="margin-left:6px">${midiOuts.length ? midiOuts.length + ' salida(s)' : 'sin salida MIDI'}</span></span></div>
+      <div class="cprow"><b>Seguir MIDI Clock</b><span>
+        <button id="cpmidiclk" class="mini${uiPrefs.midiClock ? ' on' : ''}" title="esclavo del reloj del DJ/DAW: el BPM se clava al clock que llega por MIDI (CDJ, mixer, Ableton)">${uiPrefs.midiClock ? 'ON' : 'off'}</button>
+        <span class="v" style="margin-left:6px">${uiPrefs.midiClock ? (midiClock.lock ? '🟢 en sync' : 'esperando clock…') : 'TAP/SYNC manual'}</span></span></div>
       <div class="cph">MAPEOS DE MIDI LEARN
         <button id="cpmapsclear" class="mini" style="margin-left:8px">borrar todos</button></div>
       <div id="cpmaps"></div>
@@ -4306,6 +4389,12 @@ function buildCpTab(id) {
       if (uiPrefs.midiFeedback) updateMidiLeds(true); else clearMidiLeds();
       buildCpTab('midi');
       toast(uiPrefs.midiFeedback ? (midiOuts.length ? '💡 Luces de la controladora ON' : '⚠ No hay salida MIDI detectada') : 'Luces off');
+    };
+    $('#cpmidiclk').onclick = () => {
+      uiPrefs.midiClock = !uiPrefs.midiClock; saveUI();
+      midiClock.lock = false; midiClock.intervals = []; midiClock.lastBeat = 0;
+      buildCpTab('midi');
+      toast(uiPrefs.midiClock ? '🕒 Siguiendo MIDI Clock — mandá play en el DJ/DAW' : 'MIDI Clock off — TAP/SYNC manual');
     };
     $('#cpmapsclear').onclick = () => { state.mappings = {}; markDirty(); buildCpMaps(); };
     const nd = el('div', 'cprow');
@@ -4856,6 +4945,30 @@ function mapEditorSync() {
   msub.onchange = () => { setMeshSub(sf, +msub.value); markDirty(); rebuildMapHandles(); buildSurfList(); };
   row2.append(msel, softL, soft, lineL, line, meshL, msub);
   tb.appendChild(row2);
+  // fila 3: imagen de guía (foto del escenario para alinear las superficies)
+  const row3 = el('span');
+  row3.style.cssText = 'display:flex;gap:6px;align-items:center;width:100%;font-size:10px;color:var(--dim)';
+  const gld = el('button', 'mini'); gld.textContent = '🖼 guía';
+  gld.title = 'cargar una foto del escenario/objeto para alinear las superficies encima (solo en el editor)';
+  gld.onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = async () => {
+      if (!inp.files[0]) return;
+      try { mapGuide.bmp = await createImageBitmap(inp.files[0]); mapEditorSync(); toast('🖼 Guía cargada — bajá las superficies para alinearlas'); }
+      catch (e) { toast('No se pudo cargar la imagen'); }
+    };
+    inp.click();
+  };
+  row3.appendChild(gld);
+  if (mapGuide.bmp) {
+    const gop = el('input'); gop.type = 'range'; gop.min = .1; gop.max = .85; gop.step = .05; gop.value = mapGuide.op; gop.style.width = '80px';
+    gop.title = 'opacidad de la guía';
+    gop.oninput = () => { mapGuide.op = +gop.value; };
+    const gclr = el('button', 'mini'); gclr.textContent = 'quitar guía';
+    gclr.onclick = () => { try { mapGuide.bmp.close && mapGuide.bmp.close(); } catch (e) { } mapGuide.bmp = null; mapEditorSync(); };
+    row3.append(document.createTextNode('opacidad'), gop, gclr);
+  }
+  tb.appendChild(row3);
   rebuildMapHandles();
 }
 function pointInQuad(p, pts) {
@@ -4936,8 +5049,14 @@ function syncMapHandles() {
     if (sf && pts[i]) { h.style.left = pts[i][0] * 100 + '%'; h.style.top = (1 - pts[i][1]) * 100 + '%'; }
   });
 }
+const mapGuide = { bmp: null, op: 0.5 }; // imagen de guía del editor de mapping (foto del escenario)
 function drawMapPrev() {
   mapCtx.drawImage(main.canvas, 0, 0, mapPrev.width, mapPrev.height);
+  if (mapGuide.bmp) { // guía semitransparente para alinear las superficies contra la realidad
+    mapCtx.globalAlpha = mapGuide.op;
+    mapCtx.drawImage(mapGuide.bmp, 0, 0, mapPrev.width, mapPrev.height);
+    mapCtx.globalAlpha = 1;
+  }
   state.map.surfaces.forEach((sf, i) => {
     const sel = i === state.map.sel;
     mapCtx.strokeStyle = sel ? '#ff3d54' : '#ffffff66';
@@ -5020,7 +5139,7 @@ function layoutMsg() {
     grid: state.grid.map(row => row.map(c => ({
       k: c.kind,
       n: c.kind === 'empty' ? '' :
-        ((c.kind === 'gen' ? genIcon(c.presetIdx) + ' ' : c.kind === 'text' ? '💬' : c.kind === 'gif' ? (c.isImage ? '🖼' : '🎞') : c.kind === 'cam' ? '📷' : '') +
+        ((c.kind === 'gen' ? genIcon(c.presetIdx) + ' ' : c.kind === 'text' ? '💬' : c.kind === 'gif' ? (c.isImage ? '🖼' : '🎞') : c.kind === 'cam' ? (c.isScreen ? '🖥' : '📷') : '') +
           c.name).slice(0, 12),
     }))),
     scenes: state.scenes.map(s => !!s),

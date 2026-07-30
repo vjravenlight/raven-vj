@@ -276,6 +276,10 @@ MAPPING MULTI-SUPERFICIE
   - ⇋H / ⇅V: espejar horizontal o vertical (retroproyección).
   - ＋ superficie agrega una nueva.
 
+  🖼 GUÍA: cargá una foto del escenario/objeto en el editor de mapping
+  (semitransparente, con opacidad regulable) para alinear las superficies
+  contra la realidad. Solo se ve en el editor, nunca en la salida.
+
   🎯 PATRÓN DE CALIBRACIÓN: botón que dibuja una grilla + cruz sobre
   cada superficie. Encendelo, movés las esquinas hasta que la grilla
   quede derecha sobre el objeto real, y después lo apagás. Es la forma
@@ -300,6 +304,24 @@ GENERADORES CONFIGURABLES 🧪
     fuego, UV) + REACCIÓN (bajo, beat, agudos), con vista en vivo en
     el monitor PREVIA. Le ponés nombre, queda en el estante y viaja
     dentro del JSON del set. Click derecho en el tile: editar/eliminar.
+
+CAPTURA DE PANTALLA 🖥
+  Arrastrá el tile 🖥 Pantalla a una celda: elegís una app, una pestaña
+  o la pantalla entera y entra como fuente (con efectos, capas y
+  transiciones, igual que un video). Ideal para traer otro programa de
+  visuales, un navegador, slides, lo que sea. Si cortás el compartir,
+  la celda se vacía sola.
+
+VISUALIZADORES DE AUDIO 🎵
+  3 generadores que dibujan el sonido: 📊 Espectro (barras),
+  〰️ Onda audio (waveform) y 📡 Radar FFT (circular). Arrastralos como
+  cualquier generador — reaccionan al micrófono en vivo.
+
+MIDI CLOCK (sync con el DJ) 🕒
+  Panel (Ctrl+Alt+T) → MIDI → "Seguir MIDI Clock": el BPM se clava al
+  reloj que manda una CDJ, un mixer o Ableton por MIDI. Dale play en el
+  equipo del DJ y RAVEN VJ queda sincronizado solo (🟢 en sync). Apagalo
+  para volver a TAP/SYNC manual.
 
 CÁMARA / CAPTURADORA EN VIVO 📷
   Arrastrá el tile 📷 Cámara a una celda (o click derecho → Cámara) y
