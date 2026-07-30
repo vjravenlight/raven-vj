@@ -92,7 +92,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #welgo:hover{filter:brightness(1.12)}
 .welvisit{margin-top:10px;font-size:12px;color:var(--dim)}
 .welvisit b{color:var(--acc);font-size:14px;margin-left:5px}
-.welarg{margin-top:12px;font-size:12px;color:var(--txt);font-weight:700;letter-spacing:.5px}
+.welarg{margin-top:12px;font-size:12px;color:var(--txt);font-weight:700;letter-spacing:.5px;
+  display:flex;align-items:center;justify-content:center;gap:7px}
+.argflag{width:22px;height:15px;border-radius:2px;box-shadow:0 0 0 1px #ffffff22,0 1px 4px #0008}
 .welfoot{margin-top:6px;font-size:10px;color:var(--dim)}
 .welfoot a{color:var(--acc)}
 #welx{position:absolute;top:10px;right:10px;background:none;border:1px solid var(--line);border-radius:6px;
@@ -906,7 +908,7 @@ ATAJOS
     <div class="welrow"><label>Idioma</label><select id="welLang" data-noi18n></select></div>
     <button id="welgo">🚀 EMPEZAR</button>
     <div class="welvisit" id="welvisit" style="display:none"><span>Sos el visitante N°</span><b id="welvisitN" data-noi18n></b></div>
-    <div class="welarg"><span>Hecho en Argentina</span><span data-noi18n> 🇦🇷</span></div>
+    <div class="welarg"><span>Hecho en Argentina</span><svg class="argflag" viewBox="0 0 30 20" data-noi18n aria-label="bandera argentina"><rect width="30" height="20" rx="2" fill="#74ACDF"/><rect y="6.7" width="30" height="6.6" fill="#fff"/><circle cx="15" cy="10" r="2.6" fill="#F6B40E"/><circle cx="15" cy="10" r="2.6" fill="none" stroke="#85340A" stroke-width="0.3"/></svg></div>
     <div class="welfoot" data-noi18n>RAVEN VJ · 2026 ·
       <a href="https://www.ravenlight.net/ravenvj/" target="_blank" rel="noopener">ravenlight.net</a> · por VJ Ravenlight</div>
   </div>
