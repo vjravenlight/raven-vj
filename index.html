@@ -1142,9 +1142,9 @@ void main(){
 const FINAL_FS = `#version 300 es
 precision highp float;
 in vec2 v_uv; out vec4 o;
-uniform sampler2D u_tex; uniform float u_master,u_flash,u_build,u_time,u_warpOn;
+uniform sampler2D u_tex; uniform sampler2D u_mtex; uniform float u_master,u_flash,u_build,u_time,u_warpOn;
 uniform mat3 u_warp; uniform vec4 u_srcRect;
-uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test;
+uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test,u_mtexOn;
 uniform vec2 u_flip;
 void main(){
  vec2 base=v_uv; float inQ=1.; float eb=1.; float m=1.;
@@ -1165,6 +1165,7 @@ void main(){
      if(u_minv>.5) m=1.-m; // invertir máscara
      inQ*=m;
    }
+   if(u_mtexOn>.5) inQ*=texture(u_mtex,v_uv).r; // máscara dibujada (pluma / SVG)
  }
  float b=u_build;
  vec2 uv=(base-.5)*(1.-b*.22)+.5;
@@ -1198,14 +1199,15 @@ void main(){ v_luv=a_luv; gl_Position=vec4(a_pos*2.-1.,0.,1.); }`;
 const MESH_FS = `#version 300 es
 precision highp float;
 in vec2 v_luv; out vec4 o;
-uniform sampler2D u_tex; uniform float u_master,u_flash,u_build,u_time;
+uniform sampler2D u_tex; uniform sampler2D u_mtex; uniform float u_master,u_flash,u_build,u_time;
 uniform vec4 u_srcRect;
-uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test;
-uniform vec2 u_flip;
+uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test,u_mtexOn;
+uniform vec2 u_flip,u_res;
 void main(){
  vec2 base=v_luv; float inQ=1.; float m=1.;
  float eb=min(min(base.x,1.-base.x),min(base.y,1.-base.y));
  if(u_soft>0.001) inQ*=smoothstep(0.,u_soft,eb);
+ if(u_mtexOn>.5) inQ*=texture(u_mtex,gl_FragCoord.xy/u_res).r; // máscara dibujada (pluma / SVG)
  if(u_mask>.5){
    vec2 mp=base-.5; float sft=max(u_soft,.012);
    if(u_mask<1.5) m=smoothstep(.5,.5-sft,length(mp));
@@ -2303,6 +2305,10 @@ function renderTick() {
         gl.uniform1f(U(gl, mp, 'u_minv'), sf.maskInv ? 1 : 0);
         gl.uniform1f(U(gl, mp, 'u_test'), testOn);
         gl.uniform2f(U(gl, mp, 'u_flip'), sf.flipX ? 1 : 0, sf.flipY ? 1 : 0);
+        gl.uniform2f(U(gl, mp, 'u_res'), main.canvas.width, main.canvas.height);
+        gl.uniform1i(U(gl, mp, 'u_mtex'), 1);
+        gl.uniform1f(U(gl, mp, 'u_mtexOn'), sf._mtex ? 1 : 0);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, sf._mtex || blackTex); gl.activeTexture(gl.TEXTURE0);
         drawMeshSurface(gl, sf);
         gl.useProgram(fp); // volver al programa de pantalla completa para las quad
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
@@ -2318,6 +2324,9 @@ function renderTick() {
       gl.uniform1f(U(gl, fp, 'u_minv'), sf.maskInv ? 1 : 0);
       gl.uniform1f(U(gl, fp, 'u_test'), testOn);
       gl.uniform2f(U(gl, fp, 'u_flip'), sf.flipX ? 1 : 0, sf.flipY ? 1 : 0);
+      gl.uniform1i(U(gl, fp, 'u_mtex'), 1);
+      gl.uniform1f(U(gl, fp, 'u_mtexOn'), sf._mtex ? 1 : 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, sf._mtex || blackTex); gl.activeTexture(gl.TEXTURE0);
       draw(gl);
     }
     gl.disable(gl.BLEND);
@@ -2332,8 +2341,10 @@ function renderTick() {
     gl.uniform1f(U(gl, fp, 'u_minv'), 0);
     gl.uniform1f(U(gl, fp, 'u_test'), 0);
     gl.uniform2f(U(gl, fp, 'u_flip'), 0, 0);
+    gl.uniform1f(U(gl, fp, 'u_mtexOn'), 0);
     draw(gl);
   }
+  pubDraw(gl); // reacciones del público flotando sobre la salida
 
   livePrevTick();
   previewTick();
@@ -3750,6 +3761,8 @@ function serialize() {
         flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
         mesh: sf.mesh && !sf.bez ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
         bez: sf.bez ? { c: sf.bez.c, h: sf.bez.h } : null,
+        maskPts: sf.maskPts || null, maskSmooth: sf.maskSmooth ? 1 : 0,
+        maskSvg: sf.maskSvg && sf.maskSvg.length < 400000 ? sf.maskSvg : null,
       })),
     },
     fxPresets: state.fxPresets,
@@ -3859,8 +3872,11 @@ function deserialize(d) {
         flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
         mesh: sf.mesh && Array.isArray(sf.mesh.pts) ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
         bez: sf.bez && Array.isArray(sf.bez.c) && Array.isArray(sf.bez.h) ? { c: sf.bez.c, h: sf.bez.h } : null,
+        maskPts: Array.isArray(sf.maskPts) ? sf.maskPts : null,
+        maskSmooth: !!sf.maskSmooth, maskSvg: sf.maskSvg || null,
       };
       if (s.bez) bezToMesh(s); else if (s.mesh) syncMeshCorners(s);
+      if (s.maskPts || s.maskSvg) { try { rasterizeMask(s); } catch (e) { } }
       return s;
     });
   } else if (d.warp && Array.isArray(d.warp.pts) && d.warp.pts.length === 4) {
@@ -4219,6 +4235,7 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.altKey && (e.key === 't' || e.key === 'T')) {
     e.preventDefault(); togglePanel(); return;
   }
+  if (penMode && (e.key === 'Enter' || e.key === 'Escape')) { e.key === 'Enter' ? closePen() : cancelPen(); return; }
   if (e.key === 'Escape' && midiWiz) { endMidiWizard(); return; }
   if (e.key === 'Escape') { togglePanel(false); return; }
   // learn de teclado: en modo learn, elegís un control y apretás una tecla
@@ -4491,7 +4508,44 @@ function buildCpTab(id) {
         (sirve el hotspot del propio celu); después el control va directo por WiFi.</span></div>`
         : `<div class="cprow"><span class="v">Activalo: aparece un código + QR. Desde el celu manejás la grilla,
         escenas, columnas, XY, master, crossfader y macros (FLASH, BUILD, BLACKOUT, PÁNICO) en tiempo real.</span></div>`);
+    const pubUrl = 'https://www.ravenlight.net/ravenvj/remote.html?p=' + pub.code;
+    b.innerHTML += `<div class="cph">🎉 INTERACCIÓN CON EL PÚBLICO</div>
+      <div class="cprow"><b>Público</b><span><button id="cppub" class="mini${pub.on ? ' on' : ''}">${pub.on ? 'desactivar' : '🎉 ACTIVAR'}</button></span></div>` +
+      (pub.on ? `
+      <div class="cprow"><b>URL para la gente</b><span class="v" style="user-select:text">${pubUrl.replace('https://www.', '')}</span></div>
+      <div class="cprow"><b>Conectados</b><span class="v">${pub.conns.length}</span></div>
+      <div style="text-align:center;padding:10px">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&bgcolor=0c0c0e&color=ff7a1a&data=${encodeURIComponent(pubUrl)}"
+          width="170" height="170" style="border-radius:8px" alt="QR"></div>
+      <div class="cprow"><span class="v">Poné este QR en pantalla (o imprimilo): la gente escanea y manda
+        reacciones que flotan en tus visuales. Solo puede mandar LO QUE VOS habilitás acá abajo.</span></div>` : `
+      <div class="cprow"><span class="v">Un QR para que el público mande emojis y frases que flotan en la
+        salida. Anti-zarpados: solo pueden mandar lo que VOS habilitás, con límite de 1 por segundo.</span></div>`) + `
+      <div class="cprow"><b>Emojis permitidos</b><span>
+        <input type="text" id="cppubemo" value="${pub.emojis}" maxlength="24" style="width:190px" data-noi18n></span></div>
+      <div class="cprow"><b>Frases permitidas</b><span>
+        <input type="text" id="cppubtxt" value="${pub.texts.join(' | ').replace(/"/g, '&quot;')}" maxlength="200" style="width:230px"
+          title="separadas con | (barra vertical)" data-noi18n></span></div>
+      <div class="cprow"><b>Texto libre</b><span>
+        <button id="cppubfree" class="mini${pub.free ? ' danger on' : ''}" title="⚠ deja que escriban CUALQUIER cosa — usalo solo con gente de confianza">${pub.free ? '⚠ ON' : 'off (recomendado)'}</button></span></div>
+      <div class="cprow"><b>Probar</b><span><button id="cppubtest" class="mini">💥 reacción de prueba</button></span></div>`;
     $('#cpremote').onclick = remoteToggle;
+    $('#cppub').onclick = pubToggle;
+    $('#cppubemo').onchange = e => { pub.emojis = e.target.value.trim() || '🔥'; pubBroadcastConfig(); };
+    $('#cppubtxt').onchange = e => {
+      pub.texts = e.target.value.split('|').map(s => s.trim()).filter(Boolean).slice(0, 12);
+      pubBroadcastConfig();
+    };
+    $('#cppubfree').onclick = () => {
+      pub.free = !pub.free;
+      pubBroadcastConfig(); buildCpTab('remote');
+      toast(pub.free ? '⚠ Texto libre ON — el público puede escribir lo que quiera' : 'Texto libre off — solo tus frases');
+    };
+    $('#cppubtest').onclick = () => {
+      const es = [...pub.emojis].filter(ch => !/\s/.test(ch));
+      pubSpawn(es[Math.floor(Math.random() * es.length)] || '🔥');
+      pubSpawn(pub.texts[0] || 'AGUANTE');
+    };
   } else if (id === 'audio') {
     b.innerHTML = `<div class="cph">ENTRADA</div>
       <div class="cprow"><b>Audio</b><span><button id="cpaudio" class="mini${audio.on ? ' on' : ''}">${audio.on ? 'ON — click para apagar' : 'activar 🎤'}</button></span></div>
@@ -5012,6 +5066,40 @@ function mapEditorSync() {
     row3.append(document.createTextNode('opacidad'), gop, gclr);
   }
   tb.appendChild(row3);
+  // fila 4: pluma de máscaras + SVG import/export
+  const row4 = el('span');
+  row4.style.cssText = 'display:flex;gap:6px;align-items:center;width:100%;font-size:10px;color:var(--dim);flex-wrap:wrap';
+  if (penMode) {
+    const done = el('button', 'mini on'); done.textContent = '✔ cerrar máscara (Enter)';
+    done.onclick = closePen;
+    const cancel = el('button', 'mini'); cancel.textContent = '✕ cancelar (Esc)';
+    cancel.onclick = cancelPen;
+    row4.append(done, cancel, document.createTextNode('click = punto · click derecho = borrar último'));
+  } else {
+    const pen = el('button', 'mini'); pen.textContent = '✏ dibujar máscara';
+    pen.title = 'marcá con clicks el contorno del objeto real (cuadro, ventana, escultura) y esa forma queda como máscara';
+    pen.onclick = startPen;
+    row4.appendChild(pen);
+    if (sf.maskPts) {
+      const sm = el('button', 'mini' + (sf.maskSmooth ? ' on' : '')); sm.textContent = '∿ curvas';
+      sm.title = 'suavizar las esquinas de la máscara dibujada (bordes curvos)';
+      sm.onclick = () => { sf.maskSmooth = !sf.maskSmooth; rasterizeMask(sf); markDirty(); mapEditorSync(); };
+      row4.appendChild(sm);
+    }
+    if (sf.maskPts || sf.maskSvg) {
+      const clr = el('button', 'mini'); clr.textContent = '🧹 quitar máscara';
+      clr.onclick = () => { sf.maskPts = null; sf.maskSvg = null; sf.maskSmooth = false; rasterizeMask(sf); markDirty(); mapEditorSync(); };
+      row4.appendChild(clr);
+    }
+    const imp = el('button', 'mini'); imp.textContent = '📐 importar SVG';
+    imp.title = 'formas dibujadas en Illustrator/Inkscape → máscara de esta superficie';
+    imp.onclick = importMaskSVG;
+    const exp = el('button', 'mini'); exp.textContent = '⬇ exportar SVG';
+    exp.title = 'exportar superficies y máscaras como SVG para editarlas afuera y re-importarlas';
+    exp.onclick = exportMappingSVG;
+    row4.append(imp, exp);
+  }
+  tb.appendChild(row4);
   rebuildMapHandles();
 }
 function pointInQuad(p, pts) {
@@ -5062,10 +5150,19 @@ function rebuildMapHandles() {
 }
 {
   const stage = $('#mapstage');
+  stage.addEventListener('contextmenu', e => {
+    if (penMode) { e.preventDefault(); e.stopPropagation(); penPts.pop(); } // click derecho: borrar el último punto
+  });
   stage.addEventListener('pointerdown', e => {
     if (e.target !== stage && e.target !== mapPrev) return;
     const r = stage.getBoundingClientRect();
     const uv = [clamp01((e.clientX - r.left) / r.width), clamp01(1 - (e.clientY - r.top) / r.height)];
+    if (penMode) { // modo pluma: cada click marca un punto de la máscara
+      if (e.button !== 0) return;
+      if (penPts.length >= 3 && Math.hypot(uv[0] - penPts[0][0], uv[1] - penPts[0][1]) < .03) { closePen(); return; }
+      penPts.push(uv);
+      return;
+    }
     const hit = state.map.surfaces.findIndex(sf => pointInQuad(uv, sf.pts));
     if (hit >= 0 && hit !== state.map.sel) { state.map.sel = hit; mapEditorSync(); }
     const sf = state.map.surfaces[state.map.sel];
@@ -5095,7 +5192,7 @@ function syncMapHandles() {
   const pts = sf && editPts(sf);
   if (sf && mapHandles.length !== pts.length) { rebuildMapHandles(); return; }
   mapHandles.forEach((h, i) => {
-    h.style.display = mapWinOn && sf ? '' : 'none';
+    h.style.display = mapWinOn && sf && !penMode ? '' : 'none';
     if (sf && pts[i]) { h.style.left = pts[i][0] * 100 + '%'; h.style.top = (1 - pts[i][1]) * 100 + '%'; }
   });
 }
@@ -5106,6 +5203,28 @@ function drawMapPrev() {
     mapCtx.globalAlpha = mapGuide.op;
     mapCtx.drawImage(mapGuide.bmp, 0, 0, mapPrev.width, mapPrev.height);
     mapCtx.globalAlpha = 1;
+  }
+  if (penMode) { // pluma: la máscara en construcción
+    const W = mapPrev.width, H = mapPrev.height;
+    mapCtx.strokeStyle = '#8dff3f'; mapCtx.fillStyle = '#8dff3f'; mapCtx.lineWidth = 2;
+    if (penPts.length) {
+      mapCtx.beginPath();
+      penPts.forEach((p, i) => { const x = p[0] * W, y = (1 - p[1]) * H; i ? mapCtx.lineTo(x, y) : mapCtx.moveTo(x, y); });
+      mapCtx.stroke();
+      penPts.forEach((p, i) => {
+        mapCtx.beginPath();
+        mapCtx.arc(p[0] * W, (1 - p[1]) * H, i === 0 ? 7 : 4, 0, 6.2832);
+        i === 0 ? mapCtx.stroke() : mapCtx.fill();
+      });
+    }
+  }
+  const selSf = state.map.surfaces[state.map.sel];
+  if (!penMode && selSf && selSf.maskPts) { // máscara ya dibujada: contorno de referencia
+    const W = mapPrev.width, H = mapPrev.height;
+    mapCtx.save(); mapCtx.setLineDash([4, 4]); mapCtx.strokeStyle = '#8dff3f99'; mapCtx.lineWidth = 1.5;
+    mapCtx.beginPath();
+    selSf.maskPts.forEach((p, i) => { const x = p[0] * W, y = (1 - p[1]) * H; i ? mapCtx.lineTo(x, y) : mapCtx.moveTo(x, y); });
+    mapCtx.closePath(); mapCtx.stroke(); mapCtx.restore();
   }
   state.map.surfaces.forEach((sf, i) => {
     const sel = i === state.map.sel;
@@ -5153,6 +5272,255 @@ function drawMapPrev() {
     mapCtx.font = 'bold 14px sans-serif';
     mapCtx.fillText('S' + (i + 1), cx * mapPrev.width - 9, (1 - cy) * mapPrev.height + 5);
   });
+}
+
+/* ---------------- pluma de máscaras + SVG (import/export) ---------------- */
+let penMode = false, penPts = [];
+function startPen() {
+  penMode = true; penPts = [];
+  toast('✏ Click para marcar puntos · click en el 1° (o Enter) cierra · Esc cancela · click derecho borra el último');
+  mapEditorSync();
+}
+function cancelPen() { penMode = false; penPts = []; mapEditorSync(); }
+function closePen() {
+  const sf = state.map.surfaces[state.map.sel];
+  if (sf && penPts.length >= 3) {
+    sf.maskPts = penPts.map(p => p.slice());
+    sf.maskSvg = null; // la pluma reemplaza un SVG importado
+    rasterizeMask(sf);
+    markDirty();
+    toast('✏ Máscara aplicada a la superficie ' + (state.map.sel + 1));
+  }
+  penMode = false; penPts = [];
+  mapEditorSync();
+}
+/* rasteriza la máscara dibujada (o el SVG importado) a una textura alpha */
+function rasterizeMask(sf) {
+  const gl = main.gl;
+  if (!sf.maskPts && !sf.maskSvg) {
+    if (sf._mtex) { try { gl.deleteTexture(sf._mtex); } catch (e) { } sf._mtex = null; }
+    return;
+  }
+  const W = 512, H = Math.max(16, Math.round(512 * state.res[1] / state.res[0]));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#fff';
+  if (sf.maskPts) {
+    const pts = sf.maskPts.map(p => [p[0] * W, (1 - p[1]) * H]);
+    x.beginPath();
+    if (sf.maskSmooth && pts.length > 2) { // curvas suaves: cuadráticas entre puntos medios
+      const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const m0 = mid(pts[pts.length - 1], pts[0]);
+      x.moveTo(m0[0], m0[1]);
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], m1 = mid(p, pts[(i + 1) % pts.length]);
+        x.quadraticCurveTo(p[0], p[1], m1[0], m1[1]);
+      }
+    } else {
+      pts.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1]));
+    }
+    x.closePath(); x.fill();
+  } else if (sf.maskSvg) {
+    try {
+      const doc = new DOMParser().parseFromString(sf.maskSvg, 'image/svg+xml');
+      const svg = doc.querySelector('svg');
+      const vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+      let vx = 0, vy = 0, vw = parseFloat(svg.getAttribute('width')) || W, vh = parseFloat(svg.getAttribute('height')) || H;
+      if (vb.length === 4 && vb[2] > 0) { vx = vb[0]; vy = vb[1]; vw = vb[2]; vh = vb[3]; }
+      x.save(); x.scale(W / vw, H / vh); x.translate(-vx, -vy);
+      svgShapes(doc).forEach(p2d => x.fill(p2d));
+      x.restore();
+    } catch (e) { console.error('SVG:', e); }
+  }
+  if (!sf._mtex) sf._mtex = makeTex(gl, 2, 2);
+  gl.bindTexture(gl.TEXTURE_2D, sf._mtex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+}
+function svgShapes(doc) { // shapes básicas de un SVG → Path2D
+  const out = [];
+  doc.querySelectorAll('path').forEach(p => { const d = p.getAttribute('d'); if (d) { try { out.push(new Path2D(d)); } catch (e) { } } });
+  doc.querySelectorAll('rect').forEach(r => {
+    const p = new Path2D();
+    p.rect(+r.getAttribute('x') || 0, +r.getAttribute('y') || 0, +r.getAttribute('width') || 0, +r.getAttribute('height') || 0);
+    out.push(p);
+  });
+  doc.querySelectorAll('circle').forEach(c => {
+    const p = new Path2D();
+    p.arc(+c.getAttribute('cx') || 0, +c.getAttribute('cy') || 0, +c.getAttribute('r') || 0, 0, 6.2832);
+    out.push(p);
+  });
+  doc.querySelectorAll('ellipse').forEach(c => {
+    const p = new Path2D();
+    p.ellipse(+c.getAttribute('cx') || 0, +c.getAttribute('cy') || 0, +c.getAttribute('rx') || 0, +c.getAttribute('ry') || 0, 0, 0, 6.2832);
+    out.push(p);
+  });
+  doc.querySelectorAll('polygon,polyline').forEach(pg => {
+    const nums = (pg.getAttribute('points') || '').trim().split(/[\s,]+/).map(Number);
+    if (nums.length >= 6) {
+      const p = new Path2D();
+      p.moveTo(nums[0], nums[1]);
+      for (let i = 2; i < nums.length - 1; i += 2) p.lineTo(nums[i], nums[i + 1]);
+      p.closePath(); out.push(p);
+    }
+  });
+  return out;
+}
+function importMaskSVG() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.svg,image/svg+xml';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    const tx = await f.text();
+    if (tx.length > 400000) { toast('SVG demasiado grande (máx ~400 KB)'); return; }
+    const sf = state.map.surfaces[state.map.sel]; if (!sf) return;
+    sf.maskSvg = tx; sf.maskPts = null;
+    rasterizeMask(sf);
+    markDirty(); mapEditorSync();
+    toast('📐 SVG aplicado como máscara de la superficie ' + (state.map.sel + 1));
+  };
+  inp.click();
+}
+/* export SVG del mapping: superficies + máscaras, para editar en Illustrator/Inkscape y re-importar */
+function buildMappingSVG() {
+  const [W, H] = state.res;
+  const X = v => (v * W).toFixed(1), Y = v => ((1 - v) * H).toFixed(1);
+  const cols = ['#ff7a1a', '#2fd8ff', '#ff3fd4', '#8dff3f', '#ffd23f', '#b46bff', '#ff5f6e', '#7fc4ff'];
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">\n` +
+    `<!-- RAVEN VJ · mapping exportado — editá las formas y re-importalas como máscara -->\n` +
+    `<rect width="${W}" height="${H}" fill="#0d0705"/>\n`;
+  state.map.surfaces.forEach((sf, i) => {
+    const col = cols[i % 8];
+    if (sf.bez) {
+      const c = sf.bez.c, h = sf.bez.h;
+      const P = p => `${X(p[0])} ${Y(p[1])}`;
+      s += `<path id="S${i + 1}" fill="none" stroke="${col}" stroke-width="3" d="M ${P(c[0])} C ${P(h[0])}, ${P(h[1])}, ${P(c[1])} C ${P(h[2])}, ${P(h[3])}, ${P(c[2])} C ${P(h[5])}, ${P(h[4])}, ${P(c[3])} C ${P(h[7])}, ${P(h[6])}, ${P(c[0])} Z"/>\n`;
+    } else {
+      s += `<polygon id="S${i + 1}" fill="none" stroke="${col}" stroke-width="3" points="${sf.pts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>\n`;
+    }
+    if (sf.mesh && !sf.bez) { // los puntos de la malla como referencia
+      sf.mesh.pts.forEach(p => { s += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="${col}88"/>\n`; });
+    }
+    if (sf.maskPts) {
+      s += `<polygon id="S${i + 1}-mascara" fill="#ffffff33" stroke="#fff" stroke-width="2" points="${sf.maskPts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>\n`;
+    }
+  });
+  return s + '</svg>';
+}
+function exportMappingSVG() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buildMappingSVG()], { type: 'image/svg+xml' }));
+  a.download = 'ravenvj-mapping.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('⬇ Mapping exportado como SVG — editalo y re-importalo');
+}
+
+/* ---------------- interacción con el PÚBLICO (celulares → reacciones en la salida) ---------------- */
+/* Seguridad anti-zarpados: código PROPIO (separado del remoto de control), solo se aceptan
+   emojis/textos de la lista del VJ, texto libre APAGADO por defecto, límite de frecuencia y de partículas. */
+const pub = {
+  on: false, peer: null, code: '', conns: [],
+  emojis: '🔥💜✨🍄👽🌀🙌❤️', texts: ['AGUANTE', 'VAMOS!', '🔥🔥🔥', 'EPAAA'], free: false,
+  parts: [], canvas: null, ctx: null, tex: null, _last: new Map(),
+};
+function pubConfigMsg() {
+  return { t: 'publayout', emojis: [...pub.emojis].filter(ch => !/\s/.test(ch)), texts: pub.texts.slice(0, 12), free: !!pub.free };
+}
+function pubSpawn(txt) {
+  if (pub.parts.length >= 30) pub.parts.shift(); // tope duro de partículas
+  pub.parts.push({
+    txt: String(txt).slice(0, 24),
+    x: .1 + Math.random() * .8, y: -0.05,
+    vx: (Math.random() - .5) * .04, vy: .1 + Math.random() * .12,
+    size: .05 + Math.random() * .05, born: performance.now(), spin: (Math.random() - .5) * 1.2,
+  });
+}
+function pubMsg(conn, d) {
+  if (!pub.on || !d || d.t !== 'pub') return; // del canal del público SOLO se aceptan reacciones
+  const now = performance.now();
+  const lastT = pub._last.get(conn) || 0;
+  if (now - lastT < 900) return; // máx ~1 por segundo por celular
+  pub._last.set(conn, now);
+  const v = String(d.v || '').slice(0, 24);
+  if (d.k === 'e') { // emoji: solo los habilitados
+    if ([...pub.emojis].includes(v)) pubSpawn(v);
+  } else if (d.k === 't') { // texto: solo los predefinidos, salvo texto libre ON
+    if (pub.texts.includes(v)) pubSpawn(v);
+    else if (pub.free && v.trim()) pubSpawn(v.replace(/[<>]/g, '').trim());
+  }
+}
+function pubToggle() {
+  if (pub.on || pub.peer) {
+    pub.conns.forEach(c => { try { c.close(); } catch (e) { } });
+    if (pub.peer) { try { pub.peer.destroy(); } catch (e) { } }
+    pub.on = false; pub.peer = null; pub.code = ''; pub.conns = []; pub._last = new Map();
+    buildCpTab('remote');
+    toast('Interacción del público desactivada');
+    return;
+  }
+  const boot = () => {
+    pub.code = genRemoteCode();
+    pub.peer = new Peer('ravenvj-pub-' + pub.code.toLowerCase());
+    pub.peer.on('open', () => { pub.on = true; buildCpTab('remote'); toast('🎉 PÚBLICO activo — código ' + pub.code); });
+    pub.peer.on('error', err => { toast('⚠ Público: ' + (err.type || err.message)); buildCpTab('remote'); });
+    pub.peer.on('connection', conn => {
+      pub.conns.push(conn);
+      conn.on('open', () => { try { conn.send(pubConfigMsg()); } catch (e) { } buildCpTab('remote'); });
+      conn.on('data', d => { try { pubMsg(conn, d); } catch (e) { } });
+      conn.on('close', () => { pub.conns = pub.conns.filter(c => c !== conn); pub._last.delete(conn); buildCpTab('remote'); });
+    });
+  };
+  if (window.Peer) { boot(); return; }
+  const s = document.createElement('script');
+  s.src = 'peerjs.min.js';
+  s.onload = boot;
+  s.onerror = () => toast('No se pudo cargar el módulo de conexión');
+  document.head.appendChild(s);
+}
+function pubBroadcastConfig() { pub.conns.forEach(c => { try { c.send(pubConfigMsg()); } catch (e) { } }); }
+function pubDraw(gl) { // dibuja las reacciones flotando y las compone sobre la salida
+  if (!pub.parts.length) return;
+  const [W, H] = [main.canvas.width, main.canvas.height];
+  if (!pub.canvas || pub.canvas.width !== W || pub.canvas.height !== H) {
+    pub.canvas = document.createElement('canvas'); pub.canvas.width = W; pub.canvas.height = H;
+    pub.ctx = pub.canvas.getContext('2d');
+  }
+  const x = pub.ctx, now = performance.now();
+  x.clearRect(0, 0, W, H);
+  pub.parts = pub.parts.filter(p => now - p.born < 6000 && p.y < 1.15);
+  for (const p of pub.parts) {
+    const age = (now - p.born) / 1000;
+    p.y += p.vy * .016; p.x += p.vx * .016 + Math.sin(age * 3 + p.spin * 9) * .0012;
+    const alpha = Math.min(1, age * 3) * Math.max(0, 1 - (age - 4.5) / 1.5);
+    x.save();
+    x.globalAlpha = Math.max(0, alpha);
+    x.translate(p.x * W, (1 - p.y) * H);
+    x.rotate(Math.sin(age * 2) * p.spin * .3);
+    const px = p.size * H * (p.txt.length > 2 ? .55 : 1);
+    x.font = `bold ${Math.round(px)}px "Segoe UI Emoji","Segoe UI",sans-serif`;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    if (p.txt.length > 2) { x.fillStyle = '#fff'; x.shadowColor = '#ff7a1a'; x.shadowBlur = 14; }
+    x.fillText(p.txt, 0, 0);
+    x.restore();
+  }
+  if (!pub.tex) pub.tex = makeTex(gl, 2, 2);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, pub.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pub.canvas);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  const bp = program(main, 'blit', BLIT_FS);
+  gl.useProgram(bp);
+  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // canvas 2D viene premultiplicado
+  draw(gl);
+  gl.disable(gl.BLEND);
 }
 
 /* ---------------- control remoto (celular, WebRTC vía PeerJS) ---------------- */

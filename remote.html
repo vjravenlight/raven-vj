@@ -86,6 +86,20 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;heigh
 .stp.on{background:var(--acc);border-color:var(--acc)}
 .stp.now{box-shadow:0 0 0 2px var(--acc2) inset}
 .stp.on.now{background:var(--acc2)}
+/* modo público */
+#pubui{display:none;flex-direction:column;gap:10px;padding:12px;max-width:420px;margin:0 auto}
+#pubst{text-align:center;color:var(--dim);font-size:12px;min-height:18px}
+#pubemos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+#pubemos button{font-size:34px;padding:14px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+#pubemos button:active{background:var(--grad);transform:scale(.94)}
+#pubtxts{display:flex;flex-direction:column;gap:8px}
+#pubtxts button{padding:13px;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  color:var(--txt);font-weight:800;font-size:15px}
+#pubtxts button:active{background:var(--grad);color:#000}
+#pubfree{display:none;gap:6px}
+#pubfree input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:#fff;padding:11px;font-size:15px}
+#pubfree button{padding:11px 16px;background:var(--grad);border:none;border-radius:10px;font-weight:800;color:#000}
+#pubui.cool #pubemos button,#pubui.cool #pubtxts button{opacity:.35;pointer-events:none}
 </style>
 <h1>RAVEN<b>VJ</b> · remoto <span id="conn">●</span></h1>
 <div id="login">
@@ -93,6 +107,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;heigh
   <input id="code" maxlength="6" placeholder="······" autocomplete="off">
   <button id="go">CONECTAR</button>
   <div id="st"></div>
+</div>
+<div id="pubui">
+  <div id="pubst">conectando…</div>
+  <div id="pubemos"></div>
+  <div id="pubtxts"></div>
+  <div id="pubfree"><input id="pubin" maxlength="24" placeholder="escribí algo…"><button id="pubsend">➤</button></div>
 </div>
 <div id="app">
   <div id="topline">
@@ -172,6 +192,53 @@ const tgt = (id, val, on, kind) => send({ t: 'tgt', id, val, on: on === undefine
 
 const params = new URLSearchParams(location.search);
 if (params.get('r')) $('#code').value = params.get('r').toUpperCase();
+/* ---- modo PÚBLICO: mandar reacciones que flotan en las visuales ---- */
+const pubCode = (params.get('p') || '').trim();
+if (pubCode) {
+  $('#login').style.display = 'none';
+  $('#pubui').style.display = 'flex';
+  document.querySelector('h1').innerHTML = 'RAVEN<b>VJ</b> · mandá tu reacción 🎉';
+  let pconn = null, lastSend = 0;
+  const cool = () => { // 1 por segundo, con feedback visual
+    $('#pubui').classList.add('cool');
+    setTimeout(() => $('#pubui').classList.remove('cool'), 1000);
+  };
+  const psend = (k, v) => {
+    const now = Date.now();
+    if (!pconn || !pconn.open || now - lastSend < 1000) return;
+    lastSend = now;
+    try { pconn.send({ t: 'pub', k, v }); } catch (e) { }
+    $('#pubst').textContent = '¡enviado! ✨';
+    cool();
+  };
+  const buildPub = cfg => {
+    const em = $('#pubemos'); em.innerHTML = '';
+    (cfg.emojis || []).slice(0, 12).forEach(e2 => {
+      const b = document.createElement('button');
+      b.textContent = e2;
+      b.onclick = () => psend('e', e2);
+      em.appendChild(b);
+    });
+    const tx = $('#pubtxts'); tx.innerHTML = '';
+    (cfg.texts || []).slice(0, 12).forEach(t2 => {
+      const b = document.createElement('button');
+      b.textContent = t2;
+      b.onclick = () => psend('t', t2);
+      tx.appendChild(b);
+    });
+    $('#pubfree').style.display = cfg.free ? 'flex' : 'none';
+  };
+  $('#pubsend').onclick = () => { const v = $('#pubin').value.trim(); if (v) { psend('t', v); $('#pubin').value = ''; } };
+  $('#pubin').addEventListener('keydown', e => { if (e.key === 'Enter') $('#pubsend').click(); });
+  const peer = new Peer();
+  peer.on('error', e2 => { $('#pubst').textContent = 'no conecta — ¿el VJ tiene el público activo?'; });
+  peer.on('open', () => {
+    pconn = peer.connect('ravenvj-pub-' + pubCode.toLowerCase(), { reliable: true });
+    pconn.on('open', () => { $('#pubst').textContent = 'conectado — tocá para mandar'; });
+    pconn.on('data', d => { if (d && d.t === 'publayout') buildPub(d); });
+    pconn.on('close', () => { $('#pubst').textContent = 'se cortó — recargá la página'; });
+  });
+}
 $('#go').onclick = connect;
 $('#code').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
 

@@ -46,6 +46,17 @@ RELOJ 🕐
   Abajo a la derecha ves la hora local (útil para respetar el horario
   de tu set). Click en el reloj = mostrar/ocultar la fecha.
 
+INTERACCIÓN CON EL PÚBLICO 🎉
+  Panel (Ctrl+Alt+T) → Remoto → sección PÚBLICO → ACTIVAR: aparece un
+  QR para poner en pantalla. La gente lo escanea y manda emojis y
+  frases que FLOTAN sobre tus visuales en la salida.
+  ANTI-ZARPADOS (todo lo controlás vos):
+  - Solo pueden mandar los EMOJIS y FRASES que vos habilitás.
+  - Texto libre APAGADO por defecto (activalo solo con gente de confianza).
+  - Máximo 1 reacción por segundo por celular, tope de 30 en pantalla.
+  - El código del público es SEPARADO del remoto de control: nadie del
+    público puede tocar tus visuales, solo mandar reacciones.
+
 TECLAS ASIGNABLES ⌨
   El mismo learn del MIDI sirve para el teclado: activá 🎹, tocá un
   control de la UI y apretá una tecla. Se administra en el panel MIDI.
@@ -284,6 +295,21 @@ MAPPING MULTI-SUPERFICIE
   cada superficie. Encendelo, movés las esquinas hasta que la grilla
   quede derecha sobre el objeto real, y después lo apagás. Es la forma
   pro de alinear un proyector (como el test pattern de MadMapper).
+
+  ✏ PLUMA DE MÁSCARAS: botón "dibujar máscara" en el editor — marcá con
+  clicks el contorno del objeto real (cuadro, ventana, escultura), click
+  en el primer punto (o Enter) cierra, Esc cancela, click derecho borra
+  el último punto. El botón "∿ curvas" suaviza las esquinas. La forma
+  queda como máscara de la superficie y se guarda en el set.
+
+  📐 SVG IMPORT/EXPORT: "importar SVG" aplica formas dibujadas en
+  Illustrator/Inkscape como máscara. "exportar SVG" baja las superficies
+  y máscaras como archivo SVG para editarlas afuera y re-importarlas.
+
+  MALLA BÉZIER (curvas perfectas): en el selector de malla elegí
+  "bézier" — cada borde gana 2 manijas de curvatura (las bolitas
+  celestes). Con 4 esquinas + manijas mapeás un cilindro o un arco
+  perfecto sin mover 25 puntos.
 
   WARP DE MALLA (superficies curvas) 🕸: en el editor 🗺 (o en el panel)
   elegí "malla: 2×2 … 5×5" y la superficie se subdivide en una grilla
