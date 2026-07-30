@@ -177,6 +177,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;heigh
       <button id="mTap">TAP</button>
       <button id="mResync">↻ RESYNC</button>
       <button id="mDice">🎲 FX</button>
+      <button id="mReact">🎉 REACCIONES</button>
       <button id="mBlack">BLACKOUT</button>
       <button id="mPanic" style="grid-column:1/3">🚨 PÁNICO</button>
     </div>
@@ -420,6 +421,7 @@ hold($('#mFlash'), 'flash');
 $('#mTap').onclick = () => tgt('tap', 1, 1, 'note');
 $('#mResync').onclick = () => tgt('resync', 1, 1, 'note');
 $('#mDice').onclick = () => tgt('dice', 1, 1, 'note');
+$('#mReact').onclick = () => tgt('react', 1, 1, 'note');
 $('#mBlack').onclick = e => { e.target.classList.toggle('on'); tgt('blackout', 1, 1, 'note'); };
 $('#mPanic').onclick = () => { if (confirm('¿PÁNICO? Apaga todas las capas y efectos.')) tgt('panic', 1, 1, 'note'); };
 

@@ -2846,6 +2846,7 @@ async function camPicker(cell, x, y) {
     fn: () => assignCam(cell, d.deviceId, d.label || 'cámara ' + (i + 1)),
   })));
 }
+const mediaPool = new Map(); // nombre → File: para re-enlazar solos tras un deshacer o cargar set
 /* libera la memoria de una celda: cierra los ImageBitmaps del GIF, revoca URL y frena la cámara */
 function freeCellMedia(cell) {
   if (!cell) return;
@@ -2856,6 +2857,7 @@ function freeCellMedia(cell) {
 function freeAllMedia() { (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(freeCellMedia))); }
 const isMediaFile = f => f.type.startsWith('video') || f.type.startsWith('image');
 function assignMedia(cell, file) {
+  try { mediaPool.set(file.name, file); } catch (e) { }
   if (file.type === 'image/gif') return assignGif(cell, file);
   if (file.type.startsWith('image')) return assignImage(cell, file); // PNG, JPG, WebP, etc.
   return assignVideo(cell, file);
@@ -3223,6 +3225,27 @@ function midiInit() {
   });
 }
 const midiClock = { ticks: 0, lastBeat: 0, intervals: [], lock: false };
+/* MIDI Clock OUT: RAVEN VJ como reloj maestro (CDJs/DAW se cuelgan de nuestro BPM) */
+let clockOut = { timer: 0, acc: 0, last: 0 };
+function setClockOut(on) {
+  uiPrefs.midiClockOut = !!on; saveUI();
+  clearInterval(clockOut.timer); clockOut.timer = 0;
+  if (on) {
+    sendMidiAll([0xFA]); // start
+    clockOut.last = performance.now(); clockOut.acc = 0;
+    clockOut.timer = setInterval(() => {
+      const now = performance.now();
+      clockOut.acc += (now - clockOut.last) / 1000 * state.bpm / 60 * 24; // 24 ticks por negra
+      clockOut.last = now;
+      let n = Math.floor(clockOut.acc);
+      clockOut.acc -= n;
+      if (n > 12) n = 12; // tras un freeze no escupir una ráfaga gigante
+      for (let i = 0; i < n; i++) sendMidiAll([0xF8]);
+    }, 10);
+  } else {
+    sendMidiAll([0xFC]); // stop
+  }
+}
 function onMIDI(e) {
   const [st, d1, d2] = e.data;
   // MIDI Clock in (esclavo del DJ/DAW): 0xF8 tick (24 por negra), 0xFA start, 0xFC stop
@@ -3353,7 +3376,7 @@ function wizardSteps() {
     ['x', 'perilla / eje X'], ['y', 'perilla / eje Y']]
     .forEach(([id, lbl]) => s.push({ id, lbl, sec: 'FADERS Y PERILLAS' }));
   [['flash', 'FLASH'], ['build', 'BUILD'], ['blackout', 'BLACKOUT'], ['tap', 'TAP'], ['dice', '🎲 FX'],
-    ['resync', '↻ RESYNC'], ['mono', 'modo 1×'], ['panic', '🚨 PÁNICO']]
+    ['resync', '↻ RESYNC'], ['mono', 'modo 1×'], ['react', '🎉 RÁFAGA de reacciones'], ['panic', '🚨 PÁNICO']]
     .forEach(([id, lbl]) => s.push({ id, lbl, sec: 'MACROS' }));
   return s;
 }
@@ -3511,6 +3534,7 @@ function applyTarget(id, val, kind, on) {
     case 'y': setXY(state.xy.x, val); break;
     case 'scene': if (on) recallScene(+a); break;
     case 'dice': if (on) randomizeFx(); break;
+    case 'react': if (on) pubBurst(); break;
     case 'sync': if (on) syncBpm(); break;
     case 'resync': if (on) resync(); break;
     case 'deck': if (on) switchDeck(+a); break;
@@ -3952,9 +3976,55 @@ $('#relinkIn').onchange = e => {
   updateRelinkBar();
   e.target.value = '';
 };
+/* ---------------- deshacer / rehacer ---------------- */
+const hist = { stack: [], idx: -1, busy: false, t: 0 };
+function histSnap() { // snapshot con debounce tras cada cambio
+  if (hist.busy) return;
+  clearTimeout(hist.t);
+  hist.t = setTimeout(() => {
+    if (hist.busy) return;
+    let j; try { j = JSON.stringify(serialize()); } catch (e) { return; }
+    if (hist.stack[hist.idx] === j) return;
+    hist.stack.splice(hist.idx + 1); // un cambio nuevo descarta los "rehacer"
+    hist.stack.push(j);
+    if (hist.stack.length > 30) hist.stack.shift();
+    hist.idx = hist.stack.length - 1;
+  }, 800);
+}
+function reattachFromPool() { // volver a enlazar videos/GIFs desde el pool de archivos ya cargados
+  let n = 0;
+  (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => {
+    if ((c.kind === 'video' && !c.video) || (c.kind === 'gif' && !c.gframes)) {
+      const f = mediaPool.get(c._fileName) || mediaPool.get(c.name) ||
+        [...mediaPool.values()].find(x => x.name.replace(/\.[^.]+$/, '') === c.name);
+      if (f) { assignMedia(c, f); n++; }
+    }
+  })));
+  if (n) updateRelinkBar();
+  return n;
+}
+function histApply(j) {
+  hist.busy = true;
+  try { deserialize(JSON.parse(j)); reattachFromPool(); } catch (e) { console.error(e); }
+  setTimeout(() => { hist.busy = false; }, 900);
+}
+function undo() {
+  if (hist.idx <= 0) { toast('Nada para deshacer'); return; }
+  clearTimeout(hist.t);
+  hist.idx--;
+  histApply(hist.stack[hist.idx]);
+  toast('↩ Deshacer' + (hist.idx > 0 ? ` (quedan ${hist.idx})` : ''));
+}
+function redo() {
+  if (hist.idx >= hist.stack.length - 1) { toast('Nada para rehacer'); return; }
+  hist.idx++;
+  histApply(hist.stack[hist.idx]);
+  toast('↪ Rehacer');
+}
+
 /* autosave de estructura (los File no se pueden persistir) */
 let dirty = false;
-function markDirty() { dirty = true; }
+function markDirty() { dirty = true; histSnap(); }
 setInterval(() => {
   if (!dirty) return; dirty = false;
   try {
@@ -4248,7 +4318,9 @@ document.addEventListener('keydown', e => {
     markDirty();
     return;
   }
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.ctrlKey && !e.altKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (e.ctrlKey && !e.altKey && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
   if (e.altKey && !e.ctrlKey && e.key >= '1' && e.key <= '4') { // Alt+1..4 = decks A-D
     e.preventDefault();
     switchDeck(+e.key - 1);
@@ -4434,6 +4506,8 @@ function buildCpTab(id) {
       <div class="cprow"><b>Seguir MIDI Clock</b><span>
         <button id="cpmidiclk" class="mini${uiPrefs.midiClock ? ' on' : ''}" title="esclavo del reloj del DJ/DAW: el BPM se clava al clock que llega por MIDI (CDJ, mixer, Ableton)">${uiPrefs.midiClock ? 'ON' : 'off'}</button>
         <span class="v" style="margin-left:6px">${uiPrefs.midiClock ? (midiClock.lock ? '🟢 en sync' : 'esperando clock…') : 'TAP/SYNC manual'}</span></span></div>
+      <div class="cprow"><b>Mandar MIDI Clock</b><span>
+        <button id="cpmidiclkout" class="mini${uiPrefs.midiClockOut ? ' on' : ''}" title="RAVEN VJ como reloj MAESTRO: manda clock por MIDI para que otros equipos se cuelguen de tu BPM">${uiPrefs.midiClockOut ? 'ON (maestro)' : 'off'}</button></span></div>
       <div class="cph">MAPEOS DE MIDI LEARN
         <button id="cpmapsclear" class="mini" style="margin-left:8px">borrar todos</button></div>
       <div id="cpmaps"></div>
@@ -4452,8 +4526,16 @@ function buildCpTab(id) {
     $('#cpmidiclk').onclick = () => {
       uiPrefs.midiClock = !uiPrefs.midiClock; saveUI();
       midiClock.lock = false; midiClock.intervals = []; midiClock.lastBeat = 0;
+      if (uiPrefs.midiClock && uiPrefs.midiClockOut) setClockOut(false); // no ser esclavo y maestro a la vez
       buildCpTab('midi');
       toast(uiPrefs.midiClock ? '🕒 Siguiendo MIDI Clock — mandá play en el DJ/DAW' : 'MIDI Clock off — TAP/SYNC manual');
+    };
+    $('#cpmidiclkout').onclick = () => {
+      const on = !uiPrefs.midiClockOut;
+      if (on && uiPrefs.midiClock) { uiPrefs.midiClock = false; midiClock.lock = false; } // idem al revés
+      setClockOut(on);
+      buildCpTab('midi');
+      toast(on ? (midiOuts.length ? '🕒 Mandando MIDI Clock como maestro' : '⚠ No hay salida MIDI para mandar clock') : 'MIDI Clock maestro off');
     };
     $('#cpmapsclear').onclick = () => { state.mappings = {}; markDirty(); buildCpMaps(); };
     const nd = el('div', 'cprow');
@@ -4517,8 +4599,10 @@ function buildCpTab(id) {
       <div style="text-align:center;padding:10px">
         <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&bgcolor=0c0c0e&color=ff7a1a&data=${encodeURIComponent(pubUrl)}"
           width="170" height="170" style="border-radius:8px" alt="QR"></div>
-      <div class="cprow"><span class="v">Poné este QR en pantalla (o imprimilo): la gente escanea y manda
-        reacciones que flotan en tus visuales. Solo puede mandar LO QUE VOS habilitás acá abajo.</span></div>` : `
+      <div class="cprow"><b>QR proyectado</b><span>
+        <button id="cppubqr" class="mini${pub.qrShow ? ' on' : ''}" title="mostrar el QR en la SALIDA (abajo a la derecha) para que la gente lo escanee de la pantalla">${pub.qrShow ? 'EN PANTALLA' : 'mostrar en la salida'}</button></span></div>
+      <div class="cprow"><span class="v">Con "QR proyectado" el código aparece en la salida y la gente lo
+        escanea directo de la pantalla. Solo puede mandar LO QUE VOS habilitás acá abajo.</span></div>` : `
       <div class="cprow"><span class="v">Un QR para que el público mande emojis y frases que flotan en la
         salida. Anti-zarpados: solo pueden mandar lo que VOS habilitás, con límite de 1 por segundo.</span></div>`) + `
       <div class="cprow"><b>Emojis permitidos</b><span>
@@ -4528,9 +4612,16 @@ function buildCpTab(id) {
           title="separadas con | (barra vertical)" data-noi18n></span></div>
       <div class="cprow"><b>Texto libre</b><span>
         <button id="cppubfree" class="mini${pub.free ? ' danger on' : ''}" title="⚠ deja que escriban CUALQUIER cosa — usalo solo con gente de confianza">${pub.free ? '⚠ ON' : 'off (recomendado)'}</button></span></div>
-      <div class="cprow"><b>Probar</b><span><button id="cppubtest" class="mini">💥 reacción de prueba</button></span></div>`;
+      <div class="cprow"><b>Tirar vos</b><span id="cppubfire" style="display:flex;gap:4px;flex-wrap:wrap"></span></div>
+      <div class="cprow"><span class="v">💥 RÁFAGA también se puede mapear a un pad MIDI (botón 🎹 y tocás el pad).</span></div>`;
     $('#cpremote').onclick = remoteToggle;
     $('#cppub').onclick = pubToggle;
+    if ($('#cppubqr')) $('#cppubqr').onclick = () => {
+      pub.qrShow = !pub.qrShow;
+      if (pub.qrShow && !pub.qrImg) pubLoadQR();
+      buildCpTab('remote');
+      toast(pub.qrShow ? '📺 QR proyectado en la salida' : 'QR fuera de la salida');
+    };
     $('#cppubemo').onchange = e => { pub.emojis = e.target.value.trim() || '🔥'; pubBroadcastConfig(); };
     $('#cppubtxt').onchange = e => {
       pub.texts = e.target.value.split('|').map(s => s.trim()).filter(Boolean).slice(0, 12);
@@ -4541,11 +4632,22 @@ function buildCpTab(id) {
       pubBroadcastConfig(); buildCpTab('remote');
       toast(pub.free ? '⚠ Texto libre ON — el público puede escribir lo que quiera' : 'Texto libre off — solo tus frases');
     };
-    $('#cppubtest').onclick = () => {
-      const es = [...pub.emojis].filter(ch => !/\s/.test(ch));
-      pubSpawn(es[Math.floor(Math.random() * es.length)] || '🔥');
-      pubSpawn(pub.texts[0] || 'AGUANTE');
-    };
+    { // botones para que el VJ tire reacciones cuando quiera (con o sin público conectado)
+      const box = $('#cppubfire');
+      const burst = el('button', 'mini on'); burst.textContent = '💥 RÁFAGA'; burst.dataset.map = 'react';
+      burst.onclick = () => pubBurst();
+      box.appendChild(burst);
+      [...pub.emojis].filter(ch => !/\s/.test(ch)).slice(0, 10).forEach(e2 => {
+        const b = el('button', 'mini'); b.textContent = e2;
+        b.onclick = () => pubSpawn(e2);
+        box.appendChild(b);
+      });
+      pub.texts.slice(0, 4).forEach(t2 => {
+        const b = el('button', 'mini'); b.textContent = t2.slice(0, 10);
+        b.onclick = () => pubSpawn(t2);
+        box.appendChild(b);
+      });
+    }
   } else if (id === 'audio') {
     b.innerHTML = `<div class="cph">ENTRADA</div>
       <div class="cprow"><b>Audio</b><span><button id="cpaudio" class="mini${audio.on ? ' on' : ''}">${audio.on ? 'ON — click para apagar' : 'activar 🎤'}</button></span></div>
@@ -4619,7 +4721,7 @@ function mapTargetName(t) {
   const flat = {
     master: 'Master', fade: 'Fade', tap: 'Tap tempo', sync: 'Sync BPM', blackout: 'Blackout',
     flash: 'Flash', panic: 'Pánico', dice: 'Randomizar FX', x: 'Pad X', y: 'Pad Y',
-    xfade: 'Crossfader A/B', auto: 'Autopilot',
+    xfade: 'Crossfader A/B', auto: 'Autopilot', react: '🎉 Ráfaga de reacciones',
   };
   if (flat[k]) return flat[k];
   if (k === 'cell') return `Celda CAPA ${+a + 1} · col ${+b + 1}`;
@@ -5425,9 +5527,28 @@ const pub = {
   on: false, peer: null, code: '', conns: [],
   emojis: '🔥💜✨🍄👽🌀🙌❤️', texts: ['AGUANTE', 'VAMOS!', '🔥🔥🔥', 'EPAAA'], free: false,
   parts: [], canvas: null, ctx: null, tex: null, _last: new Map(),
+  qrShow: false, qrImg: null,
 };
+function pubLoadQR() { // QR para PROYECTAR en la salida (con CORS para no ensuciar el canvas)
+  if (!pub.code) return;
+  const url = 'https://www.ravenlight.net/ravenvj/remote.html?p=' + pub.code;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => { pub.qrImg = img; };
+  img.onerror = () => { pub.qrImg = null; toast('⚠ No pude cargar el QR (¿hay internet?)'); };
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=2&data=' + encodeURIComponent(url);
+}
 function pubConfigMsg() {
   return { t: 'publayout', emojis: [...pub.emojis].filter(ch => !/\s/.test(ch)), texts: pub.texts.slice(0, 12), free: !!pub.free };
+}
+function pubBurst(n) { // ráfaga tirada por el VJ (no necesita público conectado)
+  const es = [...pub.emojis].filter(ch => !/\s/.test(ch));
+  const pool = [...es, ...pub.texts];
+  if (!pool.length) return;
+  n = n || 5 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < n; i++) {
+    setTimeout(() => pubSpawn(pool[Math.floor(Math.random() * pool.length)]), i * 120);
+  }
 }
 function pubSpawn(txt) {
   if (pub.parts.length >= 30) pub.parts.shift(); // tope duro de partículas
@@ -5464,7 +5585,7 @@ function pubToggle() {
   const boot = () => {
     pub.code = genRemoteCode();
     pub.peer = new Peer('ravenvj-pub-' + pub.code.toLowerCase());
-    pub.peer.on('open', () => { pub.on = true; buildCpTab('remote'); toast('🎉 PÚBLICO activo — código ' + pub.code); });
+    pub.peer.on('open', () => { pub.on = true; pubLoadQR(); buildCpTab('remote'); toast('🎉 PÚBLICO activo — código ' + pub.code); });
     pub.peer.on('error', err => { toast('⚠ Público: ' + (err.type || err.message)); buildCpTab('remote'); });
     pub.peer.on('connection', conn => {
       pub.conns.push(conn);
@@ -5481,8 +5602,9 @@ function pubToggle() {
   document.head.appendChild(s);
 }
 function pubBroadcastConfig() { pub.conns.forEach(c => { try { c.send(pubConfigMsg()); } catch (e) { } }); }
-function pubDraw(gl) { // dibuja las reacciones flotando y las compone sobre la salida
-  if (!pub.parts.length) return;
+function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) sobre la salida
+  const showQR = pub.qrShow && pub.qrImg && pub.qrImg.complete && pub.qrImg.naturalWidth > 0;
+  if (!pub.parts.length && !showQR) return;
   const [W, H] = [main.canvas.width, main.canvas.height];
   if (!pub.canvas || pub.canvas.width !== W || pub.canvas.height !== H) {
     pub.canvas = document.createElement('canvas'); pub.canvas.width = W; pub.canvas.height = H;
@@ -5490,6 +5612,21 @@ function pubDraw(gl) { // dibuja las reacciones flotando y las compone sobre la 
   }
   const x = pub.ctx, now = performance.now();
   x.clearRect(0, 0, W, H);
+  if (showQR) { // QR proyectado abajo a la derecha, con zona blanca y leyenda
+    const qs = Math.round(H * .24), m = Math.round(H * .035), pad = Math.round(qs * .06);
+    const qx = W - qs - m, qy = H - qs - m;
+    x.save();
+    x.globalAlpha = .95;
+    x.fillStyle = '#fff';
+    x.fillRect(qx - pad, qy - pad, qs + pad * 2, qs + pad * 2);
+    x.drawImage(pub.qrImg, qx, qy, qs, qs);
+    x.fillStyle = '#fff';
+    x.font = `bold ${Math.round(H * .022)}px "Segoe UI",sans-serif`;
+    x.textAlign = 'right'; x.textBaseline = 'bottom';
+    x.shadowColor = '#000'; x.shadowBlur = 8;
+    x.fillText('📱 escaneá y mandá tu reacción', qx + qs + pad, qy - pad - Math.round(H * .012));
+    x.restore();
+  }
   pub.parts = pub.parts.filter(p => now - p.born < 6000 && p.y < 1.15);
   for (const p of pub.parts) {
     const age = (now - p.born) / 1000;
@@ -5511,7 +5648,14 @@ function pubDraw(gl) { // dibuja las reacciones flotando y las compone sobre la 
   gl.bindTexture(gl.TEXTURE_2D, pub.tex);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pub.canvas);
+  try {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pub.canvas);
+  } catch (e) { // canvas manchado por una imagen sin CORS → apagar el QR y seguir
+    pub.qrShow = false; pub.qrImg = null; pub.canvas = null;
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    return;
+  }
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   const bp = program(main, 'blit', BLIT_FS);
@@ -6757,6 +6901,8 @@ const MENUS = {
   ],
   comp: () => [
     { label: '⚙ Propiedades de la composición…', fn: () => openProps('comp') },
+    { label: '↩ Deshacer', key: 'Ctrl+Z', fn: undo },
+    { label: '↪ Rehacer', key: 'Ctrl+Shift+Z', fn: redo },
     '-',
     { label: '⚡ BUILD (mantener) / DROP (soltar)', key: 'ESPACIO', fn: () => toast('Mantené la barra espaciadora y soltala en el drop 🍄') },
     { label: 'FLASH', key: 'F', fn: () => { state.flash = 1; setTimeout(() => state.flash = 0, 150); } },
@@ -7226,6 +7372,7 @@ if (saved) {
 buildFx();
 $('#monoBtn').classList.toggle('on', state.mono);
 applyTheme(state.theme);
+if (uiPrefs.midiClockOut) setClockOut(true); // reloj maestro persistido
 if (curLang() !== 'es') applyLang(); // idioma elegido (persistido en prefs de UI)
 if (uiPrefs.propDock) setPropDock(true); // arrancar con Propiedades acoplada si quedó así
 midiInit();

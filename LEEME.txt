@@ -56,6 +56,18 @@ INTERACCIÓN CON EL PÚBLICO 🎉
   - Máximo 1 reacción por segundo por celular, tope de 30 en pantalla.
   - El código del público es SEPARADO del remoto de control: nadie del
     público puede tocar tus visuales, solo mandar reacciones.
+  TIRARLAS VOS: botones en el panel (💥 RÁFAGA + cada emoji/frase) para
+  largar reacciones cuando quieras, sin necesitar público conectado.
+  La RÁFAGA se puede mapear a un pad MIDI (🎉 en el asistente/learn) y
+  está en los macros del remoto del celu.
+  QR PROYECTADO: botón "mostrar en la salida" y el QR aparece abajo a
+  la derecha DE LA PANTALLA con la leyenda "escaneá y mandá tu
+  reacción" — la gente lo escanea directo de la proyección.
+
+DESHACER / REHACER ↩
+  Ctrl+Z deshace, Ctrl+Shift+Z (o Ctrl+Y) rehace — hasta 30 pasos.
+  También en el menú Composición. Los videos y GIFs cargados se
+  re-enlazan solos al deshacer (no perdés nada).
 
 TECLAS ASIGNABLES ⌨
   El mismo learn del MIDI sirve para el teclado: activá 🎹, tocá un
@@ -348,6 +360,9 @@ MIDI CLOCK (sync con el DJ) 🕒
   reloj que manda una CDJ, un mixer o Ableton por MIDI. Dale play en el
   equipo del DJ y RAVEN VJ queda sincronizado solo (🟢 en sync). Apagalo
   para volver a TAP/SYNC manual.
+  Y AL REVÉS — "Mandar MIDI Clock": RAVEN VJ como reloj MAESTRO, manda
+  clock por la salida MIDI para que otros equipos se cuelguen de TU BPM.
+  (Esclavo y maestro no pueden estar activos a la vez.)
 
 CÁMARA / CAPTURADORA EN VIVO 📷
   Arrastrá el tile 📷 Cámara a una celda (o click derecho → Cámara) y
