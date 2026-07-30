@@ -90,6 +90,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #welgo{margin-top:12px;width:100%;padding:12px;background:var(--grad);border:none;border-radius:10px;
   font-weight:800;font-size:15px;color:#000;cursor:pointer}
 #welgo:hover{filter:brightness(1.12)}
+.welvisit{margin-top:10px;font-size:12px;color:var(--dim)}
+.welvisit b{color:var(--acc);font-size:14px;margin-left:5px}
 .welarg{margin-top:12px;font-size:12px;color:var(--txt);font-weight:700;letter-spacing:.5px}
 .welfoot{margin-top:6px;font-size:10px;color:var(--dim)}
 .welfoot a{color:var(--acc)}
@@ -903,6 +905,7 @@ ATAJOS
     </div>
     <div class="welrow"><label>Idioma</label><select id="welLang" data-noi18n></select></div>
     <button id="welgo">🚀 EMPEZAR</button>
+    <div class="welvisit" id="welvisit" style="display:none"><span>Sos el visitante N°</span><b id="welvisitN" data-noi18n></b></div>
     <div class="welarg"><span>Hecho en Argentina</span><span data-noi18n> 🇦🇷</span></div>
     <div class="welfoot" data-noi18n>RAVEN VJ · 2026 ·
       <a href="https://www.ravenlight.net/ravenvj/" target="_blank" rel="noopener">ravenlight.net</a> · por VJ Ravenlight</div>
@@ -7732,17 +7735,17 @@ const I18N_ROOTS = ['#menubar', '#topbar', '#fxPanel', '#genPanel', '#cpanel', '
 /* traducciones del cartel de bienvenida (merge sobre los diccionarios) */
 const WEL_P = 'Mezclá videos, GIFs, imágenes y visuales generativas en capas, al ritmo de la música: audio-reactivo, sync BPM, cualquier controlador MIDI, mapping profesional, control remoto desde el celu, interacción con el público por QR y salida directa al proyector.';
 const I18N_WELCOME = {
-  en: { 'Mixer de video para VJing en vivo': 'Live video mixer for VJing', 'Este programa es 100% GRATUITO': 'This program is 100% FREE', '¡Gracias por usarlo!': 'Thanks for using it!', 'Si te sirve, apoyá el proyecto:': 'If it helps you, support the project:', '🚀 EMPEZAR': '🚀 START', 'Hecho en Argentina': 'Made in Argentina', [WEL_P]: 'Mix videos, GIFs, images and generative visuals in layers, in sync with the music: audio-reactive, BPM sync, any MIDI controller, professional mapping, phone remote control, audience interaction via QR and direct projector output.' },
-  pt: { 'Mixer de video para VJing en vivo': 'Mixer de vídeo para VJing ao vivo', 'Este programa es 100% GRATUITO': 'Este programa é 100% GRATUITO', '¡Gracias por usarlo!': 'Obrigado por usar!', 'Si te sirve, apoyá el proyecto:': 'Se te ajuda, apoie o projeto:', '🚀 EMPEZAR': '🚀 COMEÇAR', 'Hecho en Argentina': 'Feito na Argentina', [WEL_P]: 'Misture vídeos, GIFs, imagens e visuais generativos em camadas, no ritmo da música: áudio-reativo, sync de BPM, qualquer controlador MIDI, mapping profissional, controle remoto pelo celular, interação com o público via QR e saída direta para o projetor.' },
-  fr: { 'Mixer de video para VJing en vivo': 'Table de mixage vidéo pour le VJing', 'Este programa es 100% GRATUITO': 'Ce programme est 100% GRATUIT', '¡Gracias por usarlo!': 'Merci de l’utiliser !', 'Si te sirve, apoyá el proyecto:': 'S’il vous aide, soutenez le projet :', '🚀 EMPEZAR': '🚀 COMMENCER', 'Hecho en Argentina': 'Fabriqué en Argentine', [WEL_P]: 'Mixez vidéos, GIFs, images et visuels génératifs en couches, au rythme de la musique : audio-réactif, sync BPM, n’importe quel contrôleur MIDI, mapping professionnel, télécommande depuis le téléphone, interaction avec le public par QR et sortie directe vers le projecteur.' },
-  de: { 'Mixer de video para VJing en vivo': 'Video-Mixer für Live-VJing', 'Este programa es 100% GRATUITO': 'Dieses Programm ist 100% KOSTENLOS', '¡Gracias por usarlo!': 'Danke fürs Benutzen!', 'Si te sirve, apoyá el proyecto:': 'Wenn es dir hilft, unterstütze das Projekt:', '🚀 EMPEZAR': '🚀 STARTEN', 'Hecho en Argentina': 'Hergestellt in Argentinien', [WEL_P]: 'Mische Videos, GIFs, Bilder und generative Visuals in Ebenen, im Takt der Musik: audio-reaktiv, BPM-Sync, jeder MIDI-Controller, professionelles Mapping, Fernsteuerung per Handy, Publikums-Interaktion per QR und direkte Projektor-Ausgabe.' },
-  it: { 'Mixer de video para VJing en vivo': 'Mixer video per VJing dal vivo', 'Este programa es 100% GRATUITO': 'Questo programma è 100% GRATUITO', '¡Gracias por usarlo!': 'Grazie per usarlo!', 'Si te sirve, apoyá el proyecto:': 'Se ti è utile, sostieni il progetto:', '🚀 EMPEZAR': '🚀 INIZIA', 'Hecho en Argentina': 'Fatto in Argentina', [WEL_P]: 'Mixa video, GIF, immagini e visual generativi a livelli, a ritmo di musica: audio-reattivo, sync BPM, qualsiasi controller MIDI, mapping professionale, controllo remoto dal telefono, interazione col pubblico via QR e uscita diretta al proiettore.' },
-  ja: { 'Mixer de video para VJing en vivo': 'ライブVJ用ビデオミキサー', 'Este programa es 100% GRATUITO': 'このプログラムは100%無料です', '¡Gracias por usarlo!': '使ってくれてありがとう！', 'Si te sirve, apoyá el proyecto:': '役に立ったらプロジェクトを応援してね：', '🚀 EMPEZAR': '🚀 スタート', 'Hecho en Argentina': 'アルゼンチン製', [WEL_P]: '動画・GIF・画像・ジェネラティブ映像をレイヤーで音楽に合わせてミックス：オーディオリアクティブ、BPM同期、あらゆるMIDIコントローラー、プロ仕様マッピング、スマホからのリモート操作、QRでの観客参加、プロジェクターへ直接出力。' },
-  zh: { 'Mixer de video para VJing en vivo': '现场VJ视频混合器', 'Este programa es 100% GRATUITO': '本程序100%免费', '¡Gracias por usarlo!': '感谢使用！', 'Si te sirve, apoyá el proyecto:': '如果对你有帮助，请支持项目：', '🚀 EMPEZAR': '🚀 开始', 'Hecho en Argentina': '阿根廷制造', [WEL_P]: '将视频、GIF、图片和生成视觉分层混合，跟随音乐节奏：音频响应、BPM同步、任意MIDI控制器、专业映射、手机远程控制、观众扫码互动、直接输出到投影仪。' },
-  ko: { 'Mixer de video para VJing en vivo': '라이브 VJ용 비디오 믹서', 'Este programa es 100% GRATUITO': '이 프로그램은 100% 무료입니다', '¡Gracias por usarlo!': '사용해 주셔서 감사합니다!', 'Si te sirve, apoyá el proyecto:': '도움이 되었다면 프로젝트를 후원해 주세요:', '🚀 EMPEZAR': '🚀 시작', 'Hecho en Argentina': '아르헨티나에서 제작', [WEL_P]: '비디오, GIF, 이미지, 제너러티브 비주얼을 레이어로 음악에 맞춰 믹스: 오디오 반응, BPM 동기화, 모든 MIDI 컨트롤러, 프로 매핑, 휴대폰 원격 제어, QR 관객 참여, 프로젝터 직접 출력.' },
-  ru: { 'Mixer de video para VJing en vivo': 'Видеомикшер для живого VJ-инга', 'Este programa es 100% GRATUITO': 'Эта программа 100% БЕСПЛАТНА', '¡Gracias por usarlo!': 'Спасибо, что пользуетесь!', 'Si te sirve, apoyá el proyecto:': 'Если помогает — поддержите проект:', '🚀 EMPEZAR': '🚀 НАЧАТЬ', 'Hecho en Argentina': 'Сделано в Аргентине', [WEL_P]: 'Микшируйте видео, GIF, изображения и генеративные визуалы слоями в ритме музыки: аудио-реактивность, синхронизация BPM, любой MIDI-контроллер, профессиональный маппинг, пульт с телефона, взаимодействие с публикой по QR и прямой вывод на проектор.' },
-  he: { 'Mixer de video para VJing en vivo': 'מיקסר וידאו ל-VJ בזמן אמת', 'Este programa es 100% GRATUITO': 'התוכנה הזו 100% חינמית', '¡Gracias por usarlo!': 'תודה שאתם משתמשים!', 'Si te sirve, apoyá el proyecto:': 'אם היא עוזרת, תתמכו בפרויקט:', '🚀 EMPEZAR': '🚀 להתחיל', 'Hecho en Argentina': 'תוצרת ארגנטינה', [WEL_P]: 'מיקסו וידאו, GIF, תמונות וויז׳ואלים גנרטיביים בשכבות, בקצב המוזיקה: תגובת אודיו, סנכרון BPM, כל בקר MIDI, מיפוי מקצועי, שלט מהטלפון, אינטראקציה עם הקהל ב-QR ופלט ישיר למקרן.' },
-  ar: { 'Mixer de video para VJing en vivo': 'جهاز مزج فيديو للعروض الحية', 'Este programa es 100% GRATUITO': 'هذا البرنامج مجاني 100%', '¡Gracias por usarlo!': 'شكرا لاستخدامك!', 'Si te sirve, apoyá el proyecto:': 'إذا أفادك، ادعم المشروع:', '🚀 EMPEZAR': '🚀 ابدأ', 'Hecho en Argentina': 'صنع في الأرجنتين', [WEL_P]: 'امزج الفيديو وGIF والصور والمرئيات التوليدية في طبقات على إيقاع الموسيقى: تفاعل صوتي، مزامنة BPM، أي وحدة تحكم MIDI، إسقاط احترافي، تحكم عن بعد من الهاتف، تفاعل الجمهور عبر QR وإخراج مباشر لجهاز العرض.' },
+  en: { 'Sos el visitante N°': 'You are visitor no.', 'Mixer de video para VJing en vivo': 'Live video mixer for VJing', 'Este programa es 100% GRATUITO': 'This program is 100% FREE', '¡Gracias por usarlo!': 'Thanks for using it!', 'Si te sirve, apoyá el proyecto:': 'If it helps you, support the project:', '🚀 EMPEZAR': '🚀 START', 'Hecho en Argentina': 'Made in Argentina', [WEL_P]: 'Mix videos, GIFs, images and generative visuals in layers, in sync with the music: audio-reactive, BPM sync, any MIDI controller, professional mapping, phone remote control, audience interaction via QR and direct projector output.' },
+  pt: { 'Sos el visitante N°': 'Você é o visitante nº', 'Mixer de video para VJing en vivo': 'Mixer de vídeo para VJing ao vivo', 'Este programa es 100% GRATUITO': 'Este programa é 100% GRATUITO', '¡Gracias por usarlo!': 'Obrigado por usar!', 'Si te sirve, apoyá el proyecto:': 'Se te ajuda, apoie o projeto:', '🚀 EMPEZAR': '🚀 COMEÇAR', 'Hecho en Argentina': 'Feito na Argentina', [WEL_P]: 'Misture vídeos, GIFs, imagens e visuais generativos em camadas, no ritmo da música: áudio-reativo, sync de BPM, qualquer controlador MIDI, mapping profissional, controle remoto pelo celular, interação com o público via QR e saída direta para o projetor.' },
+  fr: { 'Sos el visitante N°': 'Vous êtes le visiteur n°', 'Mixer de video para VJing en vivo': 'Table de mixage vidéo pour le VJing', 'Este programa es 100% GRATUITO': 'Ce programme est 100% GRATUIT', '¡Gracias por usarlo!': 'Merci de l’utiliser !', 'Si te sirve, apoyá el proyecto:': 'S’il vous aide, soutenez le projet :', '🚀 EMPEZAR': '🚀 COMMENCER', 'Hecho en Argentina': 'Fabriqué en Argentine', [WEL_P]: 'Mixez vidéos, GIFs, images et visuels génératifs en couches, au rythme de la musique : audio-réactif, sync BPM, n’importe quel contrôleur MIDI, mapping professionnel, télécommande depuis le téléphone, interaction avec le public par QR et sortie directe vers le projecteur.' },
+  de: { 'Sos el visitante N°': 'Du bist Besucher Nr.', 'Mixer de video para VJing en vivo': 'Video-Mixer für Live-VJing', 'Este programa es 100% GRATUITO': 'Dieses Programm ist 100% KOSTENLOS', '¡Gracias por usarlo!': 'Danke fürs Benutzen!', 'Si te sirve, apoyá el proyecto:': 'Wenn es dir hilft, unterstütze das Projekt:', '🚀 EMPEZAR': '🚀 STARTEN', 'Hecho en Argentina': 'Hergestellt in Argentinien', [WEL_P]: 'Mische Videos, GIFs, Bilder und generative Visuals in Ebenen, im Takt der Musik: audio-reaktiv, BPM-Sync, jeder MIDI-Controller, professionelles Mapping, Fernsteuerung per Handy, Publikums-Interaktion per QR und direkte Projektor-Ausgabe.' },
+  it: { 'Sos el visitante N°': 'Sei il visitatore n°', 'Mixer de video para VJing en vivo': 'Mixer video per VJing dal vivo', 'Este programa es 100% GRATUITO': 'Questo programma è 100% GRATUITO', '¡Gracias por usarlo!': 'Grazie per usarlo!', 'Si te sirve, apoyá el proyecto:': 'Se ti è utile, sostieni il progetto:', '🚀 EMPEZAR': '🚀 INIZIA', 'Hecho en Argentina': 'Fatto in Argentina', [WEL_P]: 'Mixa video, GIF, immagini e visual generativi a livelli, a ritmo di musica: audio-reattivo, sync BPM, qualsiasi controller MIDI, mapping professionale, controllo remoto dal telefono, interazione col pubblico via QR e uscita diretta al proiettore.' },
+  ja: { 'Sos el visitante N°': 'あなたは訪問者番号', 'Mixer de video para VJing en vivo': 'ライブVJ用ビデオミキサー', 'Este programa es 100% GRATUITO': 'このプログラムは100%無料です', '¡Gracias por usarlo!': '使ってくれてありがとう！', 'Si te sirve, apoyá el proyecto:': '役に立ったらプロジェクトを応援してね：', '🚀 EMPEZAR': '🚀 スタート', 'Hecho en Argentina': 'アルゼンチン製', [WEL_P]: '動画・GIF・画像・ジェネラティブ映像をレイヤーで音楽に合わせてミックス：オーディオリアクティブ、BPM同期、あらゆるMIDIコントローラー、プロ仕様マッピング、スマホからのリモート操作、QRでの観客参加、プロジェクターへ直接出力。' },
+  zh: { 'Sos el visitante N°': '您是访客编号', 'Mixer de video para VJing en vivo': '现场VJ视频混合器', 'Este programa es 100% GRATUITO': '本程序100%免费', '¡Gracias por usarlo!': '感谢使用！', 'Si te sirve, apoyá el proyecto:': '如果对你有帮助，请支持项目：', '🚀 EMPEZAR': '🚀 开始', 'Hecho en Argentina': '阿根廷制造', [WEL_P]: '将视频、GIF、图片和生成视觉分层混合，跟随音乐节奏：音频响应、BPM同步、任意MIDI控制器、专业映射、手机远程控制、观众扫码互动、直接输出到投影仪。' },
+  ko: { 'Sos el visitante N°': '방문자 번호', 'Mixer de video para VJing en vivo': '라이브 VJ용 비디오 믹서', 'Este programa es 100% GRATUITO': '이 프로그램은 100% 무료입니다', '¡Gracias por usarlo!': '사용해 주셔서 감사합니다!', 'Si te sirve, apoyá el proyecto:': '도움이 되었다면 프로젝트를 후원해 주세요:', '🚀 EMPEZAR': '🚀 시작', 'Hecho en Argentina': '아르헨티나에서 제작', [WEL_P]: '비디오, GIF, 이미지, 제너러티브 비주얼을 레이어로 음악에 맞춰 믹스: 오디오 반응, BPM 동기화, 모든 MIDI 컨트롤러, 프로 매핑, 휴대폰 원격 제어, QR 관객 참여, 프로젝터 직접 출력.' },
+  ru: { 'Sos el visitante N°': 'Вы посетитель №', 'Mixer de video para VJing en vivo': 'Видеомикшер для живого VJ-инга', 'Este programa es 100% GRATUITO': 'Эта программа 100% БЕСПЛАТНА', '¡Gracias por usarlo!': 'Спасибо, что пользуетесь!', 'Si te sirve, apoyá el proyecto:': 'Если помогает — поддержите проект:', '🚀 EMPEZAR': '🚀 НАЧАТЬ', 'Hecho en Argentina': 'Сделано в Аргентине', [WEL_P]: 'Микшируйте видео, GIF, изображения и генеративные визуалы слоями в ритме музыки: аудио-реактивность, синхронизация BPM, любой MIDI-контроллер, профессиональный маппинг, пульт с телефона, взаимодействие с публикой по QR и прямой вывод на проектор.' },
+  he: { 'Sos el visitante N°': 'אתם מבקר מספר', 'Mixer de video para VJing en vivo': 'מיקסר וידאו ל-VJ בזמן אמת', 'Este programa es 100% GRATUITO': 'התוכנה הזו 100% חינמית', '¡Gracias por usarlo!': 'תודה שאתם משתמשים!', 'Si te sirve, apoyá el proyecto:': 'אם היא עוזרת, תתמכו בפרויקט:', '🚀 EMPEZAR': '🚀 להתחיל', 'Hecho en Argentina': 'תוצרת ארגנטינה', [WEL_P]: 'מיקסו וידאו, GIF, תמונות וויז׳ואלים גנרטיביים בשכבות, בקצב המוזיקה: תגובת אודיו, סנכרון BPM, כל בקר MIDI, מיפוי מקצועי, שלט מהטלפון, אינטראקציה עם הקהל ב-QR ופלט ישיר למקרן.' },
+  ar: { 'Sos el visitante N°': 'أنت الزائر رقم', 'Mixer de video para VJing en vivo': 'جهاز مزج فيديو للعروض الحية', 'Este programa es 100% GRATUITO': 'هذا البرنامج مجاني 100%', '¡Gracias por usarlo!': 'شكرا لاستخدامك!', 'Si te sirve, apoyá el proyecto:': 'إذا أفادك، ادعم المشروع:', '🚀 EMPEZAR': '🚀 ابدأ', 'Hecho en Argentina': 'صنع في الأرجنتين', [WEL_P]: 'امزج الفيديو وGIF والصور والمرئيات التوليدية في طبقات على إيقاع الموسيقى: تفاعل صوتي، مزامنة BPM، أي وحدة تحكم MIDI، إسقاط احترافي، تحكم عن بعد من الهاتف، تفاعل الجمهور عبر QR وإخراج مباشر لجهاز العرض.' },
 };
 for (const k in I18N_WELCOME) Object.assign(I18N[k], I18N_WELCOME[k]);
 const I18N_SKIP = 'input,textarea,[data-noi18n],.cell,.gtile,#genShelf,.cname,#nowName';
@@ -7839,6 +7842,24 @@ function toast(msg) {
 }
 
 /* ---------------- bienvenida / acerca de ---------------- */
+async function welVisitor() { // "sos el visitante N°": número único POR DISPOSITIVO
+  const box = $('#welvisit');
+  if (!box) return;
+  if (uiPrefs.visitorN) { // este dispositivo ya tiene su número asignado
+    $('#welvisitN').textContent = '#' + uiPrefs.visitorN.toLocaleString();
+    box.style.display = '';
+    return;
+  }
+  try {
+    const res = await fetch('https://www.ravenlight.net/ravenvj/visitas.php?new=1', { cache: 'no-store' });
+    const d = await res.json();
+    if (d && d.n > 0) {
+      uiPrefs.visitorN = d.n; saveUI();
+      $('#welvisitN').textContent = '#' + d.n.toLocaleString();
+      box.style.display = '';
+    }
+  } catch (e) { /* sin internet: la línea no se muestra */ }
+}
 function showWelcome() {
   const w = $('#welcome');
   const sel = $('#welLang');
@@ -7846,6 +7867,7 @@ function showWelcome() {
     `<option value="${k}"${curLang() === k ? ' selected' : ''}>${nm}</option>`).join('');
   sel.onchange = e => { setLang(e.target.value); translateRoot(w); };
   w.style.display = 'flex';
+  welVisitor();
   if (curLang() !== 'es') translateRoot(w);
 }
 function closeWelcome() {
