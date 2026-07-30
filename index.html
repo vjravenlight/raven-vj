@@ -70,6 +70,43 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   border-radius:6px;padding:4px 8px;cursor:pointer;user-select:none;backdrop-filter:blur(3px)}
 #clock:hover{color:var(--acc);border-color:var(--acc)}
 #clock b{color:var(--acc);font-weight:700}
+/* ---- bienvenida / acerca de ---- */
+#welcome{display:none;position:fixed;inset:0;z-index:90;background:#000a;backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;padding:16px}
+#welcard{position:relative;width:min(560px,94vw);max-height:92vh;overflow-y:auto;background:var(--panel);
+  border:1px solid var(--acc);border-radius:14px;padding:26px 28px;text-align:center;
+  box-shadow:0 20px 80px #000d}
+#wellogo{font-size:34px;font-weight:800;letter-spacing:2px;color:#fff}
+#wellogo b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.weltag{color:var(--dim);font-size:13px;letter-spacing:.5px;margin:2px 0 14px}
+.welp{font-size:12.5px;line-height:1.6;color:var(--txt);margin:10px 0}
+.welfree{margin:12px auto;padding:8px 14px;border:1px solid var(--acc);border-radius:20px;
+  display:inline-block;color:var(--acc);font-weight:700;font-size:12.5px}
+.weldon{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0 14px}
+.welbtn{display:inline-block;background:var(--grad);color:#000;font-weight:800;font-size:12.5px;
+  padding:9px 16px;border-radius:20px;text-decoration:none;border:none;cursor:pointer}
+.welbtn:hover{filter:brightness(1.15)}
+.welrow{display:flex;gap:8px;justify-content:center;align-items:center;margin:8px 0;color:var(--dim);font-size:12px}
+#welgo{margin-top:12px;width:100%;padding:12px;background:var(--grad);border:none;border-radius:10px;
+  font-weight:800;font-size:15px;color:#000;cursor:pointer}
+#welgo:hover{filter:brightness(1.12)}
+.welfoot{margin-top:14px;font-size:10px;color:var(--dim)}
+.welfoot a{color:var(--acc)}
+#welx{position:absolute;top:10px;right:10px;background:none;border:1px solid var(--line);border-radius:6px;
+  color:var(--dim);padding:2px 8px}
+#welx:hover{color:#fff;border-color:var(--acc)}
+/* ---- manual flotante (LEEME adentro de la app) ---- */
+#manwin{display:none;position:fixed;top:6vh;left:50%;transform:translateX(-50%);width:min(680px,94vw);
+  height:84vh;background:var(--panel);border:1px solid var(--line);border-radius:12px;z-index:70;
+  flex-direction:column;box-shadow:0 16px 60px #000c;resize:both;overflow:hidden}
+#manbar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel2);
+  border-bottom:1px solid var(--line);cursor:move;font-weight:700;font-size:12px}
+#manbar b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+#manbar input{flex:1;max-width:220px;margin-left:auto}
+#manbody{flex:1;overflow-y:auto;padding:14px 20px;font-size:12px;line-height:1.55;color:var(--txt)}
+#manbody h4{color:var(--acc);font-size:12px;letter-spacing:.6px;margin:16px 0 4px;border-bottom:1px solid var(--line);padding-bottom:3px}
+#manbody p{margin:2px 0;white-space:pre-wrap}
+#manbody .mhit{background:#ff7a1a44;border-radius:3px}
 .meters{display:flex;gap:2px;align-items:flex-end;height:18px}
 .meters i{display:block;width:5px;height:2px;background:var(--acc);border-radius:1px}
 #midiBtn.learn{background:var(--acc2);border-color:var(--acc2);color:#000;font-weight:700}
@@ -445,8 +482,431 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <div id="hint">click = disparar · <b>click derecho = menú</b> · <b>ESPACIO = BUILD/DROP</b> · Ctrl+Alt+T = panel · arrastrá MP4s · 1-9,0 = columnas · F1-F8 = escenas · T = tap · B = blackout · F = flash · P = pánico · MIDI learn: 🎹 + control + pad</div>
 </div>
 <div id="toast"></div>
+<script type="text/plain" id="manualTxt">
+RAVEN VJ — mixer de video para VJing en vivo, portable
+====================================================
+
+CÓMO ABRIR
+  Doble click en index.html (Chrome o Edge). No requiere instalar nada.
+  Podés copiar esta carpeta a un pendrive y usarla en cualquier PC.
+
+CARGAR CLIPS (MP4, WebM, GIFs animados e IMÁGENES PNG/JPG)
+  - Arrastrá archivos sobre una celda (o varios: llenan la fila hacia la derecha).
+  - Las IMÁGENES FIJAS (PNG, JPG, WebP) entran como clip 🖼 — logos,
+    flyers, fotos. Usá el TRANSFORM del clip para escala/posición/rotación.
+  - Arrastralos sobre el fondo o usá "+ VIDEOS": llenan todas las celdas vacías.
+  - "＋" en las columnas agrega más columnas (todas las que necesites).
+  - REORDENAR: arrastrá cualquier celda (video, generador, texto, gif)
+    a otra celda y se intercambian.
+
+CONTROL REMOTO DESDE EL CELULAR 📱  
+  Panel (Ctrl+Alt+T) → pestaña Remoto → ACTIVAR: aparece un código y un QR.
+  En el celu: www.ravenlight.net/ravenvj/remote.html (o escaneá el QR).
+  4 pestañas:
+  - 🎛 GRILLA: celdas, columnas, escenas y decks A/B/C/D.
+  - 🎚 MEZCLA: pad XY, crossfader, master, FADE, velocidad global y
+    faders de opacidad + velocidad POR CAPA.
+  - 🥁 BUCLES: secuenciador de 16 pasos × 4 filas. Cada fila elige qué
+    dispara (columna, escena, FLASH, 🎲) y los pasos encendidos suenan
+    en loop al BPM de la compu (llega solo; también podés cambiarlo).
+    División: negras / corcheas / semicorcheas. Se guarda en el celu.
+  - ⚡ MACROS: BUILD, FLASH, TAP, RESYNC, 🎲, BLACKOUT, PÁNICO.
+  VARIAS PERSONAS A LA VEZ sin pisarse: arriba de todo cada celu elige
+  su ROL (control total / solo capa 1-4 / solo secuenciador / solo
+  macros) y la interfaz muestra únicamente lo suyo.
+  El remoto toma los COLORES del tema que tengas puesto en la compu.
+  Necesita internet solo para conectar (sirve el hotspot del celu);
+  después el control va directo por WiFi.
+
+IDIOMA 🌐
+  Panel (Ctrl+Alt+T) → Render → APARIENCIA → Idioma. La interfaz está
+  en 12 idiomas: Español, English, Português, Français, Deutsch,
+  Italiano, 日本語 (japonés), 中文 (chino), 한국어 (coreano),
+  Русский (ruso), עברית (hebreo) y العربية (árabe).
+  Hebreo y árabe se muestran de derecha a izquierda. Se traduce menús,
+  topbar y opciones — nunca los nombres de tus clips. El idioma se
+  recuerda en cada PC (como el tema).
+
+RELOJ 🕐
+  Abajo a la derecha ves la hora local (útil para respetar el horario
+  de tu set). Click en el reloj = mostrar/ocultar la fecha.
+
+INTERACCIÓN CON EL PÚBLICO 🎉
+  Panel (Ctrl+Alt+T) → Remoto → sección PÚBLICO → ACTIVAR: aparece un
+  QR para poner en pantalla. La gente lo escanea y manda emojis y
+  frases que FLOTAN sobre tus visuales en la salida.
+  ANTI-ZARPADOS (todo lo controlás vos):
+  - Solo pueden mandar los EMOJIS y FRASES que vos habilitás.
+  - Texto libre APAGADO por defecto (activalo solo con gente de confianza).
+  - Máximo 1 reacción por segundo por celular, tope de 30 en pantalla.
+  - El código del público es SEPARADO del remoto de control: nadie del
+    público puede tocar tus visuales, solo mandar reacciones.
+  TIRARLAS VOS: botones en el panel (💥 RÁFAGA + cada emoji/frase) para
+  largar reacciones cuando quieras, sin necesitar público conectado.
+  La RÁFAGA se puede mapear a un pad MIDI (🎉 en el asistente/learn) y
+  está en los macros del remoto del celu.
+  QR PROYECTADO: botón "mostrar en la salida" y el QR aparece abajo a
+  la derecha DE LA PANTALLA con la leyenda "escaneá y mandá tu
+  reacción" — la gente lo escanea directo de la proyección.
+
+DESHACER / REHACER ↩
+  Ctrl+Z deshace, Ctrl+Shift+Z (o Ctrl+Y) rehace — hasta 30 pasos.
+  También en el menú Composición. Los videos y GIFs cargados se
+  re-enlazan solos al deshacer (no perdés nada).
+
+TECLAS ASIGNABLES ⌨
+  El mismo learn del MIDI sirve para el teclado: activá 🎹, tocá un
+  control de la UI y apretá una tecla. Se administra en el panel MIDI.
+
+GENERADORES (34 presets)
+  Arrastrá cualquier generador del panel inferior izquierdo a una celda.
+  Reaccionan al audio (bass/mid/high/beat) y al pad XY.
+  Nuevos: Metaballs, Aurora, Fuego vivo, Matrix, Rayos ⚡, Sonar,
+  Damero, Cintas, Starburst, Plexo, Túnel² y Rombos 3D.
+
+RESOLUCIÓN DE LA COMPOSICIÓN
+  Menú de arriba (o panel Render / Propiedades → COMPOSICIÓN):
+  16:9 (960/1280/1920), VERTICAL 9:16 (540×960, 720×1280, 1080×1920),
+  CUADRADA (720×720, 1080×1080), 4:3 (1024×768) y "✏ personalizada…"
+  donde escribís lo que quieras (ej: 1920x600 para una pantalla LED).
+  La resolución se guarda con el set y la salida siempre se adapta.
+
+BEAT-SNAP (disparo cuantizado) ⏱
+  Selector SNAP arriba (al lado de AUTO): off / beat / 1 compás / 2 comp.
+  Con SNAP armado, cuando disparás una celda o columna el clip NO entra
+  al toque: queda ARMADO (titilando) y entra recién en el próximo beat
+  o compás, así todo cae clavado al ritmo — como en Resolume. Apagar
+  SNAP dispara al instante lo que quedó en cola.
+
+MODO DE REPRODUCCIÓN POR CLIP 🔁
+  Propiedades del clip (doble click) → Reproducción:
+  - 🔁 bucle: se repite (lo de siempre).
+  - 1️⃣ una vez: reproduce hasta el final y se queda en el último frame
+    (ideal para un logo o un sting que no querés que loopee).
+  - 🔄 rebote (solo GIF): ida y vuelta, ping-pong.
+  Se guarda con el clip.
+
+MODO 1× (MONO) — un solo clip a la vez
+  El botón 1× al lado del FADE: dispares la celda que dispares, se
+  reproduce UN solo clip y cada disparo reemplaza al anterior con la
+  transición del FADE. Ideal si la PC se pone pesada con varios videos
+  a la vez, o si querés VJear simple: un video → transición → otro.
+  Apagalo para volver al modo de capas (los clips se superponen).
+
+DECKS (bancos de grilla A/B/C/D)
+  Los botones A B C D en la esquina de la grilla son 4 grillas
+  independientes (como los "discos" de un DJ): armá tu set
+  psy en A, techno en B, visuales chill en C... Al cambiar de deck,
+  lo que está sonando SIGUE sonando. Los 4 se guardan en el set.
+
+MEZCLA
+  - Click en una celda = disparar con fundido (tiempo = perilla FADE).
+  - CLICK DERECHO = menú de opciones del programa: disparar, previa,
+    cargar video en esa celda, poner/editar texto, vaciar celda.
+    También en las escenas (guardar/disparar/vaciar), en los controles
+    de capa, y en el fondo (menú general con PÁNICO, OUTPUT, sets...).
+  - Números de columna (o teclas 1-9,0) = disparar la columna completa.
+  - Cada capa: blend mode, opacidad, 〰 modulador, velocidad, ✕ (fade a negro).
+
+EFECTOS
+  "＋ agregar efecto" en el rack. Cada parámetro tiene modulador:
+  lfo1/lfo2 (sincronizados al BPM), bass/mid/high/beat (audio), x/y (pad XY).
+
+AUDIO-RÍTMICO
+  Botón 🎤 AUDIO: usa el micrófono. BPM con TAP (o tecla T).
+
+AUTOPILOT
+  AUTO: SECUENCIA (columnas en orden), COLUMNA AZAR, CAOS (clips al azar
+  por capa) o ESCENAS (rota tus snapshots guardados), cada N beats.
+
+AUTO-TRANSICIÓN POR CAPA
+  Cada capa tiene su propia automatización (última fila del control):
+  - AUTO: avanza al siguiente clip de esa capa cada 2-32 beats (♪, va
+    con el BPM), cada 2-30 segundos, o al terminar el clip (fin clip).
+  - ▸ / 🎲: orden secuencial o al azar.
+  - ⤓0: transición con brillo a cero — en vez de fundido cruzado, la
+    capa baja a negro y recién ahí entra el clip siguiente.
+  Todo se guarda en el set y en las escenas.
+
+ESCENAS (snapshots)
+  Los botones ESC 1-8 guardan y disparan fotos completas del estado:
+  clips activos, opacidades, blend modes, efectos con sus parámetros,
+  XY y master. Click derecho (o Shift+F1-F8) = guardar; click (o F1-F8)
+  = disparar con fundido. Se guardan dentro del JSON del set.
+
+ANIMACIÓN DE PARÁMETROS (por clip) 🆕
+  Propiedades del clip (doble click en la celda) → sección ANIMACIÓN:
+  elegí un parámetro (escala, posición X/Y, rotación — y P1/P2 si es
+  generativo) y animalo en loop:
+  - 〰 LOOP: onda sin/tri/saw/sqr sincronizada al BPM, ciclo de ½ a
+    16 beats — bucles infinitos que respiran con el tempo.
+  - 🔊 GRAVES/MEDIOS/AGUDOS o 💥 BEAT: el parámetro sigue el audio.
+  - 🎲 AZAR: salta a un valor nuevo cada ciclo.
+  CANTIDAD regula cuánto se mueve alrededor del valor del slider.
+  Cada parámetro tiene su propia animación (se marcan con ●), todas a
+  la vez si querés. Se guarda con el clip en el set.
+
+AUTOMATIZACIONES
+  - Cada parámetro de efecto tiene modulador: lfo1/lfo2 (sync BPM),
+    bass/mid/high/beat (audio), x/y (pad XY del nanoPAD2).
+  - El botón 〰 de cada capa modula su OPACIDAD (off → bass → mid →
+    high → lfo1 → lfo2 → beat).
+  - 🎲 randomiza los parámetros de los efectos activos; el selector
+    de al lado lo hace solo cada 4/8/16/32 beats.
+  - SYNC detecta el BPM automáticamente del audio (dejá sonar la
+    música unos segundos con 🎤 AUDIO activo).
+
+GRABAR TU SET
+  ⏺ REC graba la salida (con el audio del mic si está activo) y al
+  parar descarga un .webm listo para subir.
+
+CROSSFADER A/B
+  El slider A⇄B mezcla entre el grupo A (capas 1-2) y el B (capas 3-4),
+  En el centro se ven los dos. Mapealo al
+  XY del nanoPAD2 con MIDI learn y tenés crossfader táctil.
+
+VELOCIDAD POR CAPA
+  El slider chico de cada capa va de 0% a 300%: cambia la velocidad de
+  los videos Y de los generadores. En 0 la capa queda CONGELADA (freeze).
+
+EFECTO POR CAPA
+  La última fila de cada capa tiene su propio efecto (además del rack
+  master): elegí el FX y ajustá sus 2 parámetros. Ideal: Kaleido solo
+  en la capa del video mientras las demás quedan limpias.
+
+CHROMA / LUMA KEY 🟢 (pantalla verde)
+  En el rack de efectos o como FX de capa:
+  - "Chroma Key (verde)": saca el fondo verde de la cámara/capturadora
+    (fuerza + suavidad). Poné esa capa en blend "Add" o "Screen" y el
+    presentador/objeto queda recortado sobre las capas de abajo.
+  - "Luma Key (oscuro)": saca los píxeles oscuros (fondo negro) igual.
+  Ideal para meter una cámara en vivo sin fondo, o recortar visuales.
+
+LUCES EN LA CONTROLADORA 💡 (MIDI OUT)
+  Panel (Ctrl+Alt+T) → MIDI → "Luces en la controladora": los pads del
+  clip que está al aire se ENCIENDEN en tu APC Mini / Launchpad / etc.
+  (usa la salida MIDI del controlador). Andá viendo qué está sonando sin
+  mirar la pantalla. Funciona con los pads mapeados (learn o perfiles).
+
+TEXTO ANIMADO
+  Click derecho en una celda de texto → "Animación": PULSO (late con el
+  beat), SCROLL (marquesina), ONDA (letras bailando), 3D (gira con
+  profundidad), ZOOM (vuela hacia la cámara).
+
+SETLIST 📋
+  Panel → Setlist: encadená escenas con minutos ("Escena 1 × 15 min →
+  Escena 3 × 40 min…"), START y la noche queda programada.
+
+TEXTO EN PANTALLA
+  Arrastrá el tile 💬 Texto a una celda y escribí lo que quieras
+  (nombre de la fiesta, drops). Late con el beat y cicla colores.
+  Se guarda dentro del JSON como cualquier clip.
+
+PÁNICO
+  Botón PÁNICO (o tecla P): apaga todas las capas con fade, desactiva
+  efectos y autopilot, y resetea el master. Para cuando se te fue de
+  las manos.
+
+EXTRAS EN VIVO
+  - Si el driver de video se resetea, la app se recupera sola.
+  - La pantalla no se apaga mientras VJeás (wake lock).
+  - Con 🎤 AUDIO activo aparece un selector de entrada (mic, Stereo
+    Mix / loopback, interfaz de audio).
+  - El navegador avisa antes de cerrar si tenés videos cargados.
+
+MIDI — CUALQUIER CONTROLADOR 🎹
+  Funciona con el controlador MIDI que tengas. Tres caminos:
+  1. 🧭 ASISTENTE DE MAPEO (panel → MIDI): te va pidiendo "tocá el pad
+     para CAPA 1 clip 1", "mové el fader del MASTER"... y asigna solo.
+     Salteá lo que tu controlador no tenga. En 2 minutos queda mapeado.
+  2. PERFILES DE FÁBRICA: nanoKONTROL2, APC Mini y Launchpad ya vienen
+     mapeados — elegí el tuyo en el panel MIDI y listo (editable).
+  3. MIDI LEARN: botón 🎹 → click en cualquier control de la interfaz →
+     mové/tocá el control físico. Uno por uno, para ajustes finos.
+  💾 EXPORTAR / 📂 IMPORTAR: compartí tu mapeo como archivo .json con
+  otra gente que use tu mismo controlador.
+
+MIDI (nanoPAD2) — mapeo de fábrica completo
+  Enchufá el nanoPAD2 antes de abrir. Con la configuración de fábrica:
+  - ESCENA 1: fila de abajo → CAPA 1 (col 1-8), fila de arriba → CAPA 2.
+  - ESCENA 2: fila de abajo → CAPA 3, fila de arriba → CAPA 4.
+  - ESCENA 3: fila de abajo → dispara columnas 1-8, arriba → columnas 9-16.
+  - ESCENA 4: abajo = macros (blackout, flash, tap, autopilot,
+    apagar capas 1-4) · arriba = prender/apagar efectos 1-8 del rack.
+  - Pad XY → X/Y (moduladores de efectos y generadores).
+  El monitor verde al lado del botón MIDI muestra lo último que llega
+  (♪nota o CC), útil para chequear que el controlador esté hablando.
+  Para remapear cualquier cosa: botón 🎹 MIDI → click en un control → mové el pad.
+
+SALIDA (monitor extendido)
+  Botón 🖥 OUTPUT abre la ventana de salida. Apretá F (o doble click)
+  ahí para pantalla completa. La UI queda en tu monitor con PREVIA y
+  SALIDA. En la versión online, si refrescás la app la salida se
+  reconecta sola.
+
+  ELEGIR EN QUÉ PANTALLA SALE: panel (Ctrl+Alt+T) → Render → MONITOR
+  DE SALIDA → 🔍 detectar (aceptá el permiso). Te lista las pantallas
+  con resolución y cuál es la PRINCIPAL; con 👁 ver te muestra un
+  número gigante en cada una para identificarla, y con "usar" elegís
+  a cuál va el OUTPUT. Si no elegís, va sola a la primera extendida.
+  "＋ ventana de salida" abre salidas extra (varias pantallas a la vez).
+
+  MULTI-PROYECTOR: detectá las pantallas y cada una tiene su botón
+  "🖥 salida acá" — una ventana de salida por proyector (F en cada una
+  para fullscreen). Después, en el MAPPING, poné una superficie con
+  fuente "mitad izq" y otra "mitad der" (o cuartos) y repartís la
+  composición entre los proyectores. Botón 🆕 = set nuevo de cero.
+  La ventana ⚙ PROPIEDADES se puede ACOPLAR al panel de abajo (botón
+  ⇱ en su barra) o dejar flotante — el layout se recuerda.
+
+BARRA DE MENÚS
+  Arriba de todo: Archivo (sets), Composición (build/flash/blackout/
+  pánico/1×), Capas, Entrada (videos/cámara/audio/MIDI), Salida
+  (output/pantallas/mapping/REC), Ver (pestañas del panel) y Ayuda.
+  Los atajos aparecen a la derecha de cada opción.
+
+MAPPING MULTI-SUPERFICIE
+  Menú Salida → 🗺 Editor de mapping: se abre una VENTANA FLOTANTE con
+  la salida en grande. Ahí agregás superficies (hasta 8), cada una
+  proyecta una región de la composición (completa, mitades, cuartos):
+  arrastrás las esquinas para deformar, arrastrás por adentro para
+  mover, y click sobre una superficie para elegirla. Sirve para:
+  enderezar proyección torcida, partir la imagen entre 2 pantallas,
+  mapear cajas o paredes.
+
+  CONTROLES POR SUPERFICIE (panel Ctrl+Alt+T → Render → MAPPING):
+  - Fuente (completa/mitades/cuartos), ON/off, ⧉ duplicar, ✕ borrar.
+  - Máscara de forma: círculo, rombo, triángulo, hexágono o estrella,
+    con "invertir" (recorta el centro en vez del borde).
+  - Opacidad de la superficie (para fundir capas de proyección).
+  - Borde suave (edge blending, para pegar 2 proyectores) y contorno
+    animado que late con el beat (estilo HeavyM).
+  - ⇋H / ⇅V: espejar horizontal o vertical (retroproyección).
+  - ＋ superficie agrega una nueva.
+
+  🖼 GUÍA: cargá una foto del escenario/objeto en el editor de mapping
+  (semitransparente, con opacidad regulable) para alinear las superficies
+  contra la realidad. Solo se ve en el editor, nunca en la salida.
+
+  🎯 PATRÓN DE CALIBRACIÓN: botón que dibuja una grilla + cruz sobre
+  cada superficie. Encendelo, movés las esquinas hasta que la grilla
+  quede derecha sobre el objeto real, y después lo apagás. Es la forma
+  pro de alinear un proyector (como el test pattern de MadMapper).
+
+  ✏ PLUMA DE MÁSCARAS: botón "dibujar máscara" en el editor — marcá con
+  clicks el contorno del objeto real (cuadro, ventana, escultura), click
+  en el primer punto (o Enter) cierra, Esc cancela, click derecho borra
+  el último punto. El botón "∿ curvas" suaviza las esquinas. La forma
+  queda como máscara de la superficie y se guarda en el set.
+
+  📐 SVG IMPORT/EXPORT: "importar SVG" aplica formas dibujadas en
+  Illustrator/Inkscape como máscara. "exportar SVG" baja las superficies
+  y máscaras como archivo SVG para editarlas afuera y re-importarlas.
+
+  MALLA BÉZIER (curvas perfectas): en el selector de malla elegí
+  "bézier" — cada borde gana 2 manijas de curvatura (las bolitas
+  celestes). Con 4 esquinas + manijas mapeás un cilindro o un arco
+  perfecto sin mover 25 puntos.
+
+  WARP DE MALLA (superficies curvas) 🕸: en el editor 🗺 (o en el panel)
+  elegí "malla: 2×2 … 5×5" y la superficie se subdivide en una grilla
+  de puntos. Arrastrás CADA punto (no solo las 4 esquinas) para mapear
+  columnas, cilindros, telas, domos o cualquier cosa curva — como el
+  mesh warping de MadMapper/Resolume. "malla: plana" vuelve al modo de
+  4 esquinas. Cuantas más divisiones, más suave la curva. Se guarda en
+  el set.
+
+GENERADORES CONFIGURABLES 🧪
+  - Click derecho en una celda generativa → "⚙ Parámetros": cada clip
+    puede tener sus propios P1 (velocidad) y P2 (tono) fijos, o seguir
+    el pad XY como siempre.
+  - CREAR LOS TUYOS: primer tile del estante (🧪 CREAR…) o menú
+    Entrada → Crear generador. Elegís por bloques: BASE (plasma,
+    anillos, rayas, ruido, voronoi, túnel) + DEFORMACIÓN (kaleido,
+    espejo, giro, onda, zoom al beat) + COLOR (arcoíris, duotono,
+    fuego, UV) + REACCIÓN (bajo, beat, agudos), con vista en vivo en
+    el monitor PREVIA. Le ponés nombre, queda en el estante y viaja
+    dentro del JSON del set. Click derecho en el tile: editar/eliminar.
+
+CAPTURA DE PANTALLA 🖥
+  Arrastrá el tile 🖥 Pantalla a una celda: elegís una app, una pestaña
+  o la pantalla entera y entra como fuente (con efectos, capas y
+  transiciones, igual que un video). Ideal para traer otro programa de
+  visuales, un navegador, slides, lo que sea. Si cortás el compartir,
+  la celda se vacía sola.
+
+VISUALIZADORES DE AUDIO 🎵
+  3 generadores que dibujan el sonido: 📊 Espectro (barras),
+  〰️ Onda audio (waveform) y 📡 Radar FFT (circular). Arrastralos como
+  cualquier generador — reaccionan al micrófono en vivo.
+
+MIDI CLOCK (sync con el DJ) 🕒
+  Panel (Ctrl+Alt+T) → MIDI → "Seguir MIDI Clock": el BPM se clava al
+  reloj que manda una CDJ, un mixer o Ableton por MIDI. Dale play en el
+  equipo del DJ y RAVEN VJ queda sincronizado solo (🟢 en sync). Apagalo
+  para volver a TAP/SYNC manual.
+  Y AL REVÉS — "Mandar MIDI Clock": RAVEN VJ como reloj MAESTRO, manda
+  clock por la salida MIDI para que otros equipos se cuelguen de TU BPM.
+  (Esclavo y maestro no pueden estar activos a la vez.)
+
+CÁMARA / CAPTURADORA EN VIVO 📷
+  Arrastrá el tile 📷 Cámara a una celda (o click derecho → Cámara) y
+  elegí el dispositivo: webcam o CAPTURADORA HDMI (entra como cámara —
+  podés meter la señal de otra laptop o consola). Se dispara como
+  cualquier clip, con efectos, capas y transiciones.
+
+GUARDAR / ABRIR SET
+  💾 guarda todo en un JSON (grilla, efectos, mapeos MIDI, BPM...).
+  📂 lo abre. Los videos no viajan dentro del JSON: usá 🔗 RELINK y
+  seleccioná los archivos (los matchea por nombre). La sesión también se
+  autoguarda sola en el navegador.
+
+MODO PSY 🍄 (recetas para la fiesta)
+  - BUILD/DROP: mantené ⚡ BUILD (o la BARRA ESPACIADORA, o un pad
+    mapeado): zoom + strobe acelerando + brillo subiendo. Soltalo en el
+    drop: flash + downbeat re-anclado. LA herramienta del subidón.
+  - Generadores psy: Mandala 🕉, Zoom Fractal 🌀 (zoom infinito),
+    Psy Túnel 🔯, Flor de Vida 🌸, Hipnosis 😵‍💫.
+  - Efecto "UV Neón": pinta cualquier video con paleta fluo/blacklight.
+  - El generador 💬 Texto acepta ॐ y emojis (🍄 👽 🔱).
+  - Receta mandala: cualquier video + efecto Kaleido con "rotación"
+    modulada por lfo1 = mandala giratorio del video.
+  - Receta bombo: efecto Zoom Pulso con "cantidad" alta = la imagen
+    golpea con el kick. Strobe con velocidad modulada por "beat".
+  - Túnel infinito: Feedback (cantidad ~0.7, zoom ~0.5) sobre
+    cualquier generador.
+  - SYNC clava el BPM del set (psytrance ≈ 138-150).
+
+ATAJOS
+  1-9,0 columnas · T tap · B blackout · F flash (mantener) ·
+  ESPACIO build/drop · P pánico · F1-F8 escenas · Ctrl+Alt+T panel
+
+</script>
+<div id="manwin">
+  <div id="manbar"><b>📖 MANUAL</b><span style="color:var(--dim);font-weight:400">arrastrá para mover</span><input type="text" id="mansearch" placeholder="buscar…"><button class="mini" id="manclose">✕</button></div>
+  <div id="manbody"></div>
+</div>
 <div id="dropveil"></div>
 <div id="clock" title="hora local — click: mostrar/ocultar fecha" data-noi18n>--:--</div>
+<div id="welcome">
+  <div id="welcard">
+    <button id="welx" title="cerrar">✕</button>
+    <div id="wellogo" data-noi18n>RAVEN<b>VJ</b></div>
+    <div class="weltag">Mixer de video para VJing en vivo</div>
+    <p class="welp">Mezclá videos, GIFs, imágenes y visuales generativas en capas, al ritmo de la música: audio-reactivo, sync BPM, cualquier controlador MIDI, mapping profesional, control remoto desde el celu, interacción con el público por QR y salida directa al proyector.</p>
+    <div class="welfree">💚 Este programa es 100% GRATUITO y de código abierto</div>
+    <p class="welp"><b>¡Gracias por usarlo!</b> <span>Si te sirve, apoyá el proyecto:</span></p>
+    <div class="weldon">
+      <a class="welbtn" href="https://cafecito.app/vjravenlight" target="_blank" rel="noopener" data-noi18n>☕ Cafecito</a>
+      <button class="welbtn" id="welpp" title="click para copiar el mail" data-noi18n>💙 PayPal: vjravenlight@gmail.com</button>
+    </div>
+    <div class="welrow"><label>Idioma</label><select id="welLang" data-noi18n></select></div>
+    <button id="welgo">🚀 EMPEZAR</button>
+    <div class="welfoot" data-noi18n>RAVEN VJ · 2026 · GPL v3 ·
+      <a href="https://github.com/vjravenlight/raven-vj" target="_blank" rel="noopener">GitHub</a> ·
+      <a href="https://www.ravenlight.net/ravenvj/" target="_blank" rel="noopener">ravenlight.net</a> · por VJ Ravenlight</div>
+  </div>
+</div>
 <input type="file" id="fileIn" accept="video/*,image/*" multiple style="display:none">
 <input type="file" id="setIn" accept=".json,application/json" style="display:none">
 <input type="file" id="relinkIn" accept="video/*,image/*" multiple style="display:none">
@@ -4307,6 +4767,8 @@ document.addEventListener('keydown', e => {
   }
   if (penMode && (e.key === 'Enter' || e.key === 'Escape')) { e.key === 'Enter' ? closePen() : cancelPen(); return; }
   if (e.key === 'Escape' && midiWiz) { endMidiWizard(); return; }
+  if (e.key === 'Escape' && $('#welcome').style.display === 'flex') { closeWelcome(); return; }
+  if (e.key === 'Escape' && $('#manwin').style.display === 'flex') { $('#manwin').style.display = 'none'; return; }
   if (e.key === 'Escape') { togglePanel(false); return; }
   // learn de teclado: en modo learn, elegís un control y apretás una tecla
   if (midiLearn && midiPending && !e.ctrlKey && !e.altKey && e.key !== 'Escape') {
@@ -6990,10 +7452,12 @@ const MENUS = {
   ],
   ayuda: () => [
     { label: '⌨ Atajos de teclado', key: 'H', fn: () => { togglePanel(true); buildCpTab('keys'); } },
-    { label: '📖 Manual (LEEME)', fn: () => window.open('LEEME.txt', '_blank') },
+    { label: '📖 Manual', fn: openManual },
     '-',
     { label: '☕ Invitame un cafecito (donar)', fn: () => window.open('https://cafecito.app/vjravenlight', '_blank') },
-    { label: 'RAVEN VJ · ravenlight.net/ravenvj', fn: () => toast('Hecho para la pista 🍄⚡') },
+    { label: '💙 Donar por PayPal', fn: () => { try { navigator.clipboard.writeText('vjravenlight@gmail.com'); } catch (e) { } toast('💙 PayPal: vjravenlight@gmail.com (copiado)'); } },
+    '-',
+    { label: 'ℹ Acerca de RAVEN VJ…', fn: showWelcome },
   ],
 };
 document.querySelectorAll('#menubar button[data-menu]').forEach(bt => {
@@ -7263,7 +7727,22 @@ const I18N = {
     'REMOTO': 'عن بعد', 'Tema': 'نسق',
   },
 };
-const I18N_ROOTS = ['#menubar', '#topbar', '#fxPanel', '#genPanel', '#cpanel', '#ctxmenu'];
+const I18N_ROOTS = ['#menubar', '#topbar', '#fxPanel', '#genPanel', '#cpanel', '#ctxmenu', '#welcome'];
+/* traducciones del cartel de bienvenida (merge sobre los diccionarios) */
+const I18N_WELCOME = {
+  en: { 'Mixer de video para VJing en vivo': 'Live video mixer for VJing', 'Este programa es 100% GRATUITO y de código abierto': '💚 This program is 100% FREE and open source', '¡Gracias por usarlo!': 'Thanks for using it!', 'Si te sirve, apoyá el proyecto:': 'If it helps you, support the project:', '🚀 EMPEZAR': '🚀 START', 'Mezclá videos, GIFs, imágenes y visuales generativas en capas, al ritmo de la música: audio-reactivo, sync BPM, cualquier controlador MIDI, mapping profesional, control remoto desde el celu, interacción con el público por QR y salida directa al proyector.': 'Mix videos, GIFs, images and generative visuals in layers, in sync with the music: audio-reactive, BPM sync, any MIDI controller, professional mapping, phone remote control, audience interaction via QR and direct projector output.' },
+  pt: { 'Mixer de video para VJing en vivo': 'Mixer de vídeo para VJing ao vivo', 'Este programa es 100% GRATUITO y de código abierto': '💚 Este programa é 100% GRATUITO e de código aberto', '¡Gracias por usarlo!': 'Obrigado por usar!', 'Si te sirve, apoyá el proyecto:': 'Se te ajuda, apoie o projeto:', '🚀 EMPEZAR': '🚀 COMEÇAR' },
+  fr: { 'Mixer de video para VJing en vivo': 'Table de mixage vidéo pour le VJing', 'Este programa es 100% GRATUITO y de código abierto': '💚 Ce programme est 100% GRATUIT et open source', '¡Gracias por usarlo!': 'Merci de l’utiliser !', 'Si te sirve, apoyá el proyecto:': 'S’il vous aide, soutenez le projet :', '🚀 EMPEZAR': '🚀 COMMENCER' },
+  de: { 'Mixer de video para VJing en vivo': 'Video-Mixer für Live-VJing', 'Este programa es 100% GRATUITO y de código abierto': '💚 Dieses Programm ist 100% KOSTENLOS und Open Source', '¡Gracias por usarlo!': 'Danke fürs Benutzen!', 'Si te sirve, apoyá el proyecto:': 'Wenn es dir hilft, unterstütze das Projekt:', '🚀 EMPEZAR': '🚀 STARTEN' },
+  it: { 'Mixer de video para VJing en vivo': 'Mixer video per VJing dal vivo', 'Este programa es 100% GRATUITO y de código abierto': '💚 Questo programma è 100% GRATUITO e open source', '¡Gracias por usarlo!': 'Grazie per usarlo!', 'Si te sirve, apoyá el proyecto:': 'Se ti è utile, sostieni il progetto:', '🚀 EMPEZAR': '🚀 INIZIA' },
+  ja: { 'Mixer de video para VJing en vivo': 'ライブVJ用ビデオミキサー', 'Este programa es 100% GRATUITO y de código abierto': '💚 このプログラムは100%無料・オープンソースです', '¡Gracias por usarlo!': '使ってくれてありがとう！', 'Si te sirve, apoyá el proyecto:': '役に立ったらプロジェクトを応援してね：', '🚀 EMPEZAR': '🚀 スタート' },
+  zh: { 'Mixer de video para VJing en vivo': '现场VJ视频混合器', 'Este programa es 100% GRATUITO y de código abierto': '💚 本程序100%免费且开源', '¡Gracias por usarlo!': '感谢使用！', 'Si te sirve, apoyá el proyecto:': '如果对你有帮助，请支持项目：', '🚀 EMPEZAR': '🚀 开始' },
+  ko: { 'Mixer de video para VJing en vivo': '라이브 VJ용 비디오 믹서', 'Este programa es 100% GRATUITO y de código abierto': '💚 이 프로그램은 100% 무료 오픈소스입니다', '¡Gracias por usarlo!': '사용해 주셔서 감사합니다!', 'Si te sirve, apoyá el proyecto:': '도움이 되었다면 프로젝트를 후원해 주세요:', '🚀 EMPEZAR': '🚀 시작' },
+  ru: { 'Mixer de video para VJing en vivo': 'Видеомикшер для живого VJ-инга', 'Este programa es 100% GRATUITO y de código abierto': '💚 Эта программа 100% БЕСПЛАТНА и с открытым кодом', '¡Gracias por usarlo!': 'Спасибо, что пользуетесь!', 'Si te sirve, apoyá el proyecto:': 'Если помогает — поддержите проект:', '🚀 EMPEZAR': '🚀 НАЧАТЬ' },
+  he: { 'Mixer de video para VJing en vivo': 'מיקסר וידאו ל-VJ בזמן אמת', 'Este programa es 100% GRATUITO y de código abierto': '💚 התוכנה הזו 100% חינמית ובקוד פתוח', '¡Gracias por usarlo!': 'תודה שאתם משתמשים!', 'Si te sirve, apoyá el proyecto:': 'אם היא עוזרת, תתמכו בפרויקט:', '🚀 EMPEZAR': '🚀 להתחיל' },
+  ar: { 'Mixer de video para VJing en vivo': 'جهاز مزج فيديو للعروض الحية', 'Este programa es 100% GRATUITO y de código abierto': '💚 هذا البرنامج مجاني 100% ومفتوح المصدر', '¡Gracias por usarlo!': 'شكرا لاستخدامك!', 'Si te sirve, apoyá el proyecto:': 'إذا أفادك، ادعم المشروع:', '🚀 EMPEZAR': '🚀 ابدأ' },
+};
+for (const k in I18N_WELCOME) Object.assign(I18N[k], I18N_WELCOME[k]);
 const I18N_SKIP = 'input,textarea,[data-noi18n],.cell,.gtile,#genShelf,.cname,#nowName';
 function curLang() { return uiPrefs.lang || 'es'; }
 function t(es) { const d = I18N[curLang()]; return (d && d[es]) || es; }
@@ -7357,6 +7836,68 @@ function toast(msg) {
   toastT = setTimeout(() => t.style.opacity = 0, 2600);
 }
 
+/* ---------------- bienvenida / acerca de ---------------- */
+function showWelcome() {
+  const w = $('#welcome');
+  const sel = $('#welLang');
+  sel.innerHTML = Object.entries(LANGS).map(([k, nm]) =>
+    `<option value="${k}"${curLang() === k ? ' selected' : ''}>${nm}</option>`).join('');
+  sel.onchange = e => { setLang(e.target.value); translateRoot(w); };
+  w.style.display = 'flex';
+  if (curLang() !== 'es') translateRoot(w);
+}
+function closeWelcome() {
+  $('#welcome').style.display = 'none';
+  uiPrefs.welcomed = true; saveUI();
+}
+$('#welgo').onclick = closeWelcome;
+$('#welx').onclick = closeWelcome;
+$('#welpp').onclick = () => {
+  const mail = 'vjravenlight@gmail.com';
+  try { navigator.clipboard.writeText(mail); toast('💙 Mail de PayPal copiado: ' + mail); }
+  catch (e) { prompt('Mail de PayPal:', mail); }
+};
+
+/* ---------------- manual flotante (el LEEME adentro de la app) ---------------- */
+function renderManual(filter) {
+  const src = document.getElementById('manualTxt').textContent;
+  const body = $('#manbody');
+  const f = (filter || '').trim().toLowerCase();
+  let html = '';
+  for (const line of src.split('\n')) {
+    const t2 = line.trimEnd();
+    if (!t2) { html += '<p>&nbsp;</p>'; continue; }
+    const esc = t2.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const isHead = !line.startsWith(' ') && t2.length > 2 && t2 === t2.toUpperCase();
+    const out = f && t2.toLowerCase().includes(f) ? '<span class="mhit">' + esc + '</span>' : esc;
+    html += isHead ? '<h4>' + out + '</h4>' : '<p>' + out + '</p>';
+  }
+  body.innerHTML = html;
+  if (f) { const hit = body.querySelector('.mhit'); if (hit) hit.scrollIntoView({ block: 'center' }); }
+}
+function openManual() {
+  $('#manwin').style.display = 'flex';
+  renderManual($('#mansearch').value);
+}
+$('#manclose').onclick = () => $('#manwin').style.display = 'none';
+$('#mansearch').oninput = () => renderManual($('#mansearch').value);
+{ // mover la ventana del manual por la barra
+  const bar = $('#manbar'), win = $('#manwin');
+  bar.addEventListener('pointerdown', e => {
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+    bar.setPointerCapture(e.pointerId);
+    const r = win.getBoundingClientRect();
+    const ox = e.clientX - r.left, oy = e.clientY - r.top;
+    win.style.transform = 'none';
+    const mv = ev => {
+      win.style.left = Math.max(0, Math.min(innerWidth - 160, ev.clientX - ox)) + 'px';
+      win.style.top = Math.max(0, Math.min(innerHeight - 60, ev.clientY - oy)) + 'px';
+    };
+    bar.onpointermove = mv;
+    bar.onpointerup = () => bar.onpointermove = null;
+  });
+}
+
 /* ---------------- boot ---------------- */
 buildShelf();
 const saved = localStorage.getItem('ravenvj_autosave');
@@ -7373,7 +7914,13 @@ buildFx();
 $('#monoBtn').classList.toggle('on', state.mono);
 applyTheme(state.theme);
 if (uiPrefs.midiClockOut) setClockOut(true); // reloj maestro persistido
+if (!uiPrefs.lang) { // primera vez: detectar el idioma de la computadora
+  const nav = (navigator.language || 'es').toLowerCase();
+  uiPrefs.lang = Object.keys(LANGS).find(k => nav.startsWith(k)) || 'es';
+  saveUI();
+}
 if (curLang() !== 'es') applyLang(); // idioma elegido (persistido en prefs de UI)
+if (!uiPrefs.welcomed) showWelcome(); // cartel de bienvenida en el primer arranque
 if (uiPrefs.propDock) setPropDock(true); // arrancar con Propiedades acoplada si quedó así
 midiInit();
 requestAnimationFrame(frame);
