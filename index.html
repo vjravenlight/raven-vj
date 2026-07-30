@@ -7733,7 +7733,8 @@ const I18N = {
     'REMOTO': 'عن بعد', 'Tema': 'نسق',
   },
 };
-const I18N_ROOTS = ['#menubar', '#topbar', '#fxPanel', '#genPanel', '#cpanel', '#ctxmenu', '#welcome'];
+const I18N_ROOTS = ['#menubar', '#topbar', '#fxPanel', '#genPanel', '#monPanel', '#bottom', '#cpanel', '#ctxmenu',
+  '#welcome', '#propwin', '#mapwin', '#maptools', '#genwin', '#glslwin', '#nodewin', '#manbar'];
 /* traducciones del cartel de bienvenida (merge sobre los diccionarios) */
 const WEL_P = 'Mezclá videos, GIFs, imágenes y visuales generativas en capas, al ritmo de la música: audio-reactivo, sync BPM, cualquier controlador MIDI, mapping profesional, control remoto desde el celu, interacción con el público por QR y salida directa al proyector.';
 const I18N_WELCOME = {
@@ -7750,6 +7751,161 @@ const I18N_WELCOME = {
   ar: { 'Sos el visitante N°': 'أنت الزائر رقم', 'Mixer de video para VJing en vivo': 'جهاز مزج فيديو للعروض الحية', 'Este programa es 100% GRATUITO': 'هذا البرنامج مجاني 100%', '¡Gracias por usarlo!': 'شكرا لاستخدامك!', 'Si te sirve, apoyá el proyecto:': 'إذا أفادك، ادعم المشروع:', '🚀 EMPEZAR': '🚀 ابدأ', 'Hecho en Argentina': 'صنع في الأرجنتين', [WEL_P]: 'امزج الفيديو وGIF والصور والمرئيات التوليدية في طبقات على إيقاع الموسيقى: تفاعل صوتي، مزامنة BPM، أي وحدة تحكم MIDI، إسقاط احترافي، تحكم عن بعد من الهاتف، تفاعل الجمهور عبر QR وإخراج مباشر لجهاز العرض.' },
 };
 for (const k in I18N_WELCOME) Object.assign(I18N[k], I18N_WELCOME[k]);
+
+/* ---- diccionario ampliado: cubre menús, panel, propiedades, mapping, generadores ---- */
+/* EN completo; el resto cubre lo estructural (encabezados, botones, propiedades, menús). */
+const I18N_UI = {
+  en: {
+    'ACCIONES': 'ACTIONS', 'ANIMACIÓN': 'ANIMATION', 'TRANSFORM': 'TRANSFORM', 'GENERADOR': 'GENERATOR',
+    'CLIP': 'CLIP', 'CAPA': 'LAYER', 'COMPOSICIÓN': 'COMPOSITION', 'RENDIMIENTO': 'PERFORMANCE', 'MOTOR': 'ENGINE',
+    'NIVELES': 'LEVELS', 'ESTADO DEL SET': 'SET STATUS', 'CHEQUEO PRE-SHOW': 'PRE-SHOW CHECK',
+    'DETECCIÓN DE BEAT': 'BEAT DETECTION', 'BASE': 'BASE', 'DEFORMACIÓN': 'WARP', 'COLOR': 'COLOR', 'REACCIÓN': 'REACTION',
+    'CONTROL REMOTO DESDE EL CELULAR': 'PHONE REMOTE CONTROL', 'MONITORES': 'MONITORS', 'PAD XY': 'XY PAD',
+    'MONITOR EN VIVO (últimos 8)': 'LIVE MONITOR (last 8)', 'MAPEOS DE MIDI LEARN': 'MIDI LEARN MAPPINGS',
+    'MAPPING (multi-superficie)': 'MAPPING (multi-surface)', 'Mapping (superficies)': 'Mapping (surfaces)',
+    'AUDIO / MIDI': 'AUDIO / MIDI', 'ENTRADA': 'INPUT', 'SALIDA': 'OUTPUT', 'ESTADO': 'STATUS', 'Estado': 'Status',
+    'Nombre': 'Name', 'Tipo': 'Type', 'Escala': 'Scale', 'Posición X': 'Position X', 'Posición Y': 'Position Y',
+    'Rotación': 'Rotation', 'Velocidad clip': 'Clip speed', 'Velocidad global': 'Global speed', 'Cantidad': 'Amount',
+    'Ciclo (beats)': 'Cycle (beats)', 'Forma': 'Shape', 'Modo': 'Mode', 'Parámetro': 'Parameter', 'Tiempo': 'Time',
+    'Número': 'Number', 'Seguir pad XY': 'Follow XY pad', 'P1 velocidad': 'P1 speed', 'P2 tono': 'P2 hue',
+    'Resolución': 'Resolution', 'Resolución de render': 'Render resolution', 'Master': 'Master', 'Control': 'Control',
+    'Público': 'Audience', 'Remoto': 'Remote', 'Emojis permitidos': 'Allowed emojis', 'Frases permitidas': 'Allowed phrases',
+    'Texto libre': 'Free text', 'Tirar vos': 'Fire it yourself', 'Luces en la controladora': 'Controller lights',
+    'Seguir MIDI Clock': 'Follow MIDI Clock', 'Mandar MIDI Clock': 'Send MIDI Clock', 'Patrón de calibración': 'Calibration pattern',
+    'Sensibilidad': 'Sensitivity', 'Detectar BPM del audio': 'Detect BPM from audio', 'Detectar BPM del audio (SYNC)': 'Detect BPM from audio (SYNC)',
+    'Agregar paso': 'Add step', 'Set': 'Set', 'Sesión local': 'Local session', 'Autosave (local)': 'Autosave (local)',
+    'Clips en la grilla': 'Clips in grid', 'Videos sin enlazar': 'Unlinked videos', 'Escenas guardadas': 'Saved scenes',
+    'Capas activas': 'Active layers', 'Videos reproduciéndose': 'Playing videos', 'Efectos activos': 'Active effects',
+    'FPS': 'FPS', 'Frame prom / máx': 'Frame avg / max', 'Frames lentos (>50ms)': 'Slow frames (>50ms)',
+    'Memoria JS': 'JS memory', 'Uptime de la sesión': 'Session uptime', 'GPU': 'GPU', 'Contexto': 'Context',
+    'Dispositivo MIDI': 'MIDI device', 'Mensajes MIDI': 'MIDI messages', 'Mensajes recibidos': 'Messages received',
+    'Último MIDI': 'Last MIDI', 'Beats detectados': 'Beats detected', 'Niveles B / M / H': 'Levels L / M / H',
+    'Antes de la fiesta': 'Before the party', 'PC floja de papeles 🐢': 'Low-spec PC 🐢', 'activar modo liviano': 'enable lite mode',
+    'Mapa de fábrica nanoPAD2': 'nanoPAD2 factory map', 'Mapa de fábrica': 'Factory map',
+    // generadores / bloques / nodos
+    'Plasma': 'Plasma', 'Túnel': 'Tunnel', 'Anillos': 'Rings', 'Rayas': 'Stripes', 'Voronoi': 'Voronoi',
+    'Ruido FBM': 'FBM noise', 'Ruido/humo': 'Noise/smoke', 'Espejo': 'Mirror', 'Giro': 'Spin', 'Onda': 'Wave', 'Ondas': 'Waves',
+    'Zoom al beat': 'Zoom to beat', 'Rotar': 'Rotate', 'Zoom': 'Zoom', 'Ciclo arcoíris': 'Rainbow cycle', 'Duotono': 'Duotone',
+    'Fuego': 'Fire', 'Fuego 🔥': 'Fire 🔥', 'UV espacio': 'UV space', 'UV neón': 'UV neon', 'UV Neón': 'UV Neon',
+    'Bajo': 'Bass', 'Beat': 'Beat', 'Agudos': 'Treble', 'Late con el bajo': 'Pulse with bass', 'Golpea con el beat': 'Hit with beat',
+    'Brilla con agudos': 'Shine with treble', 'Rampa color': 'Color ramp', 'Mezclar': 'Mix', 'Mezclar color': 'Mix color',
+    'Brillo ×': 'Brightness ×', 'Sumar': 'Add', 'Multiplicar': 'Multiply', 'Seno': 'Sine', 'Ninguna': 'None',
+    'Contraste/Viñeta': 'Contrast/Vignette', 'Hue/Sat': 'Hue/Sat', 'Glitch': 'Glitch', 'Kaleido': 'Kaleido', 'Feedback': 'Feedback',
+    'RGB Shift': 'RGB Shift', 'Pixelate': 'Pixelate', 'Strobe': 'Strobe', 'Zoom Pulso': 'Zoom Pulse', 'Invertir/Solar': 'Invert/Solarize',
+    'Chroma Key (verde)': 'Chroma Key (green)', 'Luma Key (oscuro)': 'Luma Key (dark)',
+    'Pad X / P1': 'Pad X / P1', 'Pad Y / P2': 'Pad Y / P2', 'MIDI X': 'MIDI X', 'MIDI Y': 'MIDI Y',
+    // opciones / valores
+    'apagada': 'off', 'off': 'off', 'off (recomendado)': 'off (recommended)', 'visible': 'visible', 'inactivo': 'inactive',
+    'un clip a la vez': 'one clip at a time', 'sin': 'none', 'invertir': 'invert', 'borde': 'edge', 'borde suave': 'soft edge',
+    'contorno': 'outline', 'malla': 'mesh', 'opac': 'opac', 'tono': 'hue', 'sat': 'sat', 'frec': 'freq', 'min': 'min', 'segs': 'secs',
+    'beat': 'beat', 'número': 'number', 'color': 'color', 'espacio': 'space', 'reset': 'reset', 'Escala': 'Scale',
+    'malla: plana': 'mesh: flat', 'malla: bézier': 'mesh: bézier', 'malla: 2×2': 'mesh: 2×2', 'malla: 3×3': 'mesh: 3×3',
+    'malla: 4×4': 'mesh: 4×4', 'malla: 5×5': 'mesh: 5×5', 'plana (4 esquinas)': 'flat (4 corners)', 'bézier (curvas)': 'bézier (curves)',
+    'máscara: sin': 'mask: none', 'máscara: círculo': 'mask: circle', 'máscara: rombo': 'mask: diamond',
+    'máscara: triángulo': 'mask: triangle', 'máscara: hexágono': 'mask: hexagon', 'sin máscara': 'no mask',
+    '● círculo': '● circle', '◆ rombo': '◆ diamond', '▲ triángulo': '▲ triangle', '⬡ hexágono': '⬡ hexagon', '★ estrella': '★ star',
+    'fuente: completa': 'source: full', 'fuente: mitad izq': 'source: left half', 'fuente: mitad der': 'source: right half',
+    'fuente: mitad sup': 'source: top half', 'fuente: mitad inf': 'source: bottom half',
+    'fuente: cuarto ↖': 'source: quarter ↖', 'fuente: cuarto ↗': 'source: quarter ↗',
+    'fuente: cuarto ↙': 'source: quarter ↙', 'fuente: cuarto ↘': 'source: quarter ↘',
+    '〰 loop (sync BPM)': '〰 loop (BPM sync)', '💥 beat': '💥 beat', '🎲 azar por ciclo': '🎲 random per cycle',
+    '🔊 graves': '🔊 bass', '🔊 medios': '🔊 mids', '🔊 agudos': '🔊 treble', 'sine': 'sine', 'tri': 'tri', 'saw': 'saw', 'sqr': 'sqr',
+    '1 compás': '1 bar', '2 comp.': '2 bars', 'OFF': 'OFF', 'ON': 'ON', 'Superficie 1': 'Surface 1', '← editando': '← editing',
+    // menús
+    '🆕 Nuevo set (empezar de cero)': '🆕 New set (start from scratch)', '💾 Guardar set (JSON)': '💾 Save set (JSON)',
+    '📂 Abrir set…': '📂 Open set…', '🔗 Relink de videos…': '🔗 Relink videos…', '📦 Plantillas de uso…': '📦 Templates…',
+    '＋ Cargar videos / GIFs…': '＋ Load videos / GIFs…', '🧨 Borrar sesión y reiniciar': '🧨 Clear session and reset',
+    '🧨 Borrar autosave y reiniciar': '🧨 Clear autosave and reset', '⚙ Propiedades de la composición…': '⚙ Composition properties…',
+    '↩ Deshacer': '↩ Undo', '↪ Rehacer': '↪ Redo', '⚡ BUILD (mantener) / DROP (soltar)': '⚡ BUILD (hold) / DROP (release)',
+    '🎲 Randomizar efectos': '🎲 Randomize effects', '⬛ Blackout': '⬛ Blackout', '🚨 Pánico': '🚨 Panic',
+    '✓ Modo 1× — un clip a la vez': '✓ 1× mode — one clip at a time', '↺ Reset de todas las capas': '↺ Reset all layers',
+    '＋ Videos / GIFs…': '＋ Videos / GIFs…', '📷 Cámara / capturadora…': '📷 Camera / capture…',
+    '💬 Poner texto…': '💬 Add text…', '🧪 Crear generador propio…': '🧪 Create your own generator…',
+    '📜 Importar GLSL / Shadertoy…': '📜 Import GLSL / Shadertoy…', '🕸 Editor de nodos…': '🕸 Node editor…',
+    '⬆ Importar generador (.json)…': '⬆ Import generator (.json)…', '🔊 Audio y beat': '🔊 Audio & beat',
+    '🎹 MIDI y mapeos': '🎹 MIDI & mappings', '🖥 Abrir ventana de salida': '🖥 Open output window',
+    '🖥 ＋ otra ventana de salida': '🖥 ＋ another output window', '🔍 Elegir pantalla / identificar…': '🔍 Choose screen / identify…',
+    '🗺 Editor de mapping…': '🗺 Mapping editor…', '⏺ Grabar la salida (webm)': '⏺ Record output (webm)',
+    '🛠 Panel de control': '🛠 Control panel', '⚙ Render / pantallas / mapping': '⚙ Render / screens / mapping',
+    '📱 Remoto (celular)': '📱 Remote (phone)', '⌨ Atajos de teclado': '⌨ Keyboard shortcuts', '📖 Manual': '📖 Manual',
+    '☕ Invitame un cafecito (donar)': '☕ Buy me a coffee (donate)', '💙 Donar por PayPal': '💙 Donate via PayPal',
+    'ℹ Acerca de RAVEN VJ…': 'ℹ About RAVEN VJ…', '🎬 Cargar video acá…': '🎬 Load video here…',
+    '👁 previa': '👁 preview', '🧹 vaciar': '🧹 clear', '▶ disparar': '▶ trigger', 'menú de opciones': 'options menu',
+    // botones varios
+    '🎤 AUDIO': '🎤 AUDIO', '🎹 MIDI': '🎹 MIDI', '🖥 OUTPUT': '🖥 OUTPUT', '⚡ BUILD': '⚡ BUILD', '🎲': '🎲', '🆕': '🆕',
+    '💾 Guardar JSON': '💾 Save JSON', '📂 Abrir': '📂 Open', '🔗 Relink videos': '🔗 Relink videos',
+    '🎤 Audio: activar': '🎤 Audio: enable', 'activar 🎤': 'enable 🎤', 'Detectar BPM del audio': 'Detect BPM from audio',
+    '📊 Telemetría': '📊 Telemetry', '📋 Setlist': '📋 Setlist', '💾 Sesión': '💾 Session',
+    '🎨 Tema: 🔥 Fénix → cambiar': '🎨 Theme: 🔥 Phoenix → change', '🔥 Fénix': '🔥 Phoenix', '🟢 Clásico (verde)': '🟢 Classic (green)',
+    '🔮 Violeta psy': '🔮 Psy violet', '⚡ Cian cyber': '⚡ Cyber cyan',
+    '🎉 ACTIVAR': '🎉 ACTIVATE', '📱 ACTIVAR': '📱 ACTIVATE', '🎉 INTERACCIÓN CON EL PÚBLICO': '🎉 AUDIENCE INTERACTION',
+    '💥 RÁFAGA': '💥 BURST', 'RAVEN': 'RAVEN', 'elegir controlador…': 'choose controller…',
+    '🧭 mapear mi controlador…': '🧭 map my controller…', '💾 exportar': '💾 export', '📂 importar': '📂 import',
+    '📐 importar SVG': '📐 import SVG', '⬇ exportar SVG': '⬇ export SVG', '✏ dibujar máscara': '✏ draw mask',
+    '🖼 guía': '🖼 guide', '＋ superficie': '＋ surface', '✕ superficie': '✕ surface', 'MAPPING ON': 'MAPPING ON',
+    '✔ cerrar máscara (Enter)': '✔ close mask (Enter)', '✕ cancelar (Esc)': '✕ cancel (Esc)',
+    'click = punto · click derecho = borrar último': 'click = point · right-click = delete last',
+    '💾 AGREGAR AL ESTANTE': '💾 ADD TO SHELF', '💾 GUARDAR': '💾 SAVE', '▶ PROBAR': '▶ TEST', '📂 .frag': '📂 .frag',
+    '＋ agregar nodo…': '＋ add node…', '＋ agregar': '＋ add', 'ejemplos…': 'examples…', 'presets…': 'presets…',
+    '🔍 Celdas más chicas': '🔍 Smaller cells', '🔍 Celdas más grandes': '🔍 Bigger cells',
+    'Mapa de fábrica nanoPAD2': 'nanoPAD2 factory map', 'sin salida MIDI': 'no MIDI output', 'sin mapeos — usá 🎹 MIDI learn': 'no mappings — use 🎹 MIDI learn',
+    // frases/tooltips largos frecuentes
+    '↺ reset transform': '↺ reset transform', '↻ Reiniciar (si se ve raro)': '↻ Restart (if it looks off)',
+    'arrastrar MP4/WebM': 'drag MP4/WebM', 'cargar videos en la grilla': 'load videos into the grid',
+    '· loops por parámetro al tempo': '· per-parameter loops in tempo', '· vista en PREVIA ↘': '· preview below ↘',
+    'vista en vivo en el monitor PREVIA ↘': 'live preview in the PREVIEW monitor ↘',
+  },
+};
+/* núcleo estructural para los otros 10 idiomas (encabezados, propiedades, menús principales) */
+const CORE = ['ACCIONES', 'ANIMACIÓN', 'GENERADOR', 'CLIP', 'CAPA', 'COMPOSICIÓN', 'RENDIMIENTO', 'MOTOR', 'NIVELES',
+  'ESTADO DEL SET', 'ENTRADA', 'SALIDA', 'Nombre', 'Tipo', 'Escala', 'Posición X', 'Posición Y', 'Rotación',
+  'Velocidad clip', 'Velocidad global', 'Cantidad', 'Modo', 'Parámetro', 'Público', 'Remoto', 'Master', 'Resolución',
+  'Sensibilidad', 'Set', 'apagada', 'off', 'visible', 'invertir', 'malla', 'contorno', 'reset',
+  '↩ Deshacer', '↪ Rehacer', '📖 Manual', '📊 Telemetría', '📋 Setlist', '📱 Remoto (celular)'];
+const CORE_TR = {
+  pt: { 'ACCIONES': 'AÇÕES', 'ANIMACIÓN': 'ANIMAÇÃO', 'GENERADOR': 'GERADOR', 'CLIP': 'CLIPE', 'CAPA': 'CAMADA', 'COMPOSICIÓN': 'COMPOSIÇÃO', 'RENDIMIENTO': 'DESEMPENHO', 'MOTOR': 'MOTOR', 'NIVELES': 'NÍVEIS', 'ESTADO DEL SET': 'ESTADO DO SET', 'ENTRADA': 'ENTRADA', 'SALIDA': 'SAÍDA', 'Nombre': 'Nome', 'Tipo': 'Tipo', 'Escala': 'Escala', 'Posición X': 'Posição X', 'Posición Y': 'Posição Y', 'Rotación': 'Rotação', 'Velocidad clip': 'Velocidade do clipe', 'Velocidad global': 'Velocidade global', 'Cantidad': 'Quantidade', 'Modo': 'Modo', 'Parámetro': 'Parâmetro', 'Público': 'Público', 'Remoto': 'Remoto', 'Master': 'Master', 'Resolución': 'Resolução', 'Sensibilidad': 'Sensibilidade', 'Set': 'Set', 'apagada': 'desligada', 'off': 'off', 'visible': 'visível', 'invertir': 'inverter', 'malla': 'malha', 'contorno': 'contorno', 'reset': 'reset', '↩ Deshacer': '↩ Desfazer', '↪ Rehacer': '↪ Refazer', '📖 Manual': '📖 Manual', '📊 Telemetría': '📊 Telemetria', '📋 Setlist': '📋 Setlist', '📱 Remoto (celular)': '📱 Remoto (celular)' },
+  fr: { 'ACCIONES': 'ACTIONS', 'ANIMACIÓN': 'ANIMATION', 'GENERADOR': 'GÉNÉRATEUR', 'CLIP': 'CLIP', 'CAPA': 'CALQUE', 'COMPOSICIÓN': 'COMPOSITION', 'RENDIMIENTO': 'PERFORMANCE', 'MOTOR': 'MOTEUR', 'NIVELES': 'NIVEAUX', 'ESTADO DEL SET': 'ÉTAT DU SET', 'ENTRADA': 'ENTRÉE', 'SALIDA': 'SORTIE', 'Nombre': 'Nom', 'Tipo': 'Type', 'Escala': 'Échelle', 'Posición X': 'Position X', 'Posición Y': 'Position Y', 'Rotación': 'Rotation', 'Velocidad clip': 'Vitesse du clip', 'Velocidad global': 'Vitesse globale', 'Cantidad': 'Quantité', 'Modo': 'Mode', 'Parámetro': 'Paramètre', 'Público': 'Public', 'Remoto': 'À distance', 'Master': 'Master', 'Resolución': 'Résolution', 'Sensibilidad': 'Sensibilité', 'Set': 'Set', 'apagada': 'désactivée', 'off': 'off', 'visible': 'visible', 'invertir': 'inverser', 'malla': 'maillage', 'contorno': 'contour', 'reset': 'reset', '↩ Deshacer': '↩ Annuler', '↪ Rehacer': '↪ Rétablir', '📖 Manual': '📖 Manuel', '📊 Telemetría': '📊 Télémétrie', '📋 Setlist': '📋 Setlist', '📱 Remoto (celular)': '📱 À distance (tél.)' },
+  de: { 'ACCIONES': 'AKTIONEN', 'ANIMACIÓN': 'ANIMATION', 'GENERADOR': 'GENERATOR', 'CLIP': 'CLIP', 'CAPA': 'EBENE', 'COMPOSICIÓN': 'KOMPOSITION', 'RENDIMIENTO': 'LEISTUNG', 'MOTOR': 'ENGINE', 'NIVELES': 'PEGEL', 'ESTADO DEL SET': 'SET-STATUS', 'ENTRADA': 'EINGANG', 'SALIDA': 'AUSGANG', 'Nombre': 'Name', 'Tipo': 'Typ', 'Escala': 'Skalierung', 'Posición X': 'Position X', 'Posición Y': 'Position Y', 'Rotación': 'Drehung', 'Velocidad clip': 'Clip-Tempo', 'Velocidad global': 'Globales Tempo', 'Cantidad': 'Menge', 'Modo': 'Modus', 'Parámetro': 'Parameter', 'Público': 'Publikum', 'Remoto': 'Fern', 'Master': 'Master', 'Resolución': 'Auflösung', 'Sensibilidad': 'Empfindlichkeit', 'Set': 'Set', 'apagada': 'aus', 'off': 'aus', 'visible': 'sichtbar', 'invertir': 'invertieren', 'malla': 'Netz', 'contorno': 'Kontur', 'reset': 'Reset', '↩ Deshacer': '↩ Rückgängig', '↪ Rehacer': '↪ Wiederholen', '📖 Manual': '📖 Handbuch', '📊 Telemetría': '📊 Telemetrie', '📋 Setlist': '📋 Setlist', '📱 Remoto (celular)': '📱 Fern (Handy)' },
+  it: { 'ACCIONES': 'AZIONI', 'ANIMACIÓN': 'ANIMAZIONE', 'GENERADOR': 'GENERATORE', 'CLIP': 'CLIP', 'CAPA': 'LIVELLO', 'COMPOSICIÓN': 'COMPOSIZIONE', 'RENDIMIENTO': 'PRESTAZIONI', 'MOTOR': 'MOTORE', 'NIVELES': 'LIVELLI', 'ESTADO DEL SET': 'STATO DEL SET', 'ENTRADA': 'INGRESSO', 'SALIDA': 'USCITA', 'Nombre': 'Nome', 'Tipo': 'Tipo', 'Escala': 'Scala', 'Posición X': 'Posizione X', 'Posición Y': 'Posizione Y', 'Rotación': 'Rotazione', 'Velocidad clip': 'Velocità clip', 'Velocidad global': 'Velocità globale', 'Cantidad': 'Quantità', 'Modo': 'Modo', 'Parámetro': 'Parametro', 'Público': 'Pubblico', 'Remoto': 'Remoto', 'Master': 'Master', 'Resolución': 'Risoluzione', 'Sensibilidad': 'Sensibilità', 'Set': 'Set', 'apagada': 'spenta', 'off': 'off', 'visible': 'visibile', 'invertir': 'inverti', 'malla': 'mesh', 'contorno': 'contorno', 'reset': 'reset', '↩ Deshacer': '↩ Annulla', '↪ Rehacer': '↪ Ripeti', '📖 Manual': '📖 Manuale', '📊 Telemetría': '📊 Telemetria', '📋 Setlist': '📋 Scaletta', '📱 Remoto (celular)': '📱 Remoto (telefono)' },
+  ja: { 'ACCIONES': 'アクション', 'ANIMACIÓN': 'アニメーション', 'GENERADOR': 'ジェネレーター', 'CLIP': 'クリップ', 'CAPA': 'レイヤー', 'COMPOSICIÓN': 'コンポジション', 'RENDIMIENTO': 'パフォーマンス', 'MOTOR': 'エンジン', 'NIVELES': 'レベル', 'ESTADO DEL SET': 'セット状態', 'ENTRADA': '入力', 'SALIDA': '出力', 'Nombre': '名前', 'Tipo': '種類', 'Escala': 'スケール', 'Posición X': '位置X', 'Posición Y': '位置Y', 'Rotación': '回転', 'Velocidad clip': 'クリップ速度', 'Velocidad global': '全体速度', 'Cantidad': '量', 'Modo': 'モード', 'Parámetro': 'パラメータ', 'Público': '観客', 'Remoto': 'リモート', 'Master': 'マスター', 'Resolución': '解像度', 'Sensibilidad': '感度', 'Set': 'セット', 'apagada': 'オフ', 'off': 'オフ', 'visible': '表示', 'invertir': '反転', 'malla': 'メッシュ', 'contorno': '輪郭', 'reset': 'リセット', '↩ Deshacer': '↩ 元に戻す', '↪ Rehacer': '↪ やり直し', '📖 Manual': '📖 マニュアル', '📊 Telemetría': '📊 テレメトリ', '📋 Setlist': '📋 セットリスト', '📱 Remoto (celular)': '📱 リモート（スマホ）' },
+  zh: { 'ACCIONES': '操作', 'ANIMACIÓN': '动画', 'GENERADOR': '生成器', 'CLIP': '片段', 'CAPA': '图层', 'COMPOSICIÓN': '合成', 'RENDIMIENTO': '性能', 'MOTOR': '引擎', 'NIVELES': '电平', 'ESTADO DEL SET': '设置状态', 'ENTRADA': '输入', 'SALIDA': '输出', 'Nombre': '名称', 'Tipo': '类型', 'Escala': '缩放', 'Posición X': '位置X', 'Posición Y': '位置Y', 'Rotación': '旋转', 'Velocidad clip': '片段速度', 'Velocidad global': '全局速度', 'Cantidad': '数量', 'Modo': '模式', 'Parámetro': '参数', 'Público': '观众', 'Remoto': '远程', 'Master': '主控', 'Resolución': '分辨率', 'Sensibilidad': '灵敏度', 'Set': '集', 'apagada': '关', 'off': '关', 'visible': '可见', 'invertir': '反转', 'malla': '网格', 'contorno': '轮廓', 'reset': '重置', '↩ Deshacer': '↩ 撤销', '↪ Rehacer': '↪ 重做', '📖 Manual': '📖 手册', '📊 Telemetría': '📊 遥测', '📋 Setlist': '📋 歌单', '📱 Remoto (celular)': '📱 远程（手机）' },
+  ko: { 'ACCIONES': '동작', 'ANIMACIÓN': '애니메이션', 'GENERADOR': '제너레이터', 'CLIP': '클립', 'CAPA': '레이어', 'COMPOSICIÓN': '컴포지션', 'RENDIMIENTO': '성능', 'MOTOR': '엔진', 'NIVELES': '레벨', 'ESTADO DEL SET': '세트 상태', 'ENTRADA': '입력', 'SALIDA': '출력', 'Nombre': '이름', 'Tipo': '종류', 'Escala': '크기', 'Posición X': '위치 X', 'Posición Y': '위치 Y', 'Rotación': '회전', 'Velocidad clip': '클립 속도', 'Velocidad global': '전체 속도', 'Cantidad': '양', 'Modo': '모드', 'Parámetro': '매개변수', 'Público': '관객', 'Remoto': '원격', 'Master': '마스터', 'Resolución': '해상도', 'Sensibilidad': '감도', 'Set': '세트', 'apagada': '꺼짐', 'off': '꺼짐', 'visible': '표시', 'invertir': '반전', 'malla': '메시', 'contorno': '윤곽', 'reset': '초기화', '↩ Deshacer': '↩ 실행 취소', '↪ Rehacer': '↪ 다시 실행', '📖 Manual': '📖 매뉴얼', '📊 Telemetría': '📊 텔레메트리', '📋 Setlist': '📋 셋리스트', '📱 Remoto (celular)': '📱 원격(휴대폰)' },
+  ru: { 'ACCIONES': 'ДЕЙСТВИЯ', 'ANIMACIÓN': 'АНИМАЦИЯ', 'GENERADOR': 'ГЕНЕРАТОР', 'CLIP': 'КЛИП', 'CAPA': 'СЛОЙ', 'COMPOSICIÓN': 'КОМПОЗИЦИЯ', 'RENDIMIENTO': 'ПРОИЗВОДИТ.', 'MOTOR': 'ДВИЖОК', 'NIVELES': 'УРОВНИ', 'ESTADO DEL SET': 'СОСТОЯНИЕ СЕТА', 'ENTRADA': 'ВХОД', 'SALIDA': 'ВЫХОД', 'Nombre': 'Имя', 'Tipo': 'Тип', 'Escala': 'Масштаб', 'Posición X': 'Позиция X', 'Posición Y': 'Позиция Y', 'Rotación': 'Поворот', 'Velocidad clip': 'Скорость клипа', 'Velocidad global': 'Общая скорость', 'Cantidad': 'Количество', 'Modo': 'Режим', 'Parámetro': 'Параметр', 'Público': 'Публика', 'Remoto': 'Удалённо', 'Master': 'Мастер', 'Resolución': 'Разрешение', 'Sensibilidad': 'Чувствит.', 'Set': 'Сет', 'apagada': 'выкл', 'off': 'выкл', 'visible': 'видимо', 'invertir': 'инверт.', 'malla': 'сетка', 'contorno': 'контур', 'reset': 'сброс', '↩ Deshacer': '↩ Отмена', '↪ Rehacer': '↪ Повтор', '📖 Manual': '📖 Руководство', '📊 Telemetría': '📊 Телеметрия', '📋 Setlist': '📋 Сет-лист', '📱 Remoto (celular)': '📱 Пульт (телефон)' },
+  he: { 'ACCIONES': 'פעולות', 'ANIMACIÓN': 'אנימציה', 'GENERADOR': 'מחולל', 'CLIP': 'קליפ', 'CAPA': 'שכבה', 'COMPOSICIÓN': 'קומפוזיציה', 'RENDIMIENTO': 'ביצועים', 'MOTOR': 'מנוע', 'NIVELES': 'רמות', 'ESTADO DEL SET': 'מצב הסט', 'ENTRADA': 'כניסה', 'SALIDA': 'יציאה', 'Nombre': 'שם', 'Tipo': 'סוג', 'Escala': 'קנה מידה', 'Posición X': 'מיקום X', 'Posición Y': 'מיקום Y', 'Rotación': 'סיבוב', 'Velocidad clip': 'מהירות קליפ', 'Velocidad global': 'מהירות כללית', 'Cantidad': 'כמות', 'Modo': 'מצב', 'Parámetro': 'פרמטר', 'Público': 'קהל', 'Remoto': 'מרחוק', 'Master': 'מאסטר', 'Resolución': 'רזולוציה', 'Sensibilidad': 'רגישות', 'Set': 'סט', 'apagada': 'כבוי', 'off': 'כבוי', 'visible': 'גלוי', 'invertir': 'היפוך', 'malla': 'רשת', 'contorno': 'מתאר', 'reset': 'איפוס', '↩ Deshacer': '↩ בטל', '↪ Rehacer': '↪ בצע שוב', '📖 Manual': '📖 מדריך', '📊 Telemetría': '📊 טלמטריה', '📋 Setlist': '📋 רשימת סט', '📱 Remoto (celular)': '📱 שלט (טלפון)' },
+  ar: { 'ACCIONES': 'إجراءات', 'ANIMACIÓN': 'حركة', 'GENERADOR': 'مولد', 'CLIP': 'مقطع', 'CAPA': 'طبقة', 'COMPOSICIÓN': 'تركيب', 'RENDIMIENTO': 'الأداء', 'MOTOR': 'المحرك', 'NIVELES': 'المستويات', 'ESTADO DEL SET': 'حالة الجلسة', 'ENTRADA': 'إدخال', 'SALIDA': 'إخراج', 'Nombre': 'الاسم', 'Tipo': 'النوع', 'Escala': 'الحجم', 'Posición X': 'الموضع X', 'Posición Y': 'الموضع Y', 'Rotación': 'تدوير', 'Velocidad clip': 'سرعة المقطع', 'Velocidad global': 'السرعة العامة', 'Cantidad': 'الكمية', 'Modo': 'الوضع', 'Parámetro': 'معامل', 'Público': 'الجمهور', 'Remoto': 'عن بعد', 'Master': 'ماستر', 'Resolución': 'الدقة', 'Sensibilidad': 'الحساسية', 'Set': 'جلسة', 'apagada': 'مطفأ', 'off': 'مطفأ', 'visible': 'ظاهر', 'invertir': 'عكس', 'malla': 'شبكة', 'contorno': 'محيط', 'reset': 'إعادة', '↩ Deshacer': '↩ تراجع', '↪ Rehacer': '↪ إعادة', '📖 Manual': '📖 الدليل', '📊 Telemetría': '📊 القياس', '📋 Setlist': '📋 قائمة العزف', '📱 Remoto (celular)': '📱 تحكم (هاتف)' },
+};
+Object.assign(I18N.en, I18N_UI.en);
+Object.assign(I18N.en, {
+  '30 (ahorro / PC lenta)': '30 (saving / slow PC)', '60 (sin límite)': '60 (unlimited)', 'Audio': 'Audio',
+  'Crossfader A⇄B': 'Crossfader A⇄B', 'ESPACIO': 'SPACE', 'F (mantener)': 'F (hold)', 'FLASH': 'FLASH',
+  'Fade (seg)': 'Fade (sec)', 'Modo 1×': '1× mode', 'PREVIA (click der.)': 'PREVIEW (right-click)', 'Tap tempo': 'Tap tempo',
+  'tap tempo': 'tap tempo', 'blackout': 'blackout', '⬛ blackout': '⬛ blackout', 'pánico': 'panic', '🚨 pánico': '🚨 panic',
+  'c/4': 'ev.4', 'c/8': 'ev.8', 'c/16': 'ev.16', 'c/32': 'ev.32', 'cerrar panel / menú': 'close panel / menu',
+  'click': 'click', 'click derecho': 'right-click', 'click en un control + mover el pad': 'click a control + move the pad',
+  'color ▸': 'color ▸', 'colores:': 'colors:', 'disparar celda / columna': 'trigger cell / column',
+  'disparar columnas': 'trigger columns', 'disparar escena (Shift = guardar)': 'trigger scene (Shift = save)',
+  'en OUTPUT: F o doble click': 'in OUTPUT: F or double click', 'espacio ▸': 'space ▸', 'este panel': 'this panel',
+  'flash blanco': 'white flash', 'número ▸': 'number ▸', 'pantalla completa': 'fullscreen',
+  'plasma audio-reactivo': 'audio-reactive plasma', 'arcoíris (default Shadertoy)': 'rainbow (Shadertoy default)',
+  'túnel 3D raymarch': '3D raymarch tunnel', 'rnd': 'rnd', '→ mod X/Y': '→ mod X/Y', '⇅V': '⇅V', '⇋H': '⇋H',
+  '⇱ acoplar': '⇱ dock', '⌨ Atajos': '⌨ Shortcuts', '⏺ REC': '⏺ REC', '⏺ grabar': '⏺ record', '▶ START': '▶ START',
+  '◂ color': '◂ color', '◂ espacio': '◂ space', '◂ número': '◂ number', '⚙ PROPIEDADES': '⚙ PROPERTIES',
+  '⚙ Propiedades (clip/capa/composición)': '⚙ Properties (clip/layer/composition)', '⚙ Render': '⚙ Render',
+  '✏ personalizada…': '✏ custom…', '🎹 MIDI learn': '🎹 MIDI learn', '🎹 MIDI learn on/off': '🎹 MIDI learn on/off',
+  '🎹 MIDI: reintentar conexión': '🎹 MIDI: retry connection', '💾': '💾', '📂': '📂', '📜 GLSL / SHADERTOY': '📜 GLSL / SHADERTOY',
+  '📱 Remoto': '📱 Remote', '📷 Cámara / capturadora HDMI': '📷 Camera / HDMI capture', '🔊 Audio': '🔊 Audio',
+  '🕸 EDITOR DE NODOS': '🕸 NODE EDITOR', '🗺 MAPPING': '🗺 MAPPING', '🧪 CREAR GENERADOR': '🧪 CREATE GENERATOR',
+  '🧪 chequear todo': '🧪 check everything', 'denegado — click 🎹 para reintentar': 'denied — click 🎹 to retry',
+  'sin pasos — guardá escenas y agregalas acá': 'no steps — save scenes and add them here', 'reset': 'reset',
+  'MAPA NANOPAD2 DE FÁBRICA — el botón SCENE del aparato cambia el banco · el pad X-Y siempre es X/Y': 'nanoPAD2 FACTORY MAP — the device SCENE button changes bank · the X-Y pad is always X/Y',
+  'SETLIST — encadená escenas con tiempos y dejá la noche programada': 'SETLIST — chain scenes with times and program the night',
+  'esquinas = deformar · arrastrá adentro = mover · click = elegir superficie': 'corners = warp · drag inside = move · click = pick surface',
+  'pegá el código de shadertoy.com (mainImage) o un .frag': 'paste shadertoy.com code (mainImage) or a .frag',
+  'arrastrá de un punto de salida a uno de entrada · click en un cable lo corta': 'drag from an output port to an input · click a cable to cut it',
+  'tocá 🔍 detectar y aceptá el permiso — te digo cuántas pantallas hay y cuál es cuál': 'tap 🔍 detect and accept the permission — I’ll tell you how many screens there are and which is which',
+  '💥 RÁFAGA también se puede mapear a un pad MIDI (botón 🎹 y tocás el pad).': '💥 BURST can also be mapped to a MIDI pad (🎹 button and hit the pad).',
+});
+for (const k in CORE_TR) Object.assign(I18N[k], CORE_TR[k]);
 const I18N_SKIP = 'input,textarea,[data-noi18n],.cell,.gtile,#genShelf,.cname,#nowName';
 function curLang() { return uiPrefs.lang || 'es'; }
 function t(es) { const d = I18N[curLang()]; return (d && d[es]) || es; }
@@ -7785,16 +7941,16 @@ function applyLang() {
   document.documentElement.lang = curLang();
   I18N_ROOTS.forEach(sel => translateRoot(document.querySelector(sel)));
 }
-// re-traducir el panel de opciones cada vez que se reconstruye (solo si no es español)
+// re-traducir las ventanas que se reconstruyen (panel, propiedades, mapping, generadores)
 (() => {
-  const cp = document.getElementById('cpanel');
-  if (!cp) return;
+  const watch = ['cpanel', 'propwin', 'mapwin', 'maptools', 'genwin', 'glslwin', 'nodewin', 'bottom'];
   let pend = false;
-  new MutationObserver(() => {
+  const obs = new MutationObserver(() => {
     if (curLang() === 'es' || pend) return;
     pend = true;
-    requestAnimationFrame(() => { pend = false; translateRoot(cp); });
-  }).observe(cp, { childList: true, subtree: true });
+    requestAnimationFrame(() => { pend = false; watch.forEach(id => translateRoot(document.getElementById(id))); });
+  });
+  watch.forEach(id => { const el = document.getElementById(id); if (el) obs.observe(el, { childList: true, subtree: true }); });
 })();
 function setLang(l) {
   uiPrefs.lang = LANGS[l] ? l : 'es';
