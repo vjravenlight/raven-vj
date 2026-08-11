@@ -1733,9 +1733,14 @@ function program(ctx, key, fsSrc, vsSrc) {
   if (ctx.progs.has(key)) return ctx.progs.get(key);
   const gl = ctx.gl;
   const p = gl.createProgram();
-  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vsSrc || VS));
-  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fsSrc));
+  const vs = compile(gl, gl.VERTEX_SHADER, vsSrc || VS);
+  const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
+  gl.attachShader(p, vs);
+  gl.attachShader(p, fs);
   gl.linkProgram(p);
+  // ya linkeado: los objetos shader sueltos se pueden liberar (el programa conserva su copia)
+  gl.detachShader(p, vs); gl.detachShader(p, fs);
+  gl.deleteShader(vs); gl.deleteShader(fs);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
     console.error(gl.getProgramInfoLog(p)); throw new Error('link');
   }
@@ -1744,6 +1749,14 @@ function program(ctx, key, fsSrc, vsSrc) {
   return p;
 }
 function U(gl, p, n) { if (!(n in p._u)) p._u[n] = gl.getUniformLocation(p, n); return p._u[n]; }
+/* liberar un shader de la GPU (borrar solo del Map deja el programa huérfano y la memoria de video se llena) */
+function dropProgram(ctx, key) {
+  const p = ctx.progs.get(key);
+  if (!p) return;
+  try { ctx.gl.deleteProgram(p); } catch (e) { }
+  ctx.progs.delete(key);
+}
+function dropProgramAll(key) { dropProgram(main, key); dropProgram(prev, key); }
 function makeTex(gl, w, h) {
   const t = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, t);
@@ -2592,16 +2605,22 @@ function uploadVideo(gl, s) {
   }
   return 1;
 }
+let lastRaf = 0;
 function frame() {
   requestAnimationFrame(frame);
+  lastRaf = performance.now();
   renderTick();
 }
 /* Chrome estrangula el rAF si la ventana está minimizada O TAPADA por otra
-   (incluso con document.hidden=false). Si el render se atrasa, lo empuja un
-   timer — así el OUTPUT nunca se congela. */
+   (incluso con document.hidden=false). Este timer lo empuja SOLO si el rAF
+   está realmente congelado (>250 ms sin correr).
+   OJO: no debe dispararse porque la PC va lenta — si el umbral fuera corto,
+   cada frame pesado provocaría renders extra que la exigen más todavía
+   (espiral: se traba cada vez más). Por eso mira el rAF, no la duración. */
 setInterval(() => {
-  if (performance.now() - (renderTick._last || 0) > 20) renderTick();
-}, 8);
+  const t = performance.now();
+  if (t - lastRaf > 250 && t - (renderTick._last || 0) > 100) renderTick();
+}, 60);
 /* keepalive WebRTC: una conexión loopback interna marca la pestaña como
    "en llamada" y Chrome deja de estrangular los timers cuando el OUTPUT
    está en pantalla completa tapando la app → render fluido siempre */
@@ -2627,7 +2646,14 @@ function renderTick() {
   nowSec = t / 1000;
   telemetry.frames[telemetry.fi % 120] = dt * 1000; telemetry.fi++;
   if (dt > .05 && !state.fpsCap) telemetry.dropped++;
-  fpsN++; if (t - fpsT > 1000) { fps = fpsN; fpsN = 0; fpsT = t; $('#fpsLbl').textContent = fps + ' fps · ' + state.res.join('×'); }
+  fpsN++; if (t - fpsT > 1000) {
+    fps = fpsN; fpsN = 0; fpsT = t; $('#fpsLbl').textContent = fps + ' fps · ' + state.res.join('×');
+    // si la PC no llega, avisar (una vez por minuto) en vez de dejar que se arrastre
+    if (fps > 0 && fps < 22 && !state.fpsCap && t > 25000 && t - (renderTick._warn || 0) > 60000) {
+      renderTick._warn = t;
+      toast('⚠ La PC va justa (' + fps + ' fps) — probá el modo liviano 🐢 en el panel (Ctrl+Alt+T → Render)');
+    }
+  }
 
   audioTick(dt); clockTick(dt); layerTick(dt);
   $('#mB').style.height = (2 + audio.bass * 16) + 'px';
@@ -2636,17 +2662,28 @@ function renderTick() {
 
   const gl = main.gl;
   // 1) fuentes
+  // opacidad efectiva por capa: si una capa no se ve (crossfader, opacidad 0, solo,
+  // bypass, blackout), NO gastamos GPU renderizando su generador.
+  const xa0 = Math.min(1, 2 - 2 * state.xfade), xb0 = Math.min(1, 2 * state.xfade);
+  const anySolo0 = state.layers.some(L => L.solo);
+  const layVis = state.layers.map((L, l) =>
+    L.opacity * (L.opMod === 'off' ? 1 : .15 + .85 * modValue(L.opMod)) * (l < 2 ? xa0 : xb0) *
+    (L.byp ? 0 : 1) * (anySolo0 && !L.solo ? 0 : 1));
+  const masterOff = state.blackout || state.master < .004;
   const texs = [], fits = [], hasA = [], hasB = [];
   for (let l = 0; l < LAYERS; l++) {
     const L = state.layers[l];
+    const skipGen = masterOff || layVis[l] < .004; // capa invisible → saltear el shader
     for (let si = 0; si < 2; si++) {
       const s = L.slots[si];
       let ok = 0;
       if (s.kind === 'video') { ok = uploadVideo(gl, s); }
       else if (s.kind === 'gif' && s.cell) { ok = uploadGif(gl, s, dt * slotRate(L, s)); }
       else if (s.kind === 'gen' && s.cell) {
-        const [ep1, ep2] = effGp(s.cell);
-        renderGen(main, s.cell.presetIdx, s.tgt, ep1, ep2, L.genT);
+        if (!skipGen) { // invisible: se reusa la textura anterior (nadie la ve)
+          const [ep1, ep2] = effGp(s.cell);
+          renderGen(main, s.cell.presetIdx, s.tgt, ep1, ep2, L.genT);
+        }
         s.fit = [1, 1]; ok = 1;
       }
       else if (s.kind === 'text' && s.cell) {
@@ -2662,7 +2699,7 @@ function renderTick() {
       const tr = s.cell && effTr(s.cell);
       const hasTr = tr && (tr.sc !== 1 || tr.x || tr.y || tr.rot ||
         cellAnimOn(s.cell, ['sc', 'x', 'y', 'rot']));
-      if (ok && ((L.fx && L.fx.id !== 'none') || hasTr)) {
+      if (ok && !skipGen && ((L.fx && L.fx.id !== 'none') || hasTr)) {
         tex = layerFxPass(s, tex, fit, L, tr);
         fit = [1, 1];
       }
@@ -4449,7 +4486,14 @@ function histSnap() { // snapshot con debounce tras cada cambio
   clearTimeout(hist.t);
   hist.t = setTimeout(() => {
     if (hist.busy) return;
-    let j; try { j = JSON.stringify(serialize()); } catch (e) { return; }
+    let j;
+    try {
+      const d = serialize();
+      // las miniaturas son dataURL base64: ~1,5 MB por snapshot y 30 en RAM.
+      // Fuera del historial — se conservan aparte al deshacer (histApply).
+      if (d.cells) for (const c of d.cells) c.thumb = '';
+      j = JSON.stringify(d);
+    } catch (e) { return; }
     if (hist.stack[hist.idx] === j) return;
     hist.stack.splice(hist.idx + 1); // un cambio nuevo descarta los "rehacer"
     hist.stack.push(j);
@@ -4471,7 +4515,23 @@ function reattachFromPool() { // volver a enlazar videos/GIFs desde el pool de a
 }
 function histApply(j) {
   hist.busy = true;
-  try { deserialize(JSON.parse(j)); reattachFromPool(); } catch (e) { console.error(e); }
+  // las miniaturas no viajan en el historial (peso): las preservamos de la sesión viva
+  const thumbs = new Map();
+  (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => {
+    if (c.thumb) thumbs.set((c.dk || 0) + ':' + c.l + ':' + c.c, c.thumb);
+  })));
+  try {
+    deserialize(JSON.parse(j));
+    let restored = 0;
+    (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => {
+      if (!c.thumb && c.kind !== 'empty') {
+        const t = thumbs.get((c.dk || 0) + ':' + c.l + ':' + c.c);
+        if (t) { c.thumb = t; restored++; }
+      }
+    })));
+    reattachFromPool();
+    if (restored) buildGrid();
+  } catch (e) { console.error(e); }
   setTimeout(() => { hist.busy = false; }, 900);
 }
 function undo() {
@@ -6412,7 +6472,7 @@ let genEditIdx = -1; // -1 = nuevo; >=0 edita un custom existente
 function bumpGenLive() {
   const old = 'cgenlive_v' + (genKey._lv || 0);
   genKey._lv = (genKey._lv || 0) + 1;
-  prev.progs.delete(old); main.progs.delete(old);
+  dropProgramAll(old); // liberar el shader viejo de la GPU, no solo del cache
 }
 function openGenBuilder(cfg, editIdx) {
   genEditIdx = editIdx === undefined ? -1 : editIdx;
