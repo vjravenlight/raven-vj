@@ -289,8 +289,17 @@ MAPPING MULTI-SUPERFICIE
   enderezar proyección torcida, partir la imagen entre 2 pantallas,
   mapear cajas o paredes.
 
+  UNA CAPA POR SUPERFICIE (ruteo por capa / "slices") 🎯
+  Cada superficie puede mandar la MEZCLA COMPLETA (como siempre) o UNA
+  CAPA SOLA. En el selector de la superficie elegí "solo CAPA 1", "solo
+  CAPA 2", etc. Así podés tener la CAPA 1 en un proyector/objeto y la
+  CAPA 2 en otro, cada una con su propio clip, efecto y velocidad.
+  Ejemplo: capa 1 → pared del fondo, capa 2 → columnas, capa 3 → la
+  pantalla del DJ. Ojo: una capa ruteada se ve en su superficie SIEMPRE,
+  aunque el crossfader esté del otro lado (sale por su propia salida).
+
   CONTROLES POR SUPERFICIE (panel Ctrl+Alt+T → Render → MAPPING):
-  - Fuente (completa/mitades/cuartos), ON/off, ⧉ duplicar, ✕ borrar.
+  - Fuente (completa/mitades/cuartos), qué capa manda, ON/off, ⧉ duplicar, ✕ borrar.
   - Máscara de forma: círculo, rombo, triángulo, hexágono o estrella,
     con "invertir" (recorta el centro en vez del borde).
   - Opacidad de la superficie (para fundir capas de proyección).

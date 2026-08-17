@@ -994,7 +994,7 @@ function applyTheme(name) {
 const WARP_ID = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 function newSurface() {
   return { pts: [[0, 0], [1, 0], [1, 1], [0, 1]], src: [0, 0, 1, 1], on: true, _m: null,
-    op: 1, mask: 0, maskInv: 0, soft: 0, line: 0, flipX: 0, flipY: 0 };
+    op: 1, mask: 0, maskInv: 0, soft: 0, line: 0, flipX: 0, flipY: 0, layer: -1 };
 }
 /* homografía: cuadrado unitario → 4 esquinas, invertida para el shader */
 function computeWarp(sf) {
@@ -1782,6 +1782,7 @@ const main = makeCtx($('#outCanvas'));
 const prev = makeCtx($('#prevgl'));
 const prev2dCtx = $('#prev2d').getContext('2d');
 let ping = [], fbTgt = null, blackTex = null;
+let layerTgt = [null, null, null, null]; // salida de cada capa sola (para superficies ruteadas por capa)
 
 function allocTargets() {
   const gl = main.gl, [w, h] = state.res;
@@ -1789,6 +1790,8 @@ function allocTargets() {
   // liberar los framebuffers viejos antes de recrear (si no, cada cambio de resolución los filtra)
   ping.forEach(t => freeTarget(gl, t));
   freeTarget(gl, fbTgt);
+  layerTgt.forEach(t => freeTarget(gl, t));
+  layerTgt = [null, null, null, null];
   ping = [makeTarget(gl, w, h), makeTarget(gl, w, h)];
   fbTgt = makeTarget(gl, w, h);
   if (!blackTex) blackTex = makeTex(gl, 2, 2);
@@ -2670,10 +2673,16 @@ function renderTick() {
     L.opacity * (L.opMod === 'off' ? 1 : .15 + .85 * modValue(L.opMod)) * (l < 2 ? xa0 : xb0) *
     (L.byp ? 0 : 1) * (anySolo0 && !L.solo ? 0 : 1));
   const masterOff = state.blackout || state.master < .004;
+  // capas ruteadas a su propia superficie de mapping: salen por ahí aunque el
+  // crossfader las tenga bajas, así que igual hay que renderizarlas
+  const routed = new Set();
+  if (state.map.on) for (const sf of state.map.surfaces) {
+    if (sf.on && sf.layer >= 0 && sf.layer < LAYERS) routed.add(sf.layer);
+  }
   const texs = [], fits = [], hasA = [], hasB = [];
   for (let l = 0; l < LAYERS; l++) {
     const L = state.layers[l];
-    const skipGen = masterOff || layVis[l] < .004; // capa invisible → saltear el shader
+    const skipGen = !routed.has(l) && (masterOff || layVis[l] < .004); // capa invisible → saltear el shader
     for (let si = 0; si < 2; si++) {
       const s = L.slots[si];
       let ok = 0;
@@ -2730,6 +2739,24 @@ function renderTick() {
   gl.uniform4f(U(gl, cp, 'u_hasB'), ...hasB);
   gl.uniform4i(U(gl, cp, 'u_mode'), ...state.layers.map(L => L.mode));
   draw(gl);
+  // 2b) capas ruteadas: cada una a su propio target, para mandarla a una superficie
+  //     (sin crossfader ni solo: si la mandás a una superficie, querés verla ahí)
+  for (const rl of routed) {
+    if (!layerTgt[rl]) layerTgt[rl] = makeTarget(gl, state.res[0], state.res[1]);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, layerTgt[rl].fbo);
+    gl.viewport(0, 0, state.res[0], state.res[1]);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    const L2 = state.layers[rl];
+    const solo = [0, 0, 0, 0];
+    solo[rl] = L2.byp ? 0 : L2.opacity * (L2.opMod === 'off' ? 1 : .15 + .85 * modValue(L2.opMod));
+    gl.uniform4f(U(gl, cp, 'u_op'), ...solo);
+    draw(gl);
+  }
+  if (routed.size) { // dejar el composite general de vuelta en ping[0]
+    gl.bindFramebuffer(gl.FRAMEBUFFER, ping[0].fbo);
+    gl.uniform4f(U(gl, cp, 'u_op'), ...ops);
+  }
   // 3) cadena de efectos
   let cur = 0;
   for (const fx of state.effects) {
@@ -2785,10 +2812,13 @@ function renderTick() {
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.uniform1f(U(gl, fp, 'u_beat'), beatEnv);
     const testOn = state.map.test ? 1 : 0;
-    const srcTex = ping[cur].tex;
+    const compTex = ping[cur].tex;
+    // fuente de cada superficie: la composición entera, o UNA capa suelta (ruteo por capa)
+    const srcOf = sf => (sf.layer >= 0 && layerTgt[sf.layer]) ? layerTgt[sf.layer].tex : compTex;
     let mp = null; // programa de malla, se compila la 1ª vez que hace falta
     for (const sf of state.map.surfaces) {
       if (!sf.on) continue;
+      const srcTex = srcOf(sf);
       if (sf.mesh) {
         // superficie con malla: geometría triangulada (superficies curvas)
         if (!mp) mp = program(main, 'mesh', MESH_FS, MESH_VS);
@@ -2817,6 +2847,7 @@ function renderTick() {
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
         continue;
       }
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex); // composición o capa ruteada
       gl.uniform1f(U(gl, fp, 'u_warpOn'), 1);
       gl.uniformMatrix3fv(U(gl, fp, 'u_warp'), false, sf._m || WARP_ID);
       gl.uniform4f(U(gl, fp, 'u_srcRect'), sf.src[0], sf.src[1], sf.src[2], sf.src[3]);
@@ -4290,6 +4321,7 @@ function serialize() {
         bez: sf.bez ? { c: sf.bez.c, h: sf.bez.h } : null,
         maskPts: sf.maskPts || null, maskSmooth: sf.maskSmooth ? 1 : 0,
         maskSvg: sf.maskSvg && sf.maskSvg.length < 400000 ? sf.maskSvg : null,
+        layer: sf.layer == null ? -1 : sf.layer,
       })),
     },
     fxPresets: state.fxPresets,
@@ -4401,6 +4433,7 @@ function deserialize(d) {
         bez: sf.bez && Array.isArray(sf.bez.c) && Array.isArray(sf.bez.h) ? { c: sf.bez.c, h: sf.bez.h } : null,
         maskPts: Array.isArray(sf.maskPts) ? sf.maskPts : null,
         maskSmooth: !!sf.maskSmooth, maskSvg: sf.maskSvg || null,
+        layer: typeof sf.layer === 'number' ? sf.layer : -1,
       };
       if (s.bez) bezToMesh(s); else if (s.mesh) syncMeshCorners(s);
       if (s.maskPts || s.maskSvg) { try { rasterizeMask(s); } catch (e) { } }
@@ -5278,6 +5311,12 @@ function buildSurfList() {
     const cur = SRC_PRESETS.findIndex(([, rect]) => JSON.stringify(rect) === JSON.stringify(sf.src));
     src.value = cur >= 0 ? cur : 0;
     src.onchange = () => { sf.src = [...SRC_PRESETS[+src.value][1]]; markDirty(); };
+    const lay = el('select');
+    lay.title = 'qué manda esta superficie: la mezcla completa, o UNA capa sola (para partir capas entre proyectores/pantallas)';
+    [['-1', 'mezcla completa'], ['0', 'solo CAPA 1'], ['1', 'solo CAPA 2'], ['2', 'solo CAPA 3'], ['3', 'solo CAPA 4']]
+      .forEach(([v, txt]) => { const o = el('option'); o.value = v; o.textContent = txt; lay.appendChild(o); });
+    lay.value = sf.layer == null ? -1 : sf.layer;
+    lay.onchange = () => { sf.layer = +lay.value; markDirty(); };
     const onb = el('button', 'mini' + (sf.on ? ' on' : ''));
     onb.textContent = sf.on ? 'ON' : 'off';
     onb.onclick = () => { sf.on = !sf.on; markDirty(); buildSurfList(); };
@@ -5298,7 +5337,7 @@ function buildSurfList() {
       positionWarpDots(); markDirty(); buildSurfList();
     };
     const btns = el('span'); btns.style.display = 'flex'; btns.style.gap = '4px';
-    btns.append(src, onb, dup, del);
+    btns.append(src, lay, onb, dup, del);
     r.append(nm, btns);
     box.appendChild(r);
     // segunda fila: controles finos de la superficie (estilo Advanced Output)
@@ -5630,6 +5669,13 @@ function mapEditorSync() {
   src.value = cur >= 0 ? cur : 0;
   src.onchange = () => { sf.src = [...SRC_PRESETS[+src.value][1]]; markDirty(); };
   tb.appendChild(src);
+  const layS = el('select');
+  layS.title = 'qué manda esta superficie: la mezcla completa, o UNA capa sola';
+  [['-1', 'mezcla completa'], ['0', 'solo CAPA 1'], ['1', 'solo CAPA 2'], ['2', 'solo CAPA 3'], ['3', 'solo CAPA 4']]
+    .forEach(([v, txt]) => { const o = el('option'); o.value = v; o.textContent = txt; layS.appendChild(o); });
+  layS.value = sf.layer == null ? -1 : sf.layer;
+  layS.onchange = () => { sf.layer = +layS.value; markDirty(); buildSurfList(); };
+  tb.appendChild(layS);
   const onS = el('button', 'mini' + (sf.on ? ' on' : ''));
   onS.textContent = sf.on ? 'visible' : 'oculta';
   onS.onclick = () => { sf.on = !sf.on; markDirty(); mapEditorSync(); buildSurfList(); };
