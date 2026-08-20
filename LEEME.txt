@@ -101,6 +101,18 @@ MODO DE REPRODUCCIÓN POR CLIP 🔁
   - 🔄 rebote (solo GIF): ida y vuelta, ping-pong.
   Se guarda con el clip.
 
+TRANSICIONES ENTRE CLIPS ✨
+  Al lado del FADE hay un selector con 6 transiciones: ✖ fundido,
+  ◧ barrido horizontal, ⬒ barrido vertical, ◎ círculo, ▦ glitch
+  (bloques) y ⬛ por negro. La velocidad la sigue dando la perilla FADE.
+  Se guarda con el set.
+
+CONEXIONES DEL REMOTO — SEGURIDAD 🛡
+  Cuando un celular intenta conectarse al remoto, la app TE PREGUNTA
+  (Aceptar / Aceptar siempre / Rechazar; a los 20 s rechaza sola).
+  En el panel Remoto: "aceptar automáticamente" para fiestas con gente
+  de confianza, y "✕ expulsar a todos" para cortar en seco.
+
 MODO 1× (MONO) — un solo clip a la vez
   El botón 1× al lado del FADE: dispares la celda que dispares, se
   reproduce UN solo clip y cada disparo reemplaza al anterior con la
