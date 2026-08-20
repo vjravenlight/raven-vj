@@ -107,6 +107,69 @@ TRANSICIONES ENTRE CLIPS ✨
   (bloques) y ⬛ por negro. La velocidad la sigue dando la perilla FADE.
   Se guarda con el set.
 
+CUE POINTS 📍 (marcadores dentro de un video)
+  Click derecho en un clip de video → Propiedades → fila 📍 Cues:
+  "＋ marcar acá" guarda la posición actual (hasta 8 por clip). Click
+  en un cue = saltar ahí. Click derecho en el cue = borrarlo. Cada cue
+  se puede mapear a MIDI (modo LEARN y tocás el chip), y el salto
+  aplica a TODOS los videos que estén al aire. Viajan con el set.
+
+ESTELA / TRAILS 🌊 (efecto)
+  En el rack de efectos (por capa o master): "Estela / Trails" deja
+  rastros de los frames anteriores que se desvanecen — el clásico
+  feedback psicodélico. Persistencia = cuánto dura el rastro,
+  deriva = zoom del eco (túnel infinito).
+
+AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
+  Panel → Audio → "Auto-DROP": la app escucha la música, detecta el
+  RISER (cuando el bombo se va y queda la tensión arriba), arma el
+  BUILD progresivo sola, y cuando el bombo VUELVE dispara el DROP con
+  flash y el compás re-anclado. Si el riser se pincha, baja sin flash.
+  Cooldown de 8 s para no re-disparar. Ideal para cuando estás
+  demasiado ocupado mezclando como para apretar BUILD a mano.
+
+TUS VIDEOS VUELVEN SOLOS 🔗 (auto-relink)
+  Si cargás los videos con "+ VIDEOS" o arrastrándolos, la app
+  recuerda DE DÓNDE salieron (Chrome/Edge). La próxima vez que abrís
+  el set, aparece un cartel "🔗 Recuperar videos": un click, un
+  permiso, y todos los clips vuelven a sus celdas sin buscar carpetas.
+
+COLOR DE CINE — LUTs .cube 🎬
+  Panel → Render → COLOR (LUT .cube): cargá cualquier LUT .cube
+  (los mismos de DaVinci/Premiere; hay miles gratis) y toda la salida
+  toma ese look. Perilla de intensidad para dosificar. Afecta la
+  salida completa (proyector incluido), se guarda con el set.
+
+AUDIO DEL SISTEMA 🔊 (sin cables)
+  Panel → Audio → "audio del sistema": capturá lo que suena en la PC
+  (Spotify, el DJ set en otra pestaña) SIN micrófono ni cable virtual.
+  Elegí la pestaña/pantalla y marcá "Compartir audio" en el diálogo.
+
+GAMEPAD 🎮
+  Enchufá un joystick de PS/Xbox y listo (aviso al conectar):
+  - Stick izquierdo: pad XY · Stick derecho: crossfader
+  - RT: BUILD (soltar = DROP) · LT: FLASH analógico (apretás = flash)
+  - A: TAP tempo · B: 🎲 efecto random · X: ráfaga 🎉 · Y: BLACKOUT
+  - LB/RB: columna anterior/siguiente · D-pad: decks y escenas
+  Se puede apagar en panel → MIDI.
+
+AUTO-MÁSCARA POR CÁMARA 📷 (mapping sin dibujar)
+  Ventana de MAPPING → "📷 auto-máscara": apuntá una webcam a la
+  proyección; la app proyecta blanco y negro, compara lo que ve la
+  cámara, y la forma iluminada queda recortada como máscara SOLA
+  (visión por diferencia, sin IA). Con poca luz ambiente funciona
+  mejor. Después la retocás con la pluma si hace falta.
+
+ESTRUCTURAS ANIMADAS 📐 (líneas que corren al ritmo)
+  Ventana de MAPPING → "📐 dibujar estructura": trazá líneas o figuras
+  sobre el escenario (bordes de la tarima, marcos, columnas) y quedan
+  ANIMADAS al BPM. 4 efectos por estructura: 🏃 recorrido de luz,
+  ➖ guiones marchando, 💓 latido, ⚡ estrobo al beat. Color fijo o
+  🌈 ciclo, velocidad en beats, y 🔊 para que el grosor siga los
+  graves. Cerrá la figura clickeando el primer punto (rellena en
+  estrobo) o Enter para dejarla como línea abierta. Se guardan con
+  el set.
+
 CONEXIONES DEL REMOTO — SEGURIDAD 🛡
   Cuando un celular intenta conectarse al remoto, la app TE PREGUNTA
   (Aceptar / Aceptar siempre / Rechazar; a los 20 s rechaza sola).

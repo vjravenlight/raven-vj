@@ -965,7 +965,7 @@ const state = {
     surfaces: [{ pts: [[0, 0], [1, 0], [1, 1], [0, 1]], src: [0, 0, 1, 1], on: true, _m: null }],
   },
   fxPresets: {}, mono: true, outScreen: -1, theme: 'fenix',
-  customGens: [], gSpeed: 1, snap: 0, trans: 0,
+  customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [],
   decks: null, deckIdx: 0,
 };
 const DECK_NAMES = ['A', 'B', 'C', 'D'];
@@ -2785,6 +2785,15 @@ function renderTick() {
   }
 
   audioTick(dt); clockTick(dt); layerTick(dt); gpTick(); autoDropTick(dt);
+  if (scanFlat) { // escaneo de auto-máscara: proyectar plano blanco o negro
+    const gfl = main.gl;
+    gfl.bindFramebuffer(gfl.FRAMEBUFFER, null);
+    gfl.viewport(0, 0, main.canvas.width, main.canvas.height);
+    const cfl = scanFlat === 1 ? 1 : 0;
+    gfl.clearColor(cfl, cfl, cfl, 1);
+    gfl.clear(gfl.COLOR_BUFFER_BIT);
+    return;
+  }
   $('#mB').style.height = (2 + audio.bass * 16) + 'px';
   $('#mM').style.height = (2 + audio.mid * 16) + 'px';
   $('#mH').style.height = (2 + audio.high * 16) + 'px';
@@ -3009,6 +3018,7 @@ function renderTick() {
     setLUTUniforms(gl, fp);
     draw(gl);
   }
+  structsDraw(gl); // estructuras de líneas animadas sobre el mapping
   pubDraw(gl); // reacciones del público flotando sobre la salida
 
   livePrevTick();
@@ -4596,6 +4606,7 @@ function serialize() {
     auto: { mode: state.auto.mode, beats: state.auto.beats },
     lfo: state.lfo.map(l => ({ wave: l.wave, rate: l.rate })),
     scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans, autoDrop: !!state.autoDrop,
+    structs: state.structs && state.structs.length ? state.structs : null,
     beatSens: state.beatSens, fpsCap: state.fpsCap, mono: state.mono, monoV: 2,
     outScreen: state.outScreen, theme: state.theme, gSpeed: state.gSpeed,
     res: state.res,
@@ -4721,6 +4732,9 @@ function deserialize(d) {
   state.snap = d.snap || 0; if ($('#snapSel')) $('#snapSel').value = state.snap;
   state.trans = d.trans || 0; if ($('#transSel')) $('#transSel').value = state.trans;
   state.autoDrop = !!d.autoDrop;
+  state.structs = Array.isArray(d.structs)
+    ? d.structs.filter(s => s && Array.isArray(s.pts) && s.pts.length > 1).slice(0, 24)
+    : [];
   $('#rndSel').value = state.rndBeats;
   state.xfade = d.xfade ?? .5;
   $('#xfadeIn').value = state.xfade;
@@ -6100,7 +6114,7 @@ function mapEditorSync() {
   const row4 = el('span');
   row4.style.cssText = 'display:flex;gap:6px;align-items:center;width:100%;font-size:10px;color:var(--dim);flex-wrap:wrap';
   if (penMode) {
-    const done = el('button', 'mini on'); done.textContent = '✔ cerrar máscara (Enter)';
+    const done = el('button', 'mini on'); done.textContent = penFor === 'struct' ? '✔ terminar estructura (Enter)' : '✔ cerrar máscara (Enter)';
     done.onclick = closePen;
     const cancel = el('button', 'mini'); cancel.textContent = '✕ cancelar (Esc)';
     cancel.onclick = cancelPen;
@@ -6108,8 +6122,12 @@ function mapEditorSync() {
   } else {
     const pen = el('button', 'mini'); pen.textContent = '✏ dibujar máscara';
     pen.title = 'marcá con clicks el contorno del objeto real (cuadro, ventana, escultura) y esa forma queda como máscara';
-    pen.onclick = startPen;
+    pen.onclick = () => startPen('mask');
     row4.appendChild(pen);
+    const cam = el('button', 'mini'); cam.textContent = '📷 auto-máscara';
+    cam.title = 'apuntá una webcam a la proyección: la app proyecta blanco y negro, compara lo que ve la cámara, y la forma iluminada queda de máscara sola (sin IA, pura matemática)';
+    cam.onclick = autoMaskScan;
+    row4.appendChild(cam);
     if (sf.maskPts) {
       const sm = el('button', 'mini' + (sf.maskSmooth ? ' on' : '')); sm.textContent = '∿ curvas';
       sm.title = 'suavizar las esquinas de la máscara dibujada (bordes curvos)';
@@ -6130,6 +6148,52 @@ function mapEditorSync() {
     row4.append(imp, exp);
   }
   tb.appendChild(row4);
+  // fila 5: estructuras de líneas animadas 📐
+  const row5 = el('span');
+  row5.style.cssText = 'display:flex;gap:6px;align-items:center;width:100%;font-size:10px;color:var(--dim);flex-wrap:wrap';
+  if (!penMode) {
+    const sd = el('button', 'mini'); sd.textContent = '📐 dibujar estructura';
+    sd.title = 'trazá líneas o figuras sobre el escenario y quedan animadas al ritmo (recorrido de luz, guiones, latido, estrobo)';
+    sd.onclick = () => startPen('struct');
+    row5.appendChild(sd);
+    (state.structs || []).forEach((st, i) => {
+      const g = el('span');
+      g.style.cssText = 'display:flex;gap:3px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:1px 4px';
+      const onb = el('button', 'mini' + (st.on !== false ? ' on' : '')); onb.textContent = 'E' + (i + 1);
+      onb.title = 'prender/apagar esta estructura';
+      onb.onclick = () => { st.on = st.on === false; markDirty(); mapEditorSync(); };
+      const fx = el('select'); fx.className = 'mini';
+      [['chase', '🏃 recorrido'], ['dash', '➖ guiones'], ['pulse', '💓 latido'], ['strobe', '⚡ estrobo']].forEach(([v, n]) => {
+        const o = el('option'); o.value = v; o.textContent = n; if (st.fx === v) o.selected = true; fx.appendChild(o);
+      });
+      fx.onchange = () => { st.fx = fx.value; markDirty(); };
+      const colSel = el('select'); colSel.className = 'mini';
+      [['cycle', '🌈 ciclo'], ['pick', '🎨 color']].forEach(([v, n]) => {
+        const o = el('option'); o.value = v; o.textContent = n;
+        if ((st.color === 'cycle') === (v === 'cycle')) o.selected = true;
+        colSel.appendChild(o);
+      });
+      const colIn = el('input'); colIn.type = 'color';
+      colIn.value = st.color && st.color !== 'cycle' ? st.color : '#ff7a1a';
+      colIn.style.cssText = 'width:22px;height:18px;padding:0;border:none;background:none' + (st.color === 'cycle' ? ';display:none' : '');
+      colSel.onchange = () => { st.color = colSel.value === 'cycle' ? 'cycle' : colIn.value; markDirty(); mapEditorSync(); };
+      colIn.oninput = () => { st.color = colIn.value; markDirty(); };
+      const bt = el('select'); bt.className = 'mini'; bt.title = 'velocidad (beats por vuelta)';
+      [[1, '1 beat'], [2, '2 beats'], [4, '4 beats'], [8, '8 beats']].forEach(([v, n]) => {
+        const o = el('option'); o.value = v; o.textContent = n; if ((st.beats || 2) === v) o.selected = true; bt.appendChild(o);
+      });
+      bt.onchange = () => { st.beats = +bt.value; markDirty(); };
+      const rc = el('button', 'mini' + (st.react && st.react !== 'off' ? ' on' : '')); rc.textContent = '🔊';
+      rc.title = 'reaccionar al audio (el grosor sigue los graves)';
+      rc.onclick = () => { st.react = st.react === 'bass' ? 'off' : 'bass'; markDirty(); mapEditorSync(); };
+      const del = el('button', 'mini'); del.textContent = '✕';
+      del.title = 'borrar esta estructura';
+      del.onclick = () => { state.structs.splice(i, 1); markDirty(); mapEditorSync(); };
+      g.append(onb, fx, colSel, colIn, bt, rc, del);
+      row5.appendChild(g);
+    });
+  }
+  tb.appendChild(row5);
   rebuildMapHandles();
 }
 function pointInQuad(p, pts) {
@@ -6189,7 +6253,10 @@ function rebuildMapHandles() {
     const uv = [clamp01((e.clientX - r.left) / r.width), clamp01(1 - (e.clientY - r.top) / r.height)];
     if (penMode) { // modo pluma: cada click marca un punto de la máscara
       if (e.button !== 0) return;
-      if (penPts.length >= 3 && Math.hypot(uv[0] - penPts[0][0], uv[1] - penPts[0][1]) < .03) { closePen(); return; }
+      if (penPts.length >= 3 && Math.hypot(uv[0] - penPts[0][0], uv[1] - penPts[0][1]) < .03) {
+        if (penFor === 'struct') penPts.push(penPts[0].slice()); // clickear el 1° = figura cerrada
+        closePen(); return;
+      }
       penPts.push(uv);
       return;
     }
@@ -6304,22 +6371,135 @@ function drawMapPrev() {
   });
 }
 
+/* ---------------- auto-máscara por cámara 📷 (luz estructurada simple, sin IA) ---------------- */
+let scanFlat = 0; // 1 = proyectar blanco · 2 = negro (para el diff de cámara)
+function traceLargestRegion(bin, W, H) { // componente conexa más grande + su contorno (Moore)
+  const lab = new Int32Array(W * H);
+  const qx = new Int32Array(W * H), qy = new Int32Array(W * H);
+  let best = 0, bestN = 0, cur = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (!bin[i] || lab[i]) continue;
+    cur++;
+    let head = 0, tail = 0, n = 0;
+    qx[tail] = x; qy[tail] = y; tail++; lab[i] = cur;
+    while (head < tail) {
+      const cx = qx[head], cy = qy[head]; head++; n++;
+      if (cx + 1 < W && bin[cy * W + cx + 1] && !lab[cy * W + cx + 1]) { lab[cy * W + cx + 1] = cur; qx[tail] = cx + 1; qy[tail] = cy; tail++; }
+      if (cx > 0 && bin[cy * W + cx - 1] && !lab[cy * W + cx - 1]) { lab[cy * W + cx - 1] = cur; qx[tail] = cx - 1; qy[tail] = cy; tail++; }
+      if (cy + 1 < H && bin[(cy + 1) * W + cx] && !lab[(cy + 1) * W + cx]) { lab[(cy + 1) * W + cx] = cur; qx[tail] = cx; qy[tail] = cy + 1; tail++; }
+      if (cy > 0 && bin[(cy - 1) * W + cx] && !lab[(cy - 1) * W + cx]) { lab[(cy - 1) * W + cx] = cur; qx[tail] = cx; qy[tail] = cy - 1; tail++; }
+    }
+    if (n > bestN) { bestN = n; best = cur; }
+  }
+  if (bestN < 30) return null;
+  const at = (x, y) => x >= 0 && y >= 0 && x < W && y < H && lab[y * W + x] === best;
+  let sx = -1, sy = -1;
+  outer: for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (at(x, y)) { sx = x; sy = y; break outer; }
+  const dirs = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+  const pts = [[sx, sy]];
+  let px2 = sx, py2 = sy, dir = 6;
+  for (let steps = 0; steps < W * H; steps++) {
+    let found = -1;
+    for (let k = 0; k < 8; k++) {
+      const d = (dir + 6 + k) % 8;
+      const nx2 = px2 + dirs[d][0], ny2 = py2 + dirs[d][1];
+      if (at(nx2, ny2)) { found = d; px2 = nx2; py2 = ny2; break; }
+    }
+    if (found < 0) break;
+    dir = found;
+    if (px2 === sx && py2 === sy) break;
+    pts.push([px2, py2]);
+  }
+  return pts;
+}
+function rdp(pts, eps) { // simplificación Douglas-Peucker (iterativa)
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    const A = pts[a], B = pts[b];
+    const dx = B[0] - A[0], dy = B[1] - A[1];
+    const len = Math.hypot(dx, dy) || 1;
+    let dmax = 0, idx = -1;
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.abs(dy * pts[i][0] - dx * pts[i][1] + B[0] * A[1] - B[1] * A[0]) / len;
+      if (d > dmax) { dmax = d; idx = i; }
+    }
+    if (dmax > eps && idx > 0) { keep[idx] = 1; stack.push([a, idx], [idx, b]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+async function autoMaskScan() { // proyecta blanco/negro, mira con la cámara, y la forma iluminada queda de máscara
+  const sf = state.map.surfaces[state.map.sel];
+  if (!sf) return;
+  let st;
+  try { st = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 } } }); }
+  catch (e) { toast('📷 No pude abrir la cámara'); return; }
+  toast('📷 Escaneando… apuntá la cámara a la proyección y no la muevas');
+  const v = document.createElement('video');
+  v.srcObject = st; v.muted = true; v.playsInline = true;
+  await v.play().catch(() => { });
+  const W = 160, H = 90;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d', { willReadFrequently: true });
+  const grab = () => { x.drawImage(v, 0, 0, W, H); return x.getImageData(0, 0, W, H).data.slice(); };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  await wait(500);           // que la cámara ajuste exposición
+  scanFlat = 1; await wait(850); const wf = grab();
+  scanFlat = 2; await wait(850); const bf = grab();
+  scanFlat = 0;
+  st.getTracks().forEach(t => t.stop());
+  const bin = new Uint8Array(W * H);
+  let lit = 0;
+  for (let i = 0; i < W * H; i++) {
+    const d = (wf[i * 4] + wf[i * 4 + 1] + wf[i * 4 + 2]) - (bf[i * 4] + bf[i * 4 + 1] + bf[i * 4 + 2]);
+    if (d > 110) { bin[i] = 1; lit++; }
+  }
+  if (lit < 40) { toast('📷 No detecté la proyección — bajá la luz ambiente y probá de nuevo'); return; }
+  const contour = traceLargestRegion(bin, W, H);
+  if (!contour || contour.length < 8) { toast('📷 Detección muy chica — acercá la cámara'); return; }
+  const simp = rdp(contour, 1.8).slice(0, 60);
+  sf.maskPts = simp.map(p => [p[0] / W, 1 - p[1] / H]);
+  sf.maskSmooth = true;
+  sf.maskSvg = null;
+  rasterizeMask(sf);
+  markDirty(); mapEditorSync();
+  toast('📷 Auto-máscara lista (' + sf.maskPts.length + ' puntos) — retocá con la pluma si hace falta');
+}
 /* ---------------- pluma de máscaras + SVG (import/export) ---------------- */
-let penMode = false, penPts = [];
-function startPen() {
-  penMode = true; penPts = [];
-  toast('✏ Click para marcar puntos · click en el 1° (o Enter) cierra · Esc cancela · click derecho borra el último');
+let penMode = false, penPts = [], penFor = 'mask';
+function startPen(kind) {
+  penMode = true; penPts = []; penFor = kind === 'struct' ? 'struct' : 'mask';
+  toast(penFor === 'struct'
+    ? '📐 Click para trazar la estructura · Enter termina (click en el 1° la cierra) · Esc cancela'
+    : '✏ Click para marcar puntos · click en el 1° (o Enter) cierra · Esc cancela · click derecho borra el último');
   mapEditorSync();
 }
 function cancelPen() { penMode = false; penPts = []; mapEditorSync(); }
 function closePen() {
-  const sf = state.map.surfaces[state.map.sel];
-  if (sf && penPts.length >= 3) {
-    sf.maskPts = penPts.map(p => p.slice());
-    sf.maskSvg = null; // la pluma reemplaza un SVG importado
-    rasterizeMask(sf);
-    markDirty();
-    toast('✏ Máscara aplicada a la superficie ' + (state.map.sel + 1));
+  if (penFor === 'struct') {
+    if (penPts.length >= 2) {
+      const first = penPts[0], last = penPts[penPts.length - 1];
+      const closed = penPts.length > 2 && Math.hypot(first[0] - last[0], first[1] - last[1]) < .04;
+      const pp = penPts.map(p => p.slice());
+      if (closed && Math.hypot(first[0] - last[0], first[1] - last[1]) < .001) pp.pop(); // punto duplicado del cierre
+      state.structs = state.structs || [];
+      state.structs.push({ pts: pp, closed, fx: 'chase', color: 'cycle', beats: 2, width: 5, react: 'off', on: true });
+      markDirty();
+      toast('📐 Estructura ' + state.structs.length + ' creada — elegile efecto y color en la fila 📐');
+    }
+  } else {
+    const sf = state.map.surfaces[state.map.sel];
+    if (sf && penPts.length >= 3) {
+      sf.maskPts = penPts.map(p => p.slice());
+      sf.maskSvg = null; // la pluma reemplaza un SVG importado
+      rasterizeMask(sf);
+      markDirty();
+      toast('✏ Máscara aplicada a la superficie ' + (state.map.sel + 1));
+    }
   }
   penMode = false; penPts = [];
   mapEditorSync();
@@ -6530,6 +6710,96 @@ function pubToggle() {
   document.head.appendChild(s);
 }
 function pubBroadcastConfig() { pub.conns.forEach(c => { try { c.send(pubConfigMsg()); } catch (e) { } }); }
+/* ---------------- estructuras 📐: líneas y figuras animadas sobre el mapping ---------------- */
+function hexA(hex, a) {
+  const m = /^#?([0-9a-f]{6})/i.exec(hex || '');
+  if (!m) return `rgba(255,122,26,${a})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function structsDraw(gl) {
+  const list = state.structs;
+  if (!list || !list.length || !list.some(s => s.on !== false && s.pts && s.pts.length > 1)) return;
+  const W = main.canvas.width, H = main.canvas.height;
+  const me = structsDraw;
+  if (!me.cv || me.cv.width !== W || me.cv.height !== H) {
+    me.cv = document.createElement('canvas'); me.cv.width = W; me.cv.height = H;
+    me.ctx = me.cv.getContext('2d');
+  }
+  const x = me.ctx;
+  x.clearRect(0, 0, W, H);
+  list.forEach((st, si) => {
+    if (st.on === false || !st.pts || st.pts.length < 2) return;
+    const P = st.pts.map(p => [p[0] * W, (1 - p[1]) * H]);
+    let len = 0;
+    for (let i = 1; i < P.length; i++) len += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
+    if (st.closed) len += Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]);
+    if (len < 2) return;
+    const ph = (beatFloat / (st.beats || 2) + si * .37) % 1; // desfase por estructura: no marchan en fila
+    const react = st.react === 'bass' ? audio.bass : st.react === 'beat' ? beatEnv : 0;
+    const wpx = Math.max(1, (st.width || 5) * H / 720 * (1 + react * 1.4));
+    const hue = st.color === 'cycle' ? (beatFloat * 11 + si * 47) % 360 : null;
+    const col = a => hue != null ? `hsla(${hue},95%,62%,${a})` : hexA(st.color, a);
+    const path = () => {
+      x.beginPath();
+      P.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1]));
+      if (st.closed) x.closePath();
+    };
+    x.lineJoin = 'round'; x.lineCap = 'round';
+    if (st.fx === 'dash') { // guiones marchando
+      path();
+      x.strokeStyle = col(.95); x.lineWidth = wpx;
+      x.setLineDash([len * .05, len * .038]); x.lineDashOffset = -ph * len;
+      x.shadowColor = col(1); x.shadowBlur = wpx * 2;
+      x.stroke();
+      x.setLineDash([]); x.shadowBlur = 0;
+    } else if (st.fx === 'chase') { // un pulso de luz recorriendo el trazado
+      path();
+      x.strokeStyle = col(.2); x.lineWidth = Math.max(1, wpx * .45); x.stroke(); // guía tenue
+      path();
+      x.setLineDash([len * .13, len]); x.lineDashOffset = -ph * len;
+      x.strokeStyle = col(1); x.lineWidth = wpx;
+      x.shadowColor = col(1); x.shadowBlur = wpx * 3;
+      x.stroke();
+      x.setLineDash([]); x.shadowBlur = 0;
+    } else if (st.fx === 'strobe') { // flash al beat (rellena si es figura cerrada)
+      path();
+      const onb = beatEnv > .45;
+      if (st.closed && onb) { x.fillStyle = col(.4 * beatEnv); x.fill(); }
+      x.strokeStyle = col(onb ? 1 : .28); x.lineWidth = wpx;
+      x.shadowColor = col(1); x.shadowBlur = onb ? wpx * 3 : 0;
+      x.stroke();
+      x.shadowBlur = 0;
+    } else { // 'pulse': late con el beat
+      path();
+      x.strokeStyle = col(.5 + .5 * beatEnv);
+      x.lineWidth = wpx * (1 + beatEnv * .8);
+      x.shadowColor = col(1); x.shadowBlur = wpx * (1 + beatEnv * 2.2);
+      x.stroke();
+      x.shadowBlur = 0;
+    }
+  });
+  if (!me.tex) me.tex = makeTex(gl, 2, 2);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, me.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, me.cv); }
+  catch (e) {
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    return;
+  }
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  const bp = program(main, 'blit', BLIT_FS);
+  gl.useProgram(bp);
+  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  draw(gl);
+  gl.disable(gl.BLEND);
+}
 function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) sobre la salida
   const showQR = pub.qrShow && pub.qrImg && pub.qrImg.complete && pub.qrImg.naturalWidth > 0;
   if (!pub.parts.length && !showQR) return;
