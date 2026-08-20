@@ -1,0 +1,94 @@
+<!-- RAVEN VJ — espejo de salida: ver la salida del VJ en este dispositivo (solo mirar) -->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+  <title>RAVEN VJ — Espejo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #000; color: #eee; font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; color-scheme: dark; }
+    #login { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0c0c0e; }
+    #login h1 { font-size: 22px; letter-spacing: 2px; color: #ff7a1a; }
+    #login .sub { font-size: 12px; color: #888; text-align: center; max-width: 300px; line-height: 1.5; }
+    #code { font-size: 26px; letter-spacing: 8px; text-align: center; text-transform: uppercase; width: 230px; padding: 10px; background: #17171a; border: 1px solid #333; border-radius: 10px; color: #eee; outline: none; }
+    #code:focus { border-color: #ff7a1a; }
+    #go { font-size: 16px; padding: 10px 34px; background: #ff7a1a; color: #000; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    #go:disabled { opacity: .5 }
+    #st { font-size: 12px; color: #8dff3f; min-height: 16px; text-align: center; }
+    #v { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
+    #hint { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 11px; color: #666; pointer-events: none; transition: opacity 1s; }
+  </style>
+</head>
+<body>
+  <div id="login">
+    <h1>🪞 RAVEN VJ — ESPEJO</h1>
+    <div class="sub">Mirá la salida del VJ en este dispositivo, en vivo. Pedile el código del remoto (el VJ tiene que aceptarte).</div>
+    <input id="code" maxlength="6" placeholder="CÓDIGO" autocomplete="off">
+    <button id="go">VER</button>
+    <div id="st"></div>
+  </div>
+  <video id="v" autoplay playsinline muted></video>
+  <div id="hint" style="display:none">tocá la pantalla para pantalla completa</div>
+  <script>
+    const $ = s => document.querySelector(s);
+    const qs = new URLSearchParams(location.search);
+    const auto = qs.get('auto') === '1';
+    let peer = null, conn = null;
+    try { $('#code').value = (qs.get('code') || localStorage.getItem('ravenvj_espejo_code') || '').toUpperCase(); } catch (e) { }
+    function st(msg, err) { $('#st').textContent = msg; $('#st').style.color = err ? '#ff3d54' : '#8dff3f'; }
+    function connect() {
+      const code = $('#code').value.trim().toLowerCase();
+      if (code.length < 4) { st('poné el código del remoto', 1); return; }
+      try { localStorage.setItem('ravenvj_espejo_code', code.toUpperCase()); } catch (e) { }
+      $('#go').disabled = true;
+      st('conectando…');
+      peer = new Peer();
+      peer.on('error', e => { st('error: ' + (e.type || e.message) + ' — ¿código bien? ¿remoto activo?', 1); $('#go').disabled = false; });
+      peer.on('open', () => {
+        conn = peer.connect('ravenvj-' + code, { metadata: { espejo: 1 }, reliable: true });
+        conn.on('open', () => { st('esperando el OK del VJ…'); conn.send({ t: 'espejo' }); });
+        conn.on('close', () => {
+          $('#v').style.display = 'none'; $('#v').srcObject = null;
+          $('#login').style.display = 'flex'; $('#go').disabled = false;
+          st('desconectado', 1);
+        });
+      });
+      peer.on('call', call => {
+        call.answer(); // solo recibimos, no mandamos nada
+        call.on('stream', stream => {
+          $('#v').srcObject = stream;
+          $('#v').style.display = 'block';
+          $('#login').style.display = 'none';
+          $('#v').play().catch(() => { });
+          if (!auto) {
+            $('#hint').style.display = 'block';
+            setTimeout(() => { $('#hint').style.opacity = 0; }, 4000);
+          }
+          st('');
+        });
+      });
+    }
+    $('#go').onclick = connect;
+    $('#code').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+    document.addEventListener('click', () => {
+      if ($('#v').style.display === 'block' && !document.fullscreenElement && !auto)
+        document.documentElement.requestFullscreen().catch(() => { });
+    });
+    // cargar PeerJS (local si está al lado, CDN de respaldo) y auto-conectar si viene ?code&auto=1
+    (function () {
+      const boot = () => { if (auto && $('#code').value.length >= 4) connect(); };
+      const s = document.createElement('script');
+      s.src = 'peerjs.min.js';
+      s.onload = boot;
+      s.onerror = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js';
+        s2.onload = boot;
+        s2.onerror = () => st('no se pudo cargar el módulo de conexión (¿hay internet?)', 1);
+        document.head.appendChild(s2);
+      };
+      document.head.appendChild(s);
+    })();
+  </script>
+</body>
+</html>

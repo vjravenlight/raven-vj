@@ -1,9 +1,9 @@
 /* RAVEN VJ — service worker: network-first con fallback a cache.
    Con internet: sirve lo último y refresca el cache.
    Sin internet: sirve el cache completo (la app funciona offline). */
-const CACHE = 'ravenvj-v5';
+const CACHE = 'ravenvj-v6';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg',
-  './remote.html', './output.html', './peerjs.min.js'];
+  './remote.html', './output.html', './espejo.html', './peerjs.min.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
@@ -31,6 +31,7 @@ self.addEventListener('fetch', e => {
         const p = new URL(e.request.url).pathname;
         if (p.endsWith('/remote.html')) return caches.match('./remote.html');
         if (p.endsWith('/output.html')) return caches.match('./output.html');
+        if (p.endsWith('/espejo.html')) return caches.match('./espejo.html');
         if (e.request.mode === 'navigate') return caches.match('./index.html'); // solo navegaciones a la app
         return Response.error(); // assets fallidos: error claro, no HTML de la app
       })

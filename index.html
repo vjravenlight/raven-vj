@@ -1596,6 +1596,11 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  vec2 zuv=(v_uv-.5)*(1.-u_p2*.035)+.5;               // deriva: la estela se abre hacia afuera
  vec3 pr=texture(u_prev,zuv).rgb*(.5+u_p1*.485);      // persistencia: cuánto dura la estela
  o=vec4(max(cur,pr),1.);}` },
+{ id: 'strobe', name: 'Estrobo', p: ['velocidad', 'oscuridad'], fs: `void main(){
+ float st=max(u_bpm,30.)/60.*pow(2.,floor(u_p1*3.99)); // destellos por beat: 1/2/4/8
+ float duty=1.-u_p2*.85;                               // oscuridad: cuánto dura el negro
+ float on=step(fract(u_time*st),duty);
+ o=vec4(texture(u_tex,v_uv).rgb*on,1.);}` },
 ];
 
 const COMP_FS = `#version 300 es
@@ -2607,6 +2612,16 @@ function applySpeed(L) {
   }
 }
 function applyAllSpeeds() { state.layers.forEach(applySpeed); }
+function toggleFreeze(l) { // ❄ congelar la capa: velocidad a 0 y vuelta a la que tenía
+  const L = state.layers[l];
+  if (!L) return;
+  if (L.speed === 0) { L.speed = L._preFreeze || 1; delete L._preFreeze; }
+  else { L._preFreeze = L.speed; L.speed = 0; }
+  applySpeed(L);
+  if (midiRefs['lspd:' + l]) midiRefs['lspd:' + l].value = L.speed;
+  if (midiRefs['lfreeze:' + l]) midiRefs['lfreeze:' + l].classList.toggle('on', L.speed === 0);
+  markDirty();
+}
 /* ¿por qué no se ve esta capa? — para avisar en vez de dejar el misterio */
 function layerMutedReason(l) {
   const L = state.layers[l];
@@ -3208,13 +3223,19 @@ function layerCtrl(l) {
     L.speed = +spd.value;
     spd.title = 'velocidad: ' + Math.round(L.speed * 100) + '%' + (L.speed === 0 ? ' (congelado)' : '');
     applySpeed(L);
+    if (midiRefs['lfreeze:' + l]) midiRefs['lfreeze:' + l].classList.toggle('on', L.speed === 0);
     markDirty();
   };
   midiRefs['lspd:' + l] = spd;
+  const fz = el('button', 'mini' + (L.speed === 0 ? ' on' : '')); fz.textContent = '❄';
+  fz.title = 'congelar el cuadro (freeze) — otro click descongela a la velocidad que tenía';
+  fz.dataset.map = 'lfreeze:' + l;
+  fz.onclick = () => toggleFreeze(l);
+  midiRefs['lfreeze:' + l] = fz;
   const cl = el('button', 'mini'); cl.textContent = '✕'; cl.title = 'apagar capa (fade a negro)';
   cl.onclick = () => clearLayer(l);
   cl.dataset.map = 'lclear:' + l;
-  r3.append(au, spd, cl);
+  r3.append(au, spd, fz, cl);
   // fila AUTO: transición automática de clips de esta capa
   const r4 = el('div', 'lrow');
   const A = L.auto;
@@ -4369,6 +4390,7 @@ function applyTarget(id, val, kind, on) {
     case 'scene': if (on) recallScene(+a); break;
     case 'dice': if (on) randomizeFx(); break;
     case 'react': if (on) pubBurst(); break;
+    case 'lfreeze': if (on) toggleFreeze(+a); break;
     case 'cue': if (on) { // saltar al cue N en todos los videos que estén sonando
       const ci = +a;
       state.layers.forEach(L2 => {
@@ -4997,18 +5019,24 @@ $('#syncBtn').onclick = syncBpm;
 
 /* ---------------- grabación de la salida ---------------- */
 let rec = null, recT0 = 0, recTimer = 0;
+function pickRecMime() { // MP4 si el browser sabe (Chrome moderno) — abre en cualquier lado; si no, WebM
+  for (const m of ['video/mp4;codecs=avc1.64002A,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'])
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  return 'video/webm';
+}
 function toggleRec() {
   if (rec) { if (rec.state !== 'inactive') rec.stop(); return; }
   const stream = main.canvas.captureStream(60);
   if (audio.on && audio.stream) audio.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
-  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const mime = pickRecMime();
+  const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
   const chunks = [];
   rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12e6 });
   rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
   rec.onstop = () => {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
-    a.download = 'ravenvj-rec.webm';
+    a.href = URL.createObjectURL(new Blob(chunks, { type: mime.split(';')[0] }));
+    a.download = 'ravenvj-rec.' + ext;
     a.click();
     rec = null; clearInterval(recTimer);
     $('#recBtn').classList.remove('on');
@@ -5503,7 +5531,13 @@ function buildCpTab(id) {
         <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&bgcolor=0c0c0e&color=8dff3f&data=${encodeURIComponent(url)}"
           width="170" height="170" style="border-radius:8px" alt="QR"></div>
       <div class="cprow"><span class="v">Escaneá el QR con el celu. La conexión inicial necesita internet
-        (sirve el hotspot del propio celu); después el control va directo por WiFi.</span></div>`
+        (sirve el hotspot del propio celu); después el control va directo por WiFi.</span></div>
+      <div class="cph">🪞 ESPEJO DE SALIDA</div>
+      <div class="cprow"><span class="v">Para VER tu salida en otro dispositivo (tablet, celu, otra PC):
+        abrí <b style="user-select:text">ravenlight.net/ravenvj/espejo.html</b> y poné este mismo código.
+        Solo mira, no puede tocar nada.</span></div>
+      <div class="cprow"><b>Para OBS</b><span class="v" style="user-select:text">fuente Navegador →
+        espejo.html?code=${remote.code}&amp;auto=1</span></div>`
         : `<div class="cprow"><span class="v">Activalo: aparece un código + QR. Desde el celu manejás la grilla,
         escenas, columnas, XY, master, crossfader y macros (FLASH, BUILD, BLACKOUT, PÁNICO) en tiempo real.</span></div>`);
     const pubUrl = 'https://www.ravenlight.net/ravenvj/remote.html?p=' + pub.code;
@@ -5658,6 +5692,7 @@ function mapTargetName(t) {
   if (k === 'lop') return `Opacidad CAPA ${+a + 1}`;
   if (k === 'lspd') return `Velocidad CAPA ${+a + 1}`;
   if (k === 'lclear') return `Apagar CAPA ${+a + 1}`;
+  if (k === 'lfreeze') return `❄ Congelar CAPA ${+a + 1}`;
   if (k === 'scene') return `Escena ${+a + 1}`;
   if (k === 'fx') return `Efecto #${a} · ${b}`;
   return t;
@@ -6984,7 +7019,10 @@ function acceptRemoteConn(conn) {
 }
 function askRemoteConn(conn) { // cartel Aceptar / Rechazar con timeout de 20 s
   const d = el('div', 'connask');
-  const tt = el('b'); tt.textContent = '📱 Un celular quiere conectarse al remoto';
+  const tt = el('b');
+  tt.textContent = conn.metadata && conn.metadata.espejo
+    ? '🪞 Alguien quiere VER tu salida (espejo, solo mirar)'
+    : '📱 Un celular quiere conectarse al remoto';
   const row = el('span');
   const ok = el('button', 'mini on'); ok.textContent = '✔ Aceptar';
   const always = el('button', 'mini'); always.textContent = '✔✔ Aceptar siempre';
@@ -7003,12 +7041,14 @@ function kickAllRemotes() {
   const n = remote.conns.length;
   remote.conns.forEach(c => { try { c.close(); } catch (e) { } });
   remote.conns = [];
+  stopMirror();
   buildCpTab('remote');
   toast(n ? '📱 ' + n + ' celular(es) expulsado(s)' : 'No había nadie conectado');
 }
 function remoteToggle() {
   if (remote.on || remote.peer) {
     remote.conns.forEach(c => { try { c.close(); } catch (e) { } });
+    stopMirror();
     if (remote.peer) { try { remote.peer.destroy(); } catch (e) { } }
     remote.peer = null; remote.code = ''; remote.conns = []; remote.on = false;
     buildCpTab('remote');
@@ -7024,7 +7064,7 @@ function remoteToggle() {
       if (!remote.on && remote.peer) toast('⚠ El remoto no conectó (¿hay internet?) — desactivalo y reintentá');
     }, 10000);
     remote.peer.on('connection', conn => {
-      conn.on('data', d => { if (!conn._ok) return; try { remoteMsg(d); } catch (e) { console.error(e); } });
+      conn.on('data', d => { if (!conn._ok) return; try { remoteMsg(d, conn); } catch (e) { console.error(e); } });
       conn.on('close', () => { remote.conns = remote.conns.filter(c => c !== conn); buildCpTab('remote'); });
       conn.on('open', () => {
         if (uiPrefs.remoteAuto) acceptRemoteConn(conn);
@@ -7062,12 +7102,31 @@ function layoutMsg() {
 }
 function sendLayout(conn) { try { conn.send(layoutMsg()); } catch (e) { } }
 function remoteBroadcastLayout() { if (remote.on) remote.conns.forEach(sendLayout); }
-function remoteMsg(d) {
+function remoteMsg(d, conn) {
   if (!d || !d.t) return;
   if (d.t === 'cell') qTriggerCell(+d.l, +d.c);
   else if (d.t === 'col') qTriggerColumn(+d.c);
   else if (d.t === 'scene') recallScene(+d.i);
   else if (d.t === 'tgt') applyTarget(String(d.id), +d.val || 0, d.kind || 'cc', d.on ? 1 : 0);
+  else if (d.t === 'espejo') mirrorTo(conn);
+}
+/* ---------------- espejo de salida 🪞: ver la salida en cualquier browser (y en OBS) ---------------- */
+let mirrorStream = null;
+const mirrorCalls = [];
+function mirrorTo(conn) {
+  if (!remote.peer || !conn) return;
+  try {
+    if (!mirrorStream) mirrorStream = main.canvas.captureStream(30);
+    const call = remote.peer.call(conn.peer, mirrorStream);
+    call.on('close', () => { const i = mirrorCalls.indexOf(call); if (i >= 0) mirrorCalls.splice(i, 1); });
+    mirrorCalls.push(call);
+    toast('🪞 Espejo de salida transmitiendo');
+  } catch (e) { console.error('espejo:', e); }
+}
+function stopMirror() {
+  mirrorCalls.forEach(c => { try { c.close(); } catch (e) { } });
+  mirrorCalls.length = 0;
+  if (mirrorStream) { try { mirrorStream.getTracks().forEach(t => t.stop()); } catch (e) { } mirrorStream = null; }
 }
 
 /* ---------------- menú contextual del programa ---------------- */

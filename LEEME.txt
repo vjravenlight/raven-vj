@@ -136,6 +136,33 @@ AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
   psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
   el golpe visual del drop sale solo.
 
+ESPEJO DE SALIDA 🪞 (ver tu salida en cualquier lado)
+  Activá el Remoto (panel → Remoto) y en cualquier otro dispositivo
+  con browser (tablet, celu, otra PC, smart TV) abrí:
+  www.ravenlight.net/ravenvj/espejo.html → poné el mismo código del
+  remoto → la app te pregunta si aceptás → esa pantalla VE tu salida
+  en vivo. Es solo-mirar: no puede tocar nada. Sirve para monitorear
+  desde la cabina, para una segunda pantalla lejana, o para que el
+  organizador vea qué está saliendo.
+  PARA OBS (streamear tus visuales): fuente "Navegador" con la URL
+  espejo.html?code=TUCODIGO&auto=1 — entra sola, sin interfaz.
+
+FREEZE FRAME ❄ (congelar el cuadro)
+  Botón ❄ en cada capa: congela el cuadro exacto que se está viendo
+  (video, generador, lo que sea). Otro click y sigue a la velocidad
+  que tenía. Mapeable a MIDI. Clásico para cortar el movimiento en
+  seco en un golpe del tema.
+
+ESTROBO ⚡ (efecto)
+  En el rack de efectos, por capa o master: destellos sincronizados
+  al BPM (1/2/4/8 por beat) con perilla de oscuridad. Como todos los
+  FX, con moduladores. ⚠ Cuidado con el público fotosensible.
+
+GRABAR EN MP4 🎬
+  ⏺ REC ahora graba directo en MP4 si tu Chrome/Edge es moderno
+  (antes salía WebM, que no todos los reproductores abren). Si el
+  browser no sabe MP4, cae a WebM como siempre.
+
 TUS VIDEOS VUELVEN SOLOS 🔗 (auto-relink)
   Si cargás los videos con "+ VIDEOS" o arrastrándolos, la app
   recuerda DE DÓNDE salieron (Chrome/Edge). La próxima vez que abrís
