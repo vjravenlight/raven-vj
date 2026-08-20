@@ -136,6 +136,31 @@ AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
   psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
   el golpe visual del drop sale solo.
 
+B2B 🤝 (dos VJs, dos compus)
+  Panel → Remoto → sección B2B. El que RECIBE activa su remoto y pasa
+  el código; el que MANDA pone ese código y "🤝 mandar mi salida".
+  El receptor acepta, y la salida completa del otro VJ le cae como un
+  CLIP en una celda vacía: la dispara en una capa, le pone efectos,
+  la mezcla con el crossfader… un back-to-back de verdad, cada uno
+  con su compu. Necesita internet para conectar (después va directo).
+
+TIME MACHINE ⏪ (rebobinar lo que salió)
+  Panel → Render → TIME MACHINE: "prender" graba los últimos ~20 s
+  de tu salida en segundo plano. El botón REPLAY los mete como clip
+  en una celda vacía: ¿pasó un momento épico? Lo rebobinás y lo
+  loopeás al toque. Usa algo de CPU: prendela cuando la vayas a usar.
+
+JOG / SCRATCH 🎚
+  Propiedades de un video → fila 🎚 Jog → "mapear a MIDI" (modo
+  LEARN y girá tu perilla): la perilla pasa a SER el cabezal del
+  video de esa capa — frotá el clip para adelante y para atrás como
+  un plato. Respeta el recorte inicio/fin.
+
+COLOR POR COLUMNA 🎨
+  Click derecho en el NÚMERO de una columna → elegí un color. El
+  número queda pintado: marcá visualmente qué columnas son psy, cuál
+  es el bloque chill, dónde están los logos… Viaja con el set.
+
 ESPEJO DE SALIDA 🪞 (ver tu salida en cualquier lado)
   Activá el Remoto (panel → Remoto) y en cualquier otro dispositivo
   con browser (tablet, celu, otra PC, smart TV) abrí:

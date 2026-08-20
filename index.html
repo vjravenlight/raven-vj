@@ -965,7 +965,7 @@ const state = {
     surfaces: [{ pts: [[0, 0], [1, 0], [1, 1], [0, 1]], src: [0, 0, 1, 1], on: true, _m: null }],
   },
   fxPresets: {}, mono: true, outScreen: -1, theme: 'fenix',
-  customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [],
+  customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [], colColors: {},
   decks: null, deckIdx: 0,
 };
 const DECK_NAMES = ['A', 'B', 'C', 'D'];
@@ -3136,6 +3136,17 @@ function previewTick() {
 const BLENDS = ['Normal', 'Add', 'Screen', 'Multiply', 'Difference', 'Lighten'];
 const OPMODS = ['off', 'bass', 'mid', 'high', 'lfo1', 'lfo2', 'beat'];
 function cellEl(l, c) { return document.querySelector(`.cell[data-l="${l}"][data-c="${c}"]`); }
+function setColColor(c, hx) { // 🎨 color de columna: para organizar el set a ojo (psy / techno / chill…)
+  state.colColors = state.colColors || {};
+  if (hx) state.colColors[c] = hx; else delete state.colColors[c];
+  const b = document.querySelector('.colhead button[data-col="' + c + '"]');
+  if (b) {
+    b.style.background = hx || '';
+    b.style.color = hx ? '#000' : '';
+    b.style.fontWeight = hx ? '800' : '';
+  }
+  markDirty();
+}
 function buildGrid() {
   const g = $('#grid');
   g.innerHTML = '';
@@ -3156,7 +3167,20 @@ function buildGrid() {
     const h = el('div', 'colhead');
     const b = el('button'); b.textContent = c + 1;
     b.dataset.map = 'col:' + c;
+    b.dataset.col = c;
     b.onclick = () => qTriggerColumn(c);
+    const cc = state.colColors && state.colColors[c];
+    if (cc) { b.style.background = cc; b.style.color = '#000'; b.style.fontWeight = '800'; }
+    b.oncontextmenu = e => { // click derecho: color de la columna (organización visual)
+      e.preventDefault(); e.stopPropagation();
+      const swatches = [['#ff3d54', 'rojo'], ['#ff7a1a', 'naranja'], ['#ffd21a', 'amarillo'], ['#8dff3f', 'verde'],
+        ['#1ad8ff', 'cian'], ['#4a7dff', 'azul'], ['#b44aff', 'violeta'], ['#ff4ad0', 'rosa']];
+      showMenu(e.clientX, e.clientY, '🎨 Color de la columna ' + (c + 1),
+        swatches.map(([hx, nm2]) => ({ label: '■ ' + nm2, fn: () => setColColor(c, hx) }))
+          .concat([{ label: '✕ sin color', fn: () => setColColor(c, null) }]));
+      // pintar los cuadraditos del menú con su color real
+      [...ctxm.querySelectorAll('.ci')].forEach((d2, i) => { if (swatches[i]) d2.firstChild.style.color = swatches[i][0]; });
+    };
     h.appendChild(b); g.appendChild(h);
   }
   const addC = el('div', 'colhead');
@@ -4391,6 +4415,17 @@ function applyTarget(id, val, kind, on) {
     case 'dice': if (on) randomizeFx(); break;
     case 'react': if (on) pubBurst(); break;
     case 'lfreeze': if (on) toggleFreeze(+a); break;
+    case 'lseek': { // 🎚 jog/scratch: el fader ES el cabezal del video de esa capa
+      const L = state.layers[+a];
+      if (!L) break;
+      const cl = L.slots[L.target].cell;
+      const v = cl && cl.video;
+      if (v && v.duration && isFinite(v.duration)) {
+        const a0 = cl.inT || 0, b0 = cl.outT ? Math.min(cl.outT, v.duration) : v.duration;
+        try { v.currentTime = a0 + val * Math.max(0, b0 - a0); } catch (e) { }
+      }
+      break;
+    }
     case 'cue': if (on) { // saltar al cue N en todos los videos que estén sonando
       const ci = +a;
       state.layers.forEach(L2 => {
@@ -4629,6 +4664,7 @@ function serialize() {
     lfo: state.lfo.map(l => ({ wave: l.wave, rate: l.rate })),
     scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans, autoDrop: !!state.autoDrop,
     structs: state.structs && state.structs.length ? state.structs : null,
+    colColors: state.colColors && Object.keys(state.colColors).length ? state.colColors : null,
     beatSens: state.beatSens, fpsCap: state.fpsCap, mono: state.mono, monoV: 2,
     outScreen: state.outScreen, theme: state.theme, gSpeed: state.gSpeed,
     res: state.res,
@@ -4757,6 +4793,9 @@ function deserialize(d) {
   state.structs = Array.isArray(d.structs)
     ? d.structs.filter(s => s && Array.isArray(s.pts) && s.pts.length > 1).slice(0, 24)
     : [];
+  state.colColors = {};
+  if (d.colColors && typeof d.colColors === 'object')
+    for (const k in d.colColors) if (/^#[0-9a-f]{6}$/i.test(String(d.colColors[k]))) state.colColors[k | 0] = d.colColors[k];
   $('#rndSel').value = state.rndBeats;
   state.xfade = d.xfade ?? .5;
   $('#xfadeIn').value = state.xfade;
@@ -4998,6 +5037,72 @@ for (let i = 0; i < 8; i++) {
   $('#sceneBtns').appendChild(b);
 }
 
+/* ---------------- time machine ⏪: los últimos segundos de la salida, listos para replay ---------------- */
+/* Dos grabadores desfasados: mientras uno rota, el otro siempre tiene el pasado reciente completo. */
+const tm = { on: false, recs: [null, null], chunks: [[], []], t0: [0, 0], SEG: 20 };
+function tmSpawn(i) {
+  if (!tm.on) return;
+  const st = main.canvas.captureStream(30);
+  // OJO: acá va WebM sí o sí — el MP4 de MediaRecorder no entrega pedazos en vivo (solo al cerrar)
+  const mime = ['video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  const r = new MediaRecorder(st, { mimeType: mime, videoBitsPerSecond: 6e6 });
+  tm.chunks[i] = [];
+  r._stream = st;
+  r.ondataavailable = e => { if (e.data.size) tm.chunks[i].push(e.data); };
+  tm.recs[i] = r;
+  tm.t0[i] = performance.now();
+  r.start(1000);
+  r._timer = setTimeout(() => { // rotar: tirar lo viejo y arrancar de nuevo
+    if (tm.recs[i] === r && tm.on) {
+      try { r.stop(); } catch (e) { }
+      st.getTracks().forEach(t2 => t2.stop());
+      tmSpawn(i);
+    }
+  }, tm.SEG * 1000);
+}
+function tmToggle() {
+  if (tm.on) {
+    tm.on = false;
+    tm.recs.forEach(r => {
+      if (r) {
+        clearTimeout(r._timer);
+        try { r.onstop = null; r.stop(); } catch (e) { }
+        if (r._stream) r._stream.getTracks().forEach(t2 => t2.stop());
+      }
+    });
+    tm.recs = [null, null]; tm.chunks = [[], []];
+    toast('⏪ Time machine apagada');
+  } else {
+    tm.on = true;
+    tmSpawn(0);
+    setTimeout(() => { if (tm.on && !tm.recs[1]) tmSpawn(1); }, tm.SEG * 500);
+    toast('⏪ Time machine grabando de fondo — REPLAY trae los últimos segundos a la grilla');
+  }
+  buildCpTab('render');
+}
+function tmReplay() {
+  if (!tm.on) { toast('Prendé la Time machine primero'); return; }
+  // usar el grabador con MÁS pasado acumulado
+  const i = (!tm.recs[1] || tm.t0[0] <= tm.t0[1]) ? 0 : 1;
+  const r = tm.recs[i];
+  if (!r || r.state === 'inactive' || !tm.chunks[i].length) { toast('⏪ Todavía no hay buffer — esperá unos segundos'); return; }
+  const mime = (r.mimeType || 'video/webm').split(';')[0];
+  const secs = Math.round((performance.now() - tm.t0[i]) / 1000);
+  clearTimeout(r._timer);
+  r.onstop = () => {
+    const blob = new Blob(tm.chunks[i], { type: mime });
+    if (r._stream) r._stream.getTracks().forEach(t2 => t2.stop());
+    let cell = null;
+    outer: for (let l = 0; l < LAYERS; l++) for (let c = 0; c < COLS; c++)
+      if (state.grid[l][c].kind === 'empty') { cell = state.grid[l][c]; break outer; }
+    if (!cell) { toast('⏪ No hay celdas vacías para el replay — vaciá una'); if (tm.on) tmSpawn(i); return; }
+    const f = new File([blob], 'replay-' + secs + 's.' + (mime.includes('mp4') ? 'mp4' : 'webm'), { type: mime });
+    assignVideo(cell, f);
+    toast('⏪ Replay de ~' + secs + ' s en la celda ' + (cell.c + 1) + ' de la CAPA ' + (cell.l + 1));
+    if (tm.on) tmSpawn(i); // seguir bufeando
+  };
+  try { r.stop(); } catch (e) { if (tm.on) tmSpawn(i); }
+}
 /* ---------------- randomizer de efectos ---------------- */
 function randomizeFx(silent) {
   let n = 0;
@@ -5353,6 +5458,13 @@ function buildCpTab(id) {
         <input id="cplutmix" type="range" min="0" max="1" step="0.05" value="${lutMix}" style="width:130px"></span></div>` : ''}
       <div class="cprow"><span class="v">Los .cube son los archivos de color de cine (DaVinci, Premiere,
         packs gratis en la web). Tiñe TODA la salida. No viaja en el set (se carga por sesión).</span></div>
+      <div class="cph">⏪ TIME MACHINE</div>
+      <div class="cprow"><b>Buffer del pasado</b><span style="display:flex;gap:6px">
+        <button id="cptm" class="mini${tm.on ? ' on' : ''}">${tm.on ? 'grabando de fondo' : 'prender'}</button>
+        ${tm.on ? '<button id="cptmgo" class="mini on">⏪ REPLAY a la grilla</button>' : ''}</span></div>
+      <div class="cprow"><span class="v">Graba los últimos ~${tm.SEG} s de tu salida en segundo plano.
+        REPLAY los mete como clip en una celda vacía: rebobiná el momento épico y loopealo.
+        (usa algo de CPU: prendela cuando la vayas a usar)</span></div>
       <div class="cph">MONITOR DE SALIDA</div>
       <div class="cprow"><b>Pantallas conectadas</b><span>
         <button id="cpscr" class="mini">🔍 detectar</button></span></div>
@@ -5400,6 +5512,8 @@ function buildCpTab(id) {
     };
     if ($('#cplutx')) $('#cplutx').onclick = () => { clearLUT(); buildCpTab('render'); toast('LUT quitado'); };
     if ($('#cplutmix')) $('#cplutmix').oninput = e => { lutMix = +e.target.value; };
+    if ($('#cptm')) $('#cptm').onclick = tmToggle;
+    if ($('#cptmgo')) $('#cptmgo').onclick = tmReplay;
     $('#cpglreset').onclick = () => {
       const ext = main.gl.getExtension('WEBGL_lose_context');
       if (ext) { ext.loseContext(); setTimeout(() => ext.restoreContext(), 150); }
@@ -5540,6 +5654,13 @@ function buildCpTab(id) {
         espejo.html?code=${remote.code}&amp;auto=1</span></div>`
         : `<div class="cprow"><span class="v">Activalo: aparece un código + QR. Desde el celu manejás la grilla,
         escenas, columnas, XY, master, crossfader y macros (FLASH, BUILD, BLACKOUT, PÁNICO) en tiempo real.</span></div>`);
+    b.innerHTML += `<div class="cph">🤝 B2B (dos VJs)</div>
+      <div class="cprow"><span class="v">RECIBIR: activá el remoto de arriba y pasale tu código al otro VJ.
+        Su salida cae como un clip 🤝 en una celda vacía — la disparás y mezclás como cualquier clip.</span></div>
+      <div class="cprow"><b>MANDAR</b><span style="display:flex;gap:4px">
+        <input id="cpb2bcode" maxlength="6" placeholder="código" autocomplete="off"
+          style="width:76px;text-transform:uppercase" ${b2bOut ? 'disabled' : ''}>
+        <button id="cpb2bgo" class="mini${b2bOut ? ' danger on' : ''}">${b2bOut ? '✕ cortar B2B' : '🤝 mandar mi salida'}</button></span></div>`;
     const pubUrl = 'https://www.ravenlight.net/ravenvj/remote.html?p=' + pub.code;
     b.innerHTML += `<div class="cph">🎉 INTERACCIÓN CON EL PÚBLICO</div>
       <div class="cprow"><b>Público</b><span><button id="cppub" class="mini${pub.on ? ' on' : ''}">${pub.on ? 'desactivar' : '🎉 ACTIVAR'}</button></span></div>` +
@@ -5566,6 +5687,7 @@ function buildCpTab(id) {
       <div class="cprow"><span class="v">💥 RÁFAGA también se puede mapear a un pad MIDI (botón 🎹 y tocás el pad).</span></div>`;
     $('#cpremote').onclick = remoteToggle;
     if ($('#cpkick')) $('#cpkick').onclick = kickAllRemotes;
+    if ($('#cpb2bgo')) $('#cpb2bgo').onclick = b2bSendToggle;
     if ($('#cprauto')) $('#cprauto').onclick = () => {
       uiPrefs.remoteAuto = !uiPrefs.remoteAuto; saveUI(); buildCpTab('remote');
       toast(uiPrefs.remoteAuto ? '📱 Conexiones auto-aceptadas (solo con gente de confianza)' : '📱 Cada conexión te va a preguntar');
@@ -5693,6 +5815,7 @@ function mapTargetName(t) {
   if (k === 'lspd') return `Velocidad CAPA ${+a + 1}`;
   if (k === 'lclear') return `Apagar CAPA ${+a + 1}`;
   if (k === 'lfreeze') return `❄ Congelar CAPA ${+a + 1}`;
+  if (k === 'lseek') return `🎚 Jog/cabezal CAPA ${+a + 1}`;
   if (k === 'scene') return `Escena ${+a + 1}`;
   if (k === 'fx') return `Efecto #${a} · ${b}`;
   return t;
@@ -7063,6 +7186,7 @@ function remoteToggle() {
     setTimeout(() => {
       if (!remote.on && remote.peer) toast('⚠ El remoto no conectó (¿hay internet?) — desactivalo y reintentá');
     }, 10000);
+    remote.peer.on('call', hostHandleCall); // B2B: otro VJ mandando su salida
     remote.peer.on('connection', conn => {
       conn.on('data', d => { if (!conn._ok) return; try { remoteMsg(d, conn); } catch (e) { console.error(e); } });
       conn.on('close', () => { remote.conns = remote.conns.filter(c => c !== conn); buildCpTab('remote'); });
@@ -7074,15 +7198,18 @@ function remoteToggle() {
   };
   if (window.Peer) { boot(); return; }
   toast('📱 Conectando el remoto…');
+  loadPeerJS(boot);
+}
+function loadPeerJS(cb) { // PeerJS local (alojado con la app); CDN solo de respaldo para el portable
+  if (window.Peer) { cb(); return; }
   const s = document.createElement('script');
-  s.src = 'peerjs.min.js'; // alojado con la app: sin dependencia de CDN
-  s.onload = boot;
+  s.src = 'peerjs.min.js';
+  s.onload = cb;
   s.onerror = () => {
-    // portable file:// sin el archivo al lado → intento por CDN
     const s2 = document.createElement('script');
     s2.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js';
-    s2.onload = boot;
-    s2.onerror = () => toast('El remoto necesita internet para conectar (sirve el hotspot del celu)');
+    s2.onload = cb;
+    s2.onerror = () => toast('La conexión necesita internet (sirve el hotspot del celu)');
     document.head.appendChild(s2);
   };
   document.head.appendChild(s);
@@ -7127,6 +7254,84 @@ function stopMirror() {
   mirrorCalls.forEach(c => { try { c.close(); } catch (e) { } });
   mirrorCalls.length = 0;
   if (mirrorStream) { try { mirrorStream.getTracks().forEach(t => t.stop()); } catch (e) { } mirrorStream = null; }
+}
+/* ---------------- B2B 🤝: la salida de otro VJ entra como un clip más de tu grilla ---------------- */
+function hostHandleCall(call) { // llamada entrante al peer del remoto
+  if (!call || !call.metadata || !call.metadata.b2b) { try { call.close(); } catch (e) { } return; }
+  const start = () => {
+    call.answer(); // solo recibimos: no mandamos nada de vuelta
+    call.on('stream', st => b2bAssign(st, call));
+  };
+  if (uiPrefs.remoteAuto) start();
+  else askB2BCall(call, start);
+}
+function askB2BCall(call, onOk) { // mismo cartel de seguridad que el remoto
+  const d = el('div', 'connask');
+  const tt = el('b'); tt.textContent = '🤝 Otro VJ quiere mandarte SU salida (B2B)';
+  const row = el('span');
+  const ok = el('button', 'mini on'); ok.textContent = '✔ Aceptar';
+  const no = el('button', 'mini danger'); no.textContent = '✕ Rechazar';
+  const done = () => { clearTimeout(t); d.remove(); };
+  const t = setTimeout(() => { done(); try { call.close(); } catch (e) { } toast('🤝 B2B rechazado (sin respuesta)'); }, 20000);
+  ok.onclick = () => { done(); onOk(); };
+  no.onclick = () => { done(); try { call.close(); } catch (e) { } toast('🤝 B2B rechazado'); };
+  row.append(ok, no);
+  d.append(tt, row);
+  document.body.appendChild(d);
+}
+function b2bAssign(stream, call) { // el stream del otro VJ cae en la primera celda vacía, como clip en vivo
+  let cell = null;
+  outer: for (let l = 0; l < LAYERS; l++) for (let c = 0; c < COLS; c++)
+    if (state.grid[l][c].kind === 'empty') { cell = state.grid[l][c]; break outer; }
+  if (!cell) {
+    toast('🤝 Llegó el B2B pero no hay celdas vacías — vaciá una y que el otro VJ reintente');
+    try { call.close(); } catch (e) { }
+    return;
+  }
+  const v = document.createElement('video');
+  v.srcObject = stream; v.muted = true; v.playsInline = true;
+  v.play().catch(() => { });
+  cell.kind = 'cam'; cell.name = 'B2B 🤝'; cell.video = v; cell.isB2B = 1; cell.camId = '';
+  refreshCell(cell.l, cell.c);
+  markDirty();
+  toast('🤝 ¡B2B conectado! El otro VJ está en la celda ' + (cell.c + 1) + ' de la CAPA ' + (cell.l + 1) + ' — disparalo y mezclalo');
+  const bye = () => { if (cell.isB2B) { cell.isB2B = 0; emptyCell(cell); toast('🤝 El otro VJ cortó el B2B'); } };
+  call.on('close', bye);
+  const tr = stream.getVideoTracks()[0];
+  if (tr) tr.onended = bye;
+}
+let b2bOut = null; // lado que MANDA: {peer, call}
+function b2bSendToggle() {
+  if (b2bOut) {
+    try { b2bOut.call.close(); } catch (e) { }
+    try { b2bOut.peer.destroy(); } catch (e) { }
+    b2bOut = null;
+    toast('🤝 B2B cortado');
+    buildCpTab('remote');
+    return;
+  }
+  const code = ($('#cpb2bcode') ? $('#cpb2bcode').value : '').trim().toLowerCase();
+  if (code.length < 4) { toast('Poné el código del remoto del OTRO VJ'); return; }
+  loadPeerJS(() => {
+    const p = new Peer();
+    p.on('error', err => { toast('🤝 B2B: ' + (err.type || err.message) + ' — ¿código bien? ¿el otro VJ tiene el remoto activo?'); });
+    p.on('open', () => {
+      const st = main.canvas.captureStream(30);
+      const call = p.call('ravenvj-' + code, st, { metadata: { b2b: 1 } });
+      b2bOut = { peer: p, call };
+      toast('🤝 Mandando tu salida… el otro VJ tiene que aceptar');
+      call.on('close', () => {
+        if (b2bOut && b2bOut.call === call) {
+          try { st.getTracks().forEach(t2 => t2.stop()); } catch (e) { }
+          try { p.destroy(); } catch (e) { }
+          b2bOut = null;
+          buildCpTab('remote');
+          toast('🤝 B2B terminado');
+        }
+      });
+      buildCpTab('remote');
+    });
+  });
 }
 
 /* ---------------- menú contextual del programa ---------------- */
@@ -7919,7 +8124,8 @@ function buildPropClip(b) {
       ${pRow('Reproducción', `<select id="ppplay">
         <option value="loop"${(cell.play || 'loop') === 'loop' ? ' selected' : ''}>🔁 bucle</option>
         <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez (queda en el último frame)</option></select>`)}
-      ${pRow('📍 Cues', `<span id="ppcues" style="display:flex;gap:4px;flex-wrap:wrap"></span>`)}`;
+      ${pRow('📍 Cues', `<span id="ppcues" style="display:flex;gap:4px;flex-wrap:wrap"></span>`)}
+      ${pRow('🎚 Jog', `<button class="mini" data-map="lseek:${propLayer}" title="mapealo a una perilla/fader MIDI (modo LEARN y girá): la perilla pasa a ser el cabezal del video de la CAPA ${propLayer + 1} — scratch con la mano">mapear a MIDI</button>`)}`;
   } else if (cell.kind === 'gif' && cell.isImage) {
     extra = `<div class="cph">IMAGEN 🖼</div>
       <div class="cprow"><span class="v">Imagen fija. Usá el TRANSFORM de arriba para escala/posición/rotación.</span></div>`;
