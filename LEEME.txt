@@ -121,12 +121,20 @@ ESTELA / TRAILS 🌊 (efecto)
   deriva = zoom del eco (túnel infinito).
 
 AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
-  Panel → Audio → "Auto-DROP": la app escucha la música, detecta el
-  RISER (cuando el bombo se va y queda la tensión arriba), arma el
-  BUILD progresivo sola, y cuando el bombo VUELVE dispara el DROP con
-  flash y el compás re-anclado. Si el riser se pincha, baja sin flash.
-  Cooldown de 8 s para no re-disparar. Ideal para cuando estás
-  demasiado ocupado mezclando como para apretar BUILD a mano.
+  ¿Qué hace? Lo mismo que apretar BUILD y soltar el DROP a mano,
+  pero automático y en el momento exacto de la música.
+  CÓMO USARLO:
+  1) Activá el audio (micrófono o "audio del sistema") en el panel
+     → Audio, y verificá que las barritas se muevan con la música.
+  2) En esa misma pestaña, prendé "💥 Auto-DROP".
+  3) Listo, no hay paso 3. Cuando el tema entra en el build-up (el
+     bombo se va y queda la tensión subiendo), la app arma el BUILD
+     progresivo sola; cuando el bombo VUELVE (el drop), dispara el
+     flash con el compás re-anclado. Si el build-up se pincha y no
+     hay drop, baja sin flash. Espera 8 s antes de poder re-disparar.
+  Funciona mejor con música electrónica con drops claros (EDM,
+  psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
+  el golpe visual del drop sale solo.
 
 TUS VIDEOS VUELVEN SOLOS 🔗 (auto-relink)
   Si cargás los videos con "+ VIDEOS" o arrastrándolos, la app
@@ -153,21 +161,35 @@ GAMEPAD 🎮
   - LB/RB: columna anterior/siguiente · D-pad: decks y escenas
   Se puede apagar en panel → MIDI.
 
-AUTO-MÁSCARA POR CÁMARA 📷 (mapping sin dibujar)
-  Ventana de MAPPING → "📷 auto-máscara": apuntá una webcam a la
-  proyección; la app proyecta blanco y negro, compara lo que ve la
-  cámara, y la forma iluminada queda recortada como máscara SOLA
-  (visión por diferencia, sin IA). Con poca luz ambiente funciona
-  mejor. Después la retocás con la pluma si hace falta.
+AUTO-MÁSCARA POR CÁMARA 📷 (mapping sin dibujar a mano)
+  ¿Para qué sirve? Cuando proyectás sobre un OBJETO (un cuadro, una
+  escultura, un mueble) y no querés dibujar su contorno punto por
+  punto: la app lo detecta sola con una webcam.
+  PASO A PASO:
+  1) Poné la ventana OUTPUT en el proyector, apuntando al objeto.
+  2) Apuntá una webcam hacia lo proyectado (sirve la del portátil).
+     Que vea toda la proyección y que quede QUIETA.
+  3) Bajá la luz ambiente lo que puedas.
+  4) Ventana de MAPPING → botón "📷 auto-máscara".
+  La salida flashea blanco y negro un par de segundos; la cámara
+  compara las dos fotos, y lo que se iluminó (tu objeto) queda
+  recortado como máscara de la superficie elegida. Es comparación
+  de imágenes, sin IA y sin internet. Después podés retocar el
+  contorno con la pluma ✏.
 
-ESTRUCTURAS ANIMADAS 📐 (líneas que corren al ritmo)
-  Ventana de MAPPING → "📐 dibujar estructura": trazá líneas o figuras
-  sobre el escenario (bordes de la tarima, marcos, columnas) y quedan
-  ANIMADAS al BPM. 4 efectos por estructura: 🏃 recorrido de luz,
-  ➖ guiones marchando, 💓 latido, ⚡ estrobo al beat. Color fijo o
-  🌈 ciclo, velocidad en beats, y 🔊 para que el grosor siga los
-  graves. Cerrá la figura clickeando el primer punto (rellena en
-  estrobo) o Enter para dejarla como línea abierta. Se guardan con
+ESTRUCTURAS ANIMADAS 📐 (líneas y figuras que corren al ritmo)
+  Ventana de MAPPING, fila 📐:
+  - "📐 dibujar estructura": trazá a mano alzada sobre el escenario
+    (bordes de la tarima, marcos, columnas). Click en el primer punto
+    la cierra como figura; Enter la deja como línea abierta.
+  - FIGURAS DE UN CLICK: ─ línea, ▭ rectángulo, ◯ círculo,
+    △ triángulo, ✦ estrella. Cada una aparece en el centro CON SU
+    ANIMACIÓN puesta (la podés cambiar). Arrastralas desde el trazo
+    para ubicarlas y ＋／－ para el tamaño.
+  6 animaciones por estructura: 🏃 recorrido de luz, ➖ guiones
+  marchando, 💓 latido, ⚡ estrobo al beat (rellena las figuras
+  cerradas), 🔄 giro y 🫧 respira. Color fijo o 🌈 ciclo, velocidad
+  en beats, y 🔊 para que el grosor siga los graves. Se guardan con
   el set.
 
 CONEXIONES DEL REMOTO — SEGURIDAD 🛡

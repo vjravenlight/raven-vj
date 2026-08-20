@@ -6156,6 +6156,12 @@ function mapEditorSync() {
     sd.title = 'trazá líneas o figuras sobre el escenario y quedan animadas al ritmo (recorrido de luz, guiones, latido, estrobo)';
     sd.onclick = () => startPen('struct');
     row5.appendChild(sd);
+    [['line', '─', 'línea'], ['rect', '▭', 'rectángulo'], ['circle', '◯', 'círculo'], ['tri', '△', 'triángulo'], ['star', '✦', 'estrella']].forEach(([k, ic, nm]) => {
+      const b = el('button', 'mini'); b.textContent = ic;
+      b.title = nm + ' — aparece en el centro con su animación; arrastrala desde el trazo para ubicarla y ➕➖ para el tamaño';
+      b.onclick = () => addStructShape(k);
+      row5.appendChild(b);
+    });
     (state.structs || []).forEach((st, i) => {
       const g = el('span');
       g.style.cssText = 'display:flex;gap:3px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:1px 4px';
@@ -6163,7 +6169,7 @@ function mapEditorSync() {
       onb.title = 'prender/apagar esta estructura';
       onb.onclick = () => { st.on = st.on === false; markDirty(); mapEditorSync(); };
       const fx = el('select'); fx.className = 'mini';
-      [['chase', '🏃 recorrido'], ['dash', '➖ guiones'], ['pulse', '💓 latido'], ['strobe', '⚡ estrobo']].forEach(([v, n]) => {
+      [['chase', '🏃 recorrido'], ['dash', '➖ guiones'], ['pulse', '💓 latido'], ['strobe', '⚡ estrobo'], ['spin', '🔄 giro'], ['breath', '🫧 respira']].forEach(([v, n]) => {
         const o = el('option'); o.value = v; o.textContent = n; if (st.fx === v) o.selected = true; fx.appendChild(o);
       });
       fx.onchange = () => { st.fx = fx.value; markDirty(); };
@@ -6186,10 +6192,14 @@ function mapEditorSync() {
       const rc = el('button', 'mini' + (st.react && st.react !== 'off' ? ' on' : '')); rc.textContent = '🔊';
       rc.title = 'reaccionar al audio (el grosor sigue los graves)';
       rc.onclick = () => { st.react = st.react === 'bass' ? 'off' : 'bass'; markDirty(); mapEditorSync(); };
+      const gUp = el('button', 'mini'); gUp.textContent = '＋'; gUp.title = 'agrandar';
+      gUp.onclick = () => scaleStruct(st, 1.15);
+      const gDn = el('button', 'mini'); gDn.textContent = '－'; gDn.title = 'achicar';
+      gDn.onclick = () => scaleStruct(st, 1 / 1.15);
       const del = el('button', 'mini'); del.textContent = '✕';
       del.title = 'borrar esta estructura';
       del.onclick = () => { state.structs.splice(i, 1); markDirty(); mapEditorSync(); };
-      g.append(onb, fx, colSel, colIn, bt, rc, del);
+      g.append(onb, fx, colSel, colIn, bt, rc, gUp, gDn, del);
       row5.appendChild(g);
     });
   }
@@ -6258,6 +6268,26 @@ function rebuildMapHandles() {
         closePen(); return;
       }
       penPts.push(uv);
+      return;
+    }
+    const sHit = structHit(uv); // las estructuras se agarran desde su trazo y se arrastran enteras
+    if (sHit >= 0 && e.button === 0) {
+      const st = state.structs[sHit];
+      let last = uv;
+      const mv = ev => {
+        const nu = [(ev.clientX - r.left) / r.width, 1 - (ev.clientY - r.top) / r.height];
+        let dx = nu[0] - last[0], dy = nu[1] - last[1];
+        for (const p of st.pts) {
+          dx = Math.max(-p[0], Math.min(1 - p[0], dx));
+          dy = Math.max(-p[1], Math.min(1 - p[1], dy));
+        }
+        for (const p of st.pts) { p[0] += dx; p[1] += dy; }
+        last = [last[0] + dx, last[1] + dy];
+        markDirty();
+      };
+      const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
+      addEventListener('pointermove', mv);
+      addEventListener('pointerup', up);
       return;
     }
     const hit = state.map.surfaces.findIndex(sf => pointInQuad(uv, sf.pts));
@@ -6435,6 +6465,16 @@ function rdp(pts, eps) { // simplificación Douglas-Peucker (iterativa)
 async function autoMaskScan() { // proyecta blanco/negro, mira con la cámara, y la forma iluminada queda de máscara
   const sf = state.map.surfaces[state.map.sel];
   if (!sf) return;
+  if (!autoMaskScan._sure) { // guía la primera vez de la sesión
+    if (!confirm(
+      '📷 AUTO-MÁSCARA — así funciona:\n\n' +
+      '1) El proyector tiene que estar mostrando la salida (ventana OUTPUT en el proyector, apuntando al objeto que querés mapear).\n' +
+      '2) Apuntá una webcam hacia lo proyectado (sirve la del portátil). Que vea toda la proyección y quede QUIETA.\n' +
+      '3) Bajá la luz ambiente lo que puedas.\n\n' +
+      'La salida va a FLASHEAR blanco y negro un par de segundos. La cámara compara las dos fotos: lo que se iluminó con el flash es tu objeto, y esa forma queda recortada como máscara de la superficie elegida.\n\n' +
+      '¿Listo para escanear?')) return;
+    autoMaskScan._sure = true;
+  }
   let st;
   try { st = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 } } }); }
   catch (e) { toast('📷 No pude abrir la cámara'); return; }
@@ -6717,6 +6757,47 @@ function hexA(hex, a) {
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
+function addStructShape(kind) { // figuras básicas de un click, cada una con su animación
+  const ar = main.canvas.height / main.canvas.width; // para que el círculo sea redondo de verdad
+  const cx = .5, cy = .5, r = .18, rx = r * ar;
+  let pts = [], closed = true, fx = 'pulse', nm = '';
+  if (kind === 'line') { pts = [[.25, .5], [.75, .5]]; closed = false; fx = 'chase'; nm = 'línea'; }
+  else if (kind === 'rect') { pts = [[cx - rx * 1.4, cy - r], [cx + rx * 1.4, cy - r], [cx + rx * 1.4, cy + r], [cx - rx * 1.4, cy + r]]; fx = 'dash'; nm = 'rectángulo'; }
+  else if (kind === 'circle') { for (let i = 0; i < 24; i++) { const a = i / 24 * 2 * Math.PI; pts.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * r]); } fx = 'breath'; nm = 'círculo'; }
+  else if (kind === 'tri') { for (let i = 0; i < 3; i++) { const a = Math.PI / 2 + i / 3 * 2 * Math.PI; pts.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * r]); } fx = 'strobe'; nm = 'triángulo'; }
+  else if (kind === 'star') { for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i / 10 * 2 * Math.PI, rr = i % 2 ? .45 : 1; pts.push([cx + Math.cos(a) * rx * rr, cy + Math.sin(a) * r * rr]); } fx = 'spin'; nm = 'estrella'; }
+  state.structs = state.structs || [];
+  state.structs.push({ pts, closed, fx, color: 'cycle', beats: 2, width: 5, react: 'off', on: true });
+  markDirty(); mapEditorSync();
+  toast('📐 ' + nm + ' agregada al centro — arrastrala para ubicarla, ➕➖ para el tamaño');
+}
+function scaleStruct(st, f) { // agrandar/achicar alrededor de su centro
+  let mx = 0, my = 0;
+  st.pts.forEach(p => { mx += p[0]; my += p[1]; });
+  mx /= st.pts.length; my /= st.pts.length;
+  st.pts.forEach(p => {
+    p[0] = Math.max(0, Math.min(1, mx + (p[0] - mx) * f));
+    p[1] = Math.max(0, Math.min(1, my + (p[1] - my) * f));
+  });
+  markDirty();
+}
+function structHit(uv) { // ¿el click cae sobre el trazo de alguna estructura? (la de más arriba gana)
+  const list = state.structs || [], th = .018;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const st = list[i];
+    if (st.on === false || !st.pts || st.pts.length < 2) continue;
+    const P = st.pts, n = st.closed ? P.length : P.length - 1;
+    for (let s = 0; s < n; s++) {
+      const a = P[s], b = P[(s + 1) % P.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const L2 = dx * dx + dy * dy;
+      let t2 = L2 ? ((uv[0] - a[0]) * dx + (uv[1] - a[1]) * dy) / L2 : 0;
+      t2 = Math.max(0, Math.min(1, t2));
+      if (Math.hypot(uv[0] - (a[0] + dx * t2), uv[1] - (a[1] + dy * t2)) < th) return i;
+    }
+  }
+  return -1;
+}
 function structsDraw(gl) {
   const list = state.structs;
   if (!list || !list.length || !list.some(s => s.on !== false && s.pts && s.pts.length > 1)) return;
@@ -6731,6 +6812,19 @@ function structsDraw(gl) {
   list.forEach((st, si) => {
     if (st.on === false || !st.pts || st.pts.length < 2) return;
     const P = st.pts.map(p => [p[0] * W, (1 - p[1]) * H]);
+    if (st.fx === 'spin' || st.fx === 'breath') { // transformar la figura alrededor de su centro
+      let mx = 0, my = 0;
+      P.forEach(p => { mx += p[0]; my += p[1]; });
+      mx /= P.length; my /= P.length;
+      if (st.fx === 'spin') {
+        const ang = ((beatFloat / ((st.beats || 2) * 4)) % 1) * 2 * Math.PI; // vuelta completa cada beats×4
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        P.forEach(p => { const dx = p[0] - mx, dy = p[1] - my; p[0] = mx + dx * ca - dy * sa; p[1] = my + dx * sa + dy * ca; });
+      } else {
+        const sc = 1 + beatEnv * .22;
+        P.forEach(p => { p[0] = mx + (p[0] - mx) * sc; p[1] = my + (p[1] - my) * sc; });
+      }
+    }
     let len = 0;
     for (let i = 1; i < P.length; i++) len += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
     if (st.closed) len += Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]);
@@ -6762,6 +6856,12 @@ function structsDraw(gl) {
       x.shadowColor = col(1); x.shadowBlur = wpx * 3;
       x.stroke();
       x.setLineDash([]); x.shadowBlur = 0;
+    } else if (st.fx === 'spin') { // trazo firme, la figura entera girando
+      path();
+      x.strokeStyle = col(.92); x.lineWidth = wpx;
+      x.shadowColor = col(1); x.shadowBlur = wpx * 2;
+      x.stroke();
+      x.shadowBlur = 0;
     } else if (st.fx === 'strobe') { // flash al beat (rellena si es figura cerrada)
       path();
       const onb = beatEnv > .45;
