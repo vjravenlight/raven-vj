@@ -1644,6 +1644,11 @@ uniform sampler2D u_tex; uniform sampler2D u_mtex; uniform float u_master,u_flas
 uniform mat3 u_warp; uniform vec4 u_srcRect;
 uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test,u_mtexOn;
 uniform vec2 u_flip;
+uniform mediump sampler3D u_lut; uniform float u_lutOn,u_lutN,u_lutMix;
+vec3 lutFix(vec3 c){
+ if(u_lutOn<.5)return c;
+ vec3 cc=clamp(c,0.,1.)*((u_lutN-1.)/u_lutN)+.5/u_lutN;
+ return mix(c,texture(u_lut,cc).rgb,u_lutMix);}
 void main(){
  vec2 base=v_uv; float inQ=1.; float eb=1.; float m=1.;
  if(u_warpOn>.5){
@@ -1686,7 +1691,7 @@ void main(){
    float cr=step(abs(base.x-base.y),.004)+step(abs(base.x+base.y-1.),.004);
    c=vec3(.04,.10,.14)+vec3(grid)*vec3(.15,.6,.85)+vec3(bord)*vec3(1.,.5,0.)+vec3(cr)*vec3(1.,0.,.35);
  }
- vec3 outc=mix(c*u_master,vec3(1.),u_flash*inQ)*inQ*u_sop;
+ c=lutFix(c); vec3 outc=mix(c*u_master,vec3(1.),u_flash*inQ)*inQ*u_sop;
  o=vec4(outc,1.); }`;
 
 /* warp de malla (superficies curvas): geometría triangulada con puntos de control */
@@ -1701,6 +1706,11 @@ uniform sampler2D u_tex; uniform sampler2D u_mtex; uniform float u_master,u_flas
 uniform vec4 u_srcRect;
 uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test,u_mtexOn;
 uniform vec2 u_flip,u_res;
+uniform mediump sampler3D u_lut; uniform float u_lutOn,u_lutN,u_lutMix;
+vec3 lutFix(vec3 c){
+ if(u_lutOn<.5)return c;
+ vec3 cc=clamp(c,0.,1.)*((u_lutN-1.)/u_lutN)+.5/u_lutN;
+ return mix(c,texture(u_lut,cc).rgb,u_lutMix);}
 void main(){
  vec2 base=v_luv; float inQ=1.; float m=1.;
  float eb=min(min(base.x,1.-base.x),min(base.y,1.-base.y));
@@ -1727,7 +1737,7 @@ void main(){
  c*=mix(1.,.55+.6*step(.45,fract(u_time*(4.+b*22.))),b);
  if(u_line>0.001){ float band=1.-smoothstep(u_line*.5,u_line,eb); vec3 lc=.5+.5*cos(6.2832*(u_time*.12+vec3(0.,.33,.66))); c=mix(c,lc*(1.2+u_beat*1.3),band*m*step(0.,eb)); }
  if(u_test>.5){ vec2 g=abs(fract(base*10.)-.5); float grid=step(.44,max(g.x,g.y)); float bord=step(.985,max(abs(base.x-.5),abs(base.y-.5))*2.); float cr=step(abs(base.x-base.y),.004)+step(abs(base.x+base.y-1.),.004); c=vec3(.04,.10,.14)+vec3(grid)*vec3(.15,.6,.85)+vec3(bord)*vec3(1.,.5,0.)+vec3(cr)*vec3(1.,0.,.35); }
- vec3 outc=mix(c*u_master,vec3(1.),u_flash*inQ)*inQ*u_sop;
+ c=lutFix(c); vec3 outc=mix(c*u_master,vec3(1.),u_flash*inQ)*inQ*u_sop;
  o=vec4(outc,1.); }`;
 
 const BLIT_FS = `#version 300 es
@@ -1808,6 +1818,59 @@ function makeTarget(gl, w, h) {
   return { fbo, tex, w, h };
 }
 function freeTarget(gl, t) { if (t) { try { gl.deleteFramebuffer(t.fbo); gl.deleteTexture(t.tex); } catch (e) { } } }
+/* ---- LUT .cube: color grading profesional sobre toda la salida ---- */
+let lutTex = null, lutN = 0, lutName = '', lutMix = 1;
+function parseCube(tx) {
+  let N = 0;
+  const vals = [];
+  for (const line of tx.split(/\r?\n/)) {
+    const t2 = line.trim();
+    if (!t2 || t2[0] === '#') continue;
+    if (/^LUT_3D_SIZE/i.test(t2)) { N = parseInt(t2.split(/\s+/)[1]) || 0; continue; }
+    if (/^[A-Za-z]/.test(t2)) continue; // TITLE, DOMAIN_MIN/MAX, LUT_1D...
+    const p = t2.split(/\s+/).map(Number);
+    if (p.length >= 3 && p.every(isFinite)) vals.push(p[0], p[1], p[2]);
+  }
+  if (!N || N < 2 || N > 65 || vals.length < N * N * N * 3) throw new Error('archivo .cube inválido');
+  return { N, vals };
+}
+function setLUT(N, vals, name) {
+  const gl = main.gl;
+  const data = new Uint8Array(N * N * N * 4);
+  for (let i = 0, j = 0; i < N * N * N; i++) {
+    data[i * 4] = Math.min(255, Math.max(0, Math.round(vals[j++] * 255)));
+    data[i * 4 + 1] = Math.min(255, Math.max(0, Math.round(vals[j++] * 255)));
+    data[i * 4 + 2] = Math.min(255, Math.max(0, Math.round(vals[j++] * 255)));
+    data[i * 4 + 3] = 255;
+  }
+  if (lutTex) { try { gl.deleteTexture(lutTex); } catch (e) { } }
+  lutTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, lutTex);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, N, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+  lutN = N; lutName = name || 'LUT';
+}
+function clearLUT() {
+  if (lutTex) { try { main.gl.deleteTexture(lutTex); } catch (e) { } }
+  lutTex = null; lutN = 0; lutName = '';
+}
+function loadLUTFile(file) {
+  file.text().then(tx => {
+    try { const { N, vals } = parseCube(tx); setLUT(N, vals, file.name.replace(/\.[^.]+$/, '')); toast('🎨 LUT "' + lutName + '" aplicado (' + N + '³)'); buildCpTab('render'); }
+    catch (e) { toast('⚠ ' + e.message); }
+  });
+}
+function setLUTUniforms(gl, p) { // llamar con el programa activo (FINAL o MESH)
+  gl.uniform1i(U(gl, p, 'u_lut'), 2);
+  gl.uniform1f(U(gl, p, 'u_lutOn'), lutTex ? 1 : 0);
+  gl.uniform1f(U(gl, p, 'u_lutN'), lutN || 2);
+  gl.uniform1f(U(gl, p, 'u_lutMix'), lutMix);
+  if (lutTex) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_3D, lutTex); gl.activeTexture(gl.TEXTURE0); }
+}
 function draw(gl) { gl.drawArrays(gl.TRIANGLES, 0, 3); }
 
 const main = makeCtx($('#outCanvas'));
@@ -2110,13 +2173,7 @@ const audio = {
   bass: 0, mid: 0, high: 0, fft16: new Float32Array(16),
   _max: [.01, .01, .01], _avg: 0, _lastBeat: 0, _ints: [],
 };
-async function openAudio(devId) {
-  const st = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      deviceId: devId ? { exact: devId } : undefined,
-      echoCancellation: false, noiseSuppression: false, autoGainControl: false,
-    }
-  });
+async function connectAudioStream(st) { // conecta CUALQUIER stream de audio al análisis (mic o sistema)
   if (audio.stream) audio.stream.getTracks().forEach(tr => tr.stop());
   audio.ctx = audio.ctx || new AudioContext();
   await audio.ctx.resume();
@@ -2130,6 +2187,31 @@ async function openAudio(devId) {
   audio.srcNode.connect(audio.an);
   audio.buf = new Uint8Array(audio.an.frequencyBinCount);
   audio.on = true; $('#audioBtn').classList.add('on');
+}
+async function sysAudioStart() { // 🖥 capturar el audio del SISTEMA (pestaña/pantalla) sin cables
+  try {
+    const st = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { echoCancellation: false } });
+    const at = st.getAudioTracks();
+    if (!at.length) {
+      st.getTracks().forEach(t => t.stop());
+      toast('⚠ Tildá "Compartir audio" al elegir la pestaña/pantalla');
+      return false;
+    }
+    st.getVideoTracks().forEach(t => t.stop()); // solo nos interesa el audio
+    at[0].onended = () => { audio.on = false; $('#audioBtn').classList.remove('on'); toast('🖥 Audio del sistema cortado'); };
+    await connectAudioStream(new MediaStream(at));
+    toast('🖥 Audio del SISTEMA conectado — sin cables 🎶');
+    return true;
+  } catch (e) { toast('Captura de audio cancelada'); return false; }
+}
+async function openAudio(devId) {
+  const st = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      deviceId: devId ? { exact: devId } : undefined,
+      echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+    }
+  });
+  await connectAudioStream(st);
   // poblar el selector de entradas (mic, Stereo Mix / loopback, interfaz...)
   try {
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
@@ -2690,7 +2772,7 @@ function renderTick() {
     }
   }
 
-  audioTick(dt); clockTick(dt); layerTick(dt);
+  audioTick(dt); clockTick(dt); layerTick(dt); gpTick();
   $('#mB').style.height = (2 + audio.bass * 16) + 'px';
   $('#mM').style.height = (2 + audio.mid * 16) + 'px';
   $('#mH').style.height = (2 + audio.high * 16) + 'px';
@@ -2875,6 +2957,7 @@ function renderTick() {
         gl.uniform2f(U(gl, mp, 'u_res'), main.canvas.width, main.canvas.height);
         gl.uniform1i(U(gl, mp, 'u_mtex'), 1);
         gl.uniform1f(U(gl, mp, 'u_mtexOn'), sf._mtex ? 1 : 0);
+        setLUTUniforms(gl, mp);
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, sf._mtex || blackTex); gl.activeTexture(gl.TEXTURE0);
         drawMeshSurface(gl, sf);
         gl.useProgram(fp); // volver al programa de pantalla completa para las quad
@@ -2894,6 +2977,7 @@ function renderTick() {
       gl.uniform2f(U(gl, fp, 'u_flip'), sf.flipX ? 1 : 0, sf.flipY ? 1 : 0);
       gl.uniform1i(U(gl, fp, 'u_mtex'), 1);
       gl.uniform1f(U(gl, fp, 'u_mtexOn'), sf._mtex ? 1 : 0);
+      setLUTUniforms(gl, fp);
       gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, sf._mtex || blackTex); gl.activeTexture(gl.TEXTURE0);
       draw(gl);
     }
@@ -2910,6 +2994,7 @@ function renderTick() {
     gl.uniform1f(U(gl, fp, 'u_test'), 0);
     gl.uniform2f(U(gl, fp, 'u_flip'), 0, 0);
     gl.uniform1f(U(gl, fp, 'u_mtexOn'), 0);
+    setLUTUniforms(gl, fp);
     draw(gl);
   }
   pubDraw(gl); // reacciones del público flotando sobre la salida
@@ -3180,6 +3265,7 @@ function cellDom(l, c) {
   d.ondrop = e => {
     e.preventDefault(); e.stopPropagation(); d.classList.remove('dragover');
     $('#dropveil').style.display = 'none';
+    captureDropHandles(e);
     if (e.dataTransfer.getData('text/texto')) {
       const str = prompt('Texto a mostrar:', cell.kind === 'text' ? cell.name : 'RAVEN');
       if (str) assignText(cell, str);
@@ -3415,6 +3501,98 @@ async function camPicker(cell, x, y) {
   })));
 }
 const mediaPool = new Map(); // nombre → File: para re-enlazar solos tras un deshacer o cargar set
+/* ---- auto-relink: guardar permisos de archivo (File System Access) para que los videos VUELVAN SOLOS ---- */
+const fsa = { db: null };
+function fsaDB() {
+  return fsa.db || (fsa.db = new Promise(res => {
+    try {
+      const rq = indexedDB.open('ravenvj-files', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('handles');
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => res(null);
+    } catch (e) { res(null); }
+  }));
+}
+async function fsaPut(name, handle) {
+  const db = await fsaDB(); if (!db) return;
+  try { db.transaction('handles', 'readwrite').objectStore('handles').put(handle, name); } catch (e) { }
+}
+async function fsaGet(name) {
+  const db = await fsaDB(); if (!db || !name) return null;
+  return new Promise(res => {
+    try {
+      const rq = db.transaction('handles').objectStore('handles').get(name);
+      rq.onsuccess = () => res(rq.result || null);
+      rq.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+}
+function captureDropHandles(e) { // en un drop, guardar los permisos de los archivos para el futuro
+  try {
+    for (const it of e.dataTransfer.items || []) {
+      if (it.kind === 'file' && it.getAsFileSystemHandle) {
+        it.getAsFileSystemHandle().then(h => { if (h && h.kind === 'file') fsaPut(h.name, h); }).catch(() => { });
+      }
+    }
+  } catch (e2) { }
+}
+async function pickVideosFSA() { // "+ VIDEOS" con permisos persistentes cuando el navegador lo soporta
+  if (!window.showOpenFilePicker) { $('#fileIn').click(); return; }
+  try {
+    const handles = await showOpenFilePicker({
+      multiple: true,
+      types: [{ description: 'Videos e imágenes', accept: { 'video/*': ['.mp4', '.webm', '.mov', '.mkv'], 'image/*': ['.gif', '.png', '.jpg', '.jpeg', '.webp'] } }],
+    });
+    const files = [];
+    for (const h of handles) {
+      try { const f = await h.getFile(); if (isMediaFile(f)) { files.push(f); fsaPut(f.name, h); } } catch (e) { }
+    }
+    if (files.length) fillEmpty(files);
+  } catch (e) { /* cancelado */ }
+}
+function allUnlinkedCells() {
+  const out = [];
+  (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => {
+    if ((c.kind === 'video' && !c.video) || (c.kind === 'gif' && !c.gframes)) out.push(c);
+  })));
+  return out;
+}
+async function autoRelink(interactive) { // volver a enlazar con los permisos guardados
+  let done = 0, needPerm = 0;
+  for (const c of allUnlinkedCells()) {
+    const h = await fsaGet(c._fileName) || await fsaGet(c.name);
+    if (!h) continue;
+    try {
+      let st = await h.queryPermission({ mode: 'read' });
+      if (st === 'prompt' && interactive) st = await h.requestPermission({ mode: 'read' });
+      if (st === 'granted') { const f = await h.getFile(); await assignMedia(c, f); done++; }
+      else needPerm++;
+    } catch (e) { }
+  }
+  if (done) { updateRelinkBar(); toast('🔗 ' + done + ' clip(s) reconectados solos'); }
+  return { done, needPerm };
+}
+function actionToast(msg, btnLabel, fn, ms) { // cartelito con un botón de acción
+  const d = el('div', 'connask');
+  const tt = el('b'); tt.textContent = msg;
+  const row = el('span');
+  const ok = el('button', 'mini on'); ok.textContent = btnLabel;
+  const no = el('button', 'mini'); no.textContent = '✕';
+  const done = () => { clearTimeout(t); d.remove(); };
+  const t = setTimeout(done, ms || 25000);
+  ok.onclick = () => { done(); fn(); };
+  no.onclick = done;
+  row.append(ok, no);
+  d.append(tt, row);
+  document.body.appendChild(d);
+}
+async function autoRelinkBoot() { // al arrancar: reconectar en silencio; si falta permiso, ofrecer con UN click
+  if (!window.showOpenFilePicker) return;
+  const r = await autoRelink(false);
+  if (r.needPerm) {
+    actionToast('🔗 Hay ' + r.needPerm + ' clip(s) para reconectar', 'reconectar', () => autoRelink(true));
+  }
+}
 /* libera la memoria de una celda: cierra los ImageBitmaps del GIF, revoca URL y frena la cámara */
 function freeCellMedia(cell) {
   if (!cell) return;
@@ -3529,7 +3707,7 @@ function assignText(cell, str) {
   cell.file = null; cell.video = null; cell.thumb = ''; cell.tcanvas = null;
   refreshCell(cell.l, cell.c); markDirty();
 }
-$('#addVidBtn').onclick = () => $('#fileIn').click();
+$('#addVidBtn').onclick = pickVideosFSA;
 $('#newBtn').onclick = () => newSet();
 $('#fileIn').onchange = e => { const f = [...e.target.files]; if (f.length) fillEmpty(f); e.target.value = ''; };
 /* drop global (fuera de una celda): rellenar vacías */
@@ -3541,6 +3719,7 @@ document.addEventListener('dragover', e => {
 document.addEventListener('dragleave', e => { if (!e.relatedTarget) $('#dropveil').style.display = 'none'; });
 document.addEventListener('drop', e => {
   e.preventDefault(); $('#dropveil').style.display = 'none';
+  captureDropHandles(e);
   const files = [...e.dataTransfer.files].filter(isMediaFile);
   if (files.length) fillEmpty(files);
 });
@@ -3792,6 +3971,39 @@ function midiInit() {
     $('#midiSt').textContent = 'denegado — click 🎹 para reintentar';
   });
 }
+/* ---------------- gamepad 🎮: joystick de PS/Xbox como controlador VJ ---------------- */
+let gpPrev = [], gpCol = -1;
+function gpTick() {
+  if (uiPrefs.gamepad === false) return; // activado por defecto cuando hay un pad conectado
+  let gp = null;
+  try { gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(g => g && g.connected); } catch (e) { }
+  if (!gp) return;
+  const dz = v => Math.abs(v) < .13 ? 0 : v; // zona muerta
+  const lx = dz(gp.axes[0] || 0), ly = dz(gp.axes[1] || 0);
+  if (lx || ly) setXY(clamp01(state.xy.x + lx * .03), clamp01(state.xy.y - ly * .03)); // stick izq = pad XY
+  const rx = dz(gp.axes[2] || 0);
+  if (rx) { state.xfade = clamp01(state.xfade + rx * .02); $('#xfadeIn').value = state.xfade; } // stick der = crossfader
+  const b = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+  const was = i => !!gpPrev[i];
+  if (b(7) && !was(7)) buildStart();            // gatillo derecho (RT) = BUILD (mantener)
+  if (!b(7) && was(7)) buildDrop();             // soltar = DROP
+  if (b(6)) state.flash = Math.max(state.flash, gp.buttons[6].value || 1); // gatillo izq = FLASH analógico
+  else if (was(6)) state.flash = 0;
+  if (b(0) && !was(0)) tap();                   // A/✕ = tap tempo
+  if (b(1) && !was(1)) randomizeFx();           // B/○ = 🎲
+  if (b(2) && !was(2)) pubBurst();              // X/□ = 🎉 ráfaga
+  if (b(3) && !was(3)) toggleBlackout();        // Y/△ = blackout
+  if (b(5) && !was(5)) { gpCol = (gpCol + 1) % COLS; qTriggerColumn(gpCol); }             // RB = columna siguiente
+  if (b(4) && !was(4)) { gpCol = (gpCol - 1 + COLS) % COLS; qTriggerColumn(gpCol); }      // LB = columna anterior
+  if (b(12) && !was(12)) switchDeck((state.deckIdx + 3) % 4); // dpad ↑ = deck anterior
+  if (b(13) && !was(13)) switchDeck((state.deckIdx + 1) % 4); // dpad ↓ = deck siguiente
+  if (b(14) && !was(14)) recallScene(0);        // dpad ← = escena 1
+  if (b(15) && !was(15)) recallScene(1);        // dpad → = escena 2
+  gpPrev = gp.buttons.map(x => !!(x && x.pressed));
+}
+window.addEventListener('gamepadconnected', e => {
+  toast('🎮 ' + (e.gamepad.id || 'Gamepad').slice(0, 34) + ' conectado — stick=XY · RT=BUILD · A=tap · LB/RB=columnas');
+});
 const midiClock = { ticks: 0, lastBeat: 0, intervals: [], lock: false };
 /* MIDI Clock OUT: RAVEN VJ como reloj maestro (CDJs/DAW se cuelgan de nuestro BPM) */
 let clockOut = { timer: 0, acc: 0, last: 0 };
@@ -5037,6 +5249,14 @@ function buildCpTab(id) {
       <div class="cprow"><b>PC floja de papeles 🐢</b><span>
         <button id="cplite" class="mini${state.res[0] === 960 && state.res[1] === 540 && state.fpsCap === 30 ? ' on' : ''}">${state.res[0] === 960 && state.res[1] === 540 && state.fpsCap === 30 ? 'modo liviano ON' : 'activar modo liviano'}</button></span></div>
       <div class="cprow"><b>Motor gráfico</b><span><button id="cpglreset" class="mini">↻ Reiniciar (si se ve raro)</button></span></div>
+      <div class="cph">COLOR (LUT .cube)</div>
+      <div class="cprow"><b>LUT de color</b><span style="display:flex;gap:6px;align-items:center">
+        <button id="cplut" class="mini">🎨 cargar .cube…</button>
+        ${lutTex ? `<span class="v">${lutName} · ${lutN}³</span><button id="cplutx" class="mini">✕</button>` : '<span class="v">sin LUT</span>'}</span></div>
+      ${lutTex ? `<div class="cprow"><b>Intensidad</b><span>
+        <input id="cplutmix" type="range" min="0" max="1" step="0.05" value="${lutMix}" style="width:130px"></span></div>` : ''}
+      <div class="cprow"><span class="v">Los .cube son los archivos de color de cine (DaVinci, Premiere,
+        packs gratis en la web). Tiñe TODA la salida. No viaja en el set (se carga por sesión).</span></div>
       <div class="cph">MONITOR DE SALIDA</div>
       <div class="cprow"><b>Pantallas conectadas</b><span>
         <button id="cpscr" class="mini">🔍 detectar</button></span></div>
@@ -5076,6 +5296,14 @@ function buildCpTab(id) {
       markDirty(); buildCpTab('render');
       toast(lite ? '🐢 Modo liviano: 960×540 @ 30fps — ideal PC floja' : '🚀 Modo completo: ' + state.res.join('×') + ' @ 60fps');
     };
+    $('#cplut').onclick = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = '.cube';
+      inp.onchange = () => { if (inp.files[0]) loadLUTFile(inp.files[0]); };
+      inp.click();
+    };
+    if ($('#cplutx')) $('#cplutx').onclick = () => { clearLUT(); buildCpTab('render'); toast('LUT quitado'); };
+    if ($('#cplutmix')) $('#cplutmix').oninput = e => { lutMix = +e.target.value; };
     $('#cpglreset').onclick = () => {
       const ext = main.gl.getExtension('WEBGL_lose_context');
       if (ext) { ext.loseContext(); setTimeout(() => ext.restoreContext(), 150); }
@@ -5119,6 +5347,8 @@ function buildCpTab(id) {
         <span class="v" style="margin-left:6px">${uiPrefs.midiClock ? (midiClock.lock ? '🟢 en sync' : 'esperando clock…') : 'TAP/SYNC manual'}</span></span></div>
       <div class="cprow"><b>Mandar MIDI Clock</b><span>
         <button id="cpmidiclkout" class="mini${uiPrefs.midiClockOut ? ' on' : ''}" title="RAVEN VJ como reloj MAESTRO: manda clock por MIDI para que otros equipos se cuelguen de tu BPM">${uiPrefs.midiClockOut ? 'ON (maestro)' : 'off'}</button></span></div>
+      <div class="cprow"><b>🎮 Gamepad</b><span>
+        <button id="cpgamepad" class="mini${uiPrefs.gamepad !== false ? ' on' : ''}" title="joystick de PS/Xbox: stick izq = pad XY · stick der = crossfader · RT = BUILD · LT = FLASH · A = tap · B = 🎲 · X = ráfaga · Y = blackout · LB/RB = columnas · dpad = decks y escenas">${uiPrefs.gamepad !== false ? 'ON' : 'off'}</button></span></div>
       <div class="cph">MAPEOS DE MIDI LEARN
         <button id="cpmapsclear" class="mini" style="margin-left:8px">borrar todos</button></div>
       <div id="cpmaps"></div>
@@ -5140,6 +5370,10 @@ function buildCpTab(id) {
       if (uiPrefs.midiClock && uiPrefs.midiClockOut) setClockOut(false); // no ser esclavo y maestro a la vez
       buildCpTab('midi');
       toast(uiPrefs.midiClock ? '🕒 Siguiendo MIDI Clock — mandá play en el DJ/DAW' : 'MIDI Clock off — TAP/SYNC manual');
+    };
+    $('#cpgamepad').onclick = () => {
+      uiPrefs.gamepad = uiPrefs.gamepad === false ? true : false; saveUI(); buildCpTab('midi');
+      toast(uiPrefs.gamepad !== false ? '🎮 Gamepad activo' : '🎮 Gamepad desactivado');
     };
     $('#cpmidiclkout').onclick = () => {
       const on = !uiPrefs.midiClockOut;
@@ -5269,7 +5503,7 @@ function buildCpTab(id) {
     }
   } else if (id === 'audio') {
     b.innerHTML = `<div class="cph">ENTRADA</div>
-      <div class="cprow"><b>Audio</b><span><button id="cpaudio" class="mini${audio.on ? ' on' : ''}">${audio.on ? 'ON — click para apagar' : 'activar 🎤'}</button></span></div>
+      <div class="cprow"><b>Audio</b><span><button id="cpaudio" class="mini${audio.on ? ' on' : ''}">${audio.on ? 'ON — click para apagar' : 'activar 🎤'}</button> <button id="cpsys" class="mini" title="capturar el audio que suena en la PC (Spotify, DJ virtual) sin cables: elegí pestaña o pantalla y tildá Compartir audio">🖥 sistema</button></span></div>
       ${cpRow('BPM', 'bpm')}${cpRow('Beats detectados', 'beats')}
       <div class="cph">NIVELES</div>
       <div class="cpbarw"><b>BASS</b><div class="cpbar"><i id="cpbB"></i></div></div>
@@ -5281,6 +5515,7 @@ function buildCpTab(id) {
         <span class="v" data-tv="sens"></span></span></div>
       <div class="cprow"><b>Detectar BPM del audio</b><span><button id="cpsync" class="mini">SYNC</button></span></div>`;
     $('#cpaudio').onclick = async () => { await audioToggle(); buildCpTab('audio'); };
+    if ($('#cpsys')) $('#cpsys').onclick = async () => { await sysAudioStart(); buildCpTab('audio'); };
     $('#cpsens').value = state.beatSens || 1.32;
     $('#cpsens').oninput = e => { state.beatSens = +e.target.value; markDirty(); };
     $('#cpsync').onclick = syncBpm;
@@ -8300,6 +8535,7 @@ if (!uiPrefs.lang) { // primera vez: detectar el idioma de la computadora
 }
 if (curLang() !== 'es') applyLang(); // idioma elegido (persistido en prefs de UI)
 if (!uiPrefs.welcomed) showWelcome(); // cartel de bienvenida en el primer arranque
+setTimeout(autoRelinkBoot, 1800); // los videos vuelven solos si hay permisos guardados
 if (uiPrefs.propDock) setPropDock(true); // arrancar con Propiedades acoplada si quedó así
 midiInit();
 requestAnimationFrame(frame);
