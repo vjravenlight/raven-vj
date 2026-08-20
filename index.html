@@ -1591,6 +1591,11 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  float thr=u_p1*0.6;
  float k=1.-smoothstep(thr,thr+0.02+u_p2*0.4,l); // por debajo del umbral → negro (transparente en Add/Screen)
  o=vec4(c*(1.-k),1.);}` },
+{ id: 'trail', name: 'Estela / Trails', p: ['persistencia', 'deriva'], fs: `void main(){
+ vec3 cur=texture(u_tex,v_uv).rgb;
+ vec2 zuv=(v_uv-.5)*(1.-u_p2*.035)+.5;               // deriva: la estela se abre hacia afuera
+ vec3 pr=texture(u_prev,zuv).rgb*(.5+u_p1*.485);      // persistencia: cuánto dura la estela
+ o=vec4(max(cur,pr),1.);}` },
 ];
 
 const COMP_FS = `#version 300 es
@@ -1892,7 +1897,7 @@ function allocTargets() {
   if (!blackTex) blackTex = makeTex(gl, 2, 2);
   for (const L of state.layers) for (const s of L.slots) {
     if (s.tgt) { freeTarget(gl, s.tgt); s.tgt = makeTarget(gl, w, h); }
-    freeTarget(gl, s.nT); freeTarget(gl, s.fxT);
+    freeTarget(gl, s.nT); freeTarget(gl, s.fxT); freeTarget(gl, s.fxP); s.fxP = null;
     s.nT = null; s.fxT = null;
   }
 }
@@ -2656,19 +2661,26 @@ function layerFxPass(s, tex, fit, L, tr) {
   }
   if (!def) return src;
   if (!s.fxT) s.fxT = makeTarget(gl, state.res[0], state.res[1]);
+  const isTrail = def.id === 'trail';
+  if (isTrail && !s.fxP) s.fxP = makeTarget(gl, state.res[0], state.res[1]); // historia propia de la capa
   const p = program(main, 'fx' + def.id, FX_PRE + def.fs);
   gl.bindFramebuffer(gl.FRAMEBUFFER, s.fxT.fbo);
   gl.viewport(0, 0, state.res[0], state.res[1]);
   gl.useProgram(p);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src);
   gl.uniform1i(U(gl, p, 'u_tex'), 0);
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, fbTgt.tex);
+  // la estela usa el frame ANTERIOR de esta misma capa; el resto, el feedback global
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, (isTrail ? s.fxP : fbTgt).tex);
   gl.uniform1i(U(gl, p, 'u_prev'), 1);
   gl.uniform2f(U(gl, p, 'u_res'), state.res[0], state.res[1]);
   setAudioUniforms(gl, p);
   gl.uniform1f(U(gl, p, 'u_p1'), L.fx.p1);
   gl.uniform1f(U(gl, p, 'u_p2'), L.fx.p2);
   draw(gl);
+  if (isTrail) { // ping-pong: lo recién escrito pasa a ser la historia del próximo frame
+    const t2 = s.fxT; s.fxT = s.fxP; s.fxP = t2;
+    return t2.tex;
+  }
   return s.fxT.tex;
 }
 /* GIFs animados: frames decodificados con ImageDecoder, subidos como textura */
@@ -2772,7 +2784,7 @@ function renderTick() {
     }
   }
 
-  audioTick(dt); clockTick(dt); layerTick(dt); gpTick();
+  audioTick(dt); clockTick(dt); layerTick(dt); gpTick(); autoDropTick(dt);
   $('#mB').style.height = (2 + audio.bass * 16) + 'px';
   $('#mM').style.height = (2 + audio.mid * 16) + 'px';
   $('#mH').style.height = (2 + audio.high * 16) + 'px';
@@ -3971,6 +3983,36 @@ function midiInit() {
     $('#midiSt').textContent = 'denegado — click 🎹 para reintentar';
   });
 }
+/* ---------------- auto-DROP 💥: detectar el build-up y el drop de la música (DSP, sin IA) ---------------- */
+const adrop = { low: 0, cool: 0, armed: false };
+function autoDropTick(dt) {
+  if (!state.autoDrop || !audio.on) {
+    if (adrop.armed) { state.building = false; adrop.armed = false; }
+    adrop.low = 0;
+    return;
+  }
+  adrop.cool = Math.max(0, adrop.cool - dt);
+  const bass = audio.bass, high = audio.high;
+  if (bass < .3 && high > .15) {
+    // fase de RISER: el bombo se fue pero hay energía arriba → se viene el drop
+    adrop.low += dt;
+    if (adrop.low > 1.3 && !adrop.armed && adrop.cool <= 0 && !state.building) {
+      adrop.armed = true;
+      buildStart(); // BUILD progresivo automático
+    }
+  } else if (bass > .55) {
+    if (adrop.armed) { // ¡volvió el bombo! → DROP con flash y compás re-anclado
+      buildDrop();
+      adrop.armed = false;
+      adrop.cool = 8; // no re-disparar por 8 segundos
+      toast('💥 AUTO-DROP');
+    }
+    adrop.low = 0;
+  } else {
+    adrop.low = Math.max(0, adrop.low - dt * 2);
+    if (adrop.armed && adrop.low <= 0) { state.building = false; adrop.armed = false; } // riser que se pinchó: bajar sin flash
+  }
+}
 /* ---------------- gamepad 🎮: joystick de PS/Xbox como controlador VJ ---------------- */
 let gpPrev = [], gpCol = -1;
 function gpTick() {
@@ -4317,6 +4359,15 @@ function applyTarget(id, val, kind, on) {
     case 'scene': if (on) recallScene(+a); break;
     case 'dice': if (on) randomizeFx(); break;
     case 'react': if (on) pubBurst(); break;
+    case 'cue': if (on) { // saltar al cue N en todos los videos que estén sonando
+      const ci = +a;
+      state.layers.forEach(L2 => {
+        const cl = L2.slots[L2.target].cell;
+        if (cl && cl.cues && cl.cues[ci] != null && cl.video) {
+          try { cl.video.currentTime = cl.cues[ci]; cl.video.play().catch(() => { }); } catch (e) { }
+        }
+      });
+    } break;
     case 'sync': if (on) syncBpm(); break;
     case 'resync': if (on) resync(); break;
     case 'deck': if (on) switchDeck(+a); break;
@@ -4544,7 +4595,7 @@ function serialize() {
     bpm: state.bpm, fade: state.fade, master: state.master, cols: COLS,
     auto: { mode: state.auto.mode, beats: state.auto.beats },
     lfo: state.lfo.map(l => ({ wave: l.wave, rate: l.rate })),
-    scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans,
+    scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans, autoDrop: !!state.autoDrop,
     beatSens: state.beatSens, fpsCap: state.fpsCap, mono: state.mono, monoV: 2,
     outScreen: state.outScreen, theme: state.theme, gSpeed: state.gSpeed,
     res: state.res,
@@ -4585,6 +4636,7 @@ function serialize() {
       spd: c.spd != null && c.spd !== 1 ? c.spd : null,
       textStyle: c.textStyle, inT: c.inT || 0, outT: c.outT || 0, camId: c.camId || '',
       play: c.play && c.play !== 'loop' ? c.play : null, isImage: c.isImage ? 1 : 0, isScreen: c.isScreen ? 1 : 0,
+      cues: c.cues && c.cues.length ? c.cues : null,
       fileName: c.file ? c.file.name : (c.kind === 'video' || c.kind === 'gif' ? c.name : null),
       thumb: c.thumb,
     })),
@@ -4650,6 +4702,7 @@ function deserialize(d) {
     cell.anim = cd.anim || undefined;
     cell.inT = cd.inT || 0; cell.outT = cd.outT || 0; cell.play = cd.play || undefined;
     cell.isImage = cd.isImage ? true : undefined;
+    cell.cues = Array.isArray(cd.cues) ? cd.cues.filter(x => isFinite(x)).slice(0, 8) : undefined;
     cell.camId = cd.camId || '';
     if (cd.kind === 'video' || cd.kind === 'gif')
       cell.name = cd.fileName ? cd.fileName.replace(/\.[^.]+$/, '') : cd.name;
@@ -4667,6 +4720,7 @@ function deserialize(d) {
   state.rndBeats = d.rndBeats || 0;
   state.snap = d.snap || 0; if ($('#snapSel')) $('#snapSel').value = state.snap;
   state.trans = d.trans || 0; if ($('#transSel')) $('#transSel').value = state.trans;
+  state.autoDrop = !!d.autoDrop;
   $('#rndSel').value = state.rndBeats;
   state.xfade = d.xfade ?? .5;
   $('#xfadeIn').value = state.xfade;
@@ -4981,7 +5035,7 @@ main.canvas.addEventListener('webglcontextlost', e => {
 main.canvas.addEventListener('webglcontextrestored', () => {
   main.progs.clear();
   blackTex = null;
-  for (const L of state.layers) for (const s of L.slots) { s.tex = null; s.tgt = null; s.nT = null; s.fxT = null; s._gidx = -1; }
+  for (const L of state.layers) for (const s of L.slots) { s.tex = null; s.tgt = null; s.nT = null; s.fxT = null; s.fxP = null; s._gidx = -1; }
   allocTargets();
   toast('Render recuperado ✔');
 });
@@ -5513,12 +5567,18 @@ function buildCpTab(id) {
       <div class="cprow"><b>Sensibilidad</b><span style="display:flex;gap:8px;align-items:center">
         <input id="cpsens" type="range" min="1.1" max="1.8" step="0.02" style="width:130px">
         <span class="v" data-tv="sens"></span></span></div>
-      <div class="cprow"><b>Detectar BPM del audio</b><span><button id="cpsync" class="mini">SYNC</button></span></div>`;
+      <div class="cprow"><b>Detectar BPM del audio</b><span><button id="cpsync" class="mini">SYNC</button></span></div>
+      <div class="cprow"><b>💥 Auto-DROP (beta)</b><span>
+        <button id="cpadrop" class="mini${state.autoDrop ? ' on' : ''}" title="detecta el build-up y el drop de la música SOLO: arma el BUILD en el riser y suelta el flash cuando vuelve el bombo (análisis de energía, sin IA)">${state.autoDrop ? 'ON 🤖' : 'off'}</button></span></div>`;
     $('#cpaudio').onclick = async () => { await audioToggle(); buildCpTab('audio'); };
     if ($('#cpsys')) $('#cpsys').onclick = async () => { await sysAudioStart(); buildCpTab('audio'); };
     $('#cpsens').value = state.beatSens || 1.32;
     $('#cpsens').oninput = e => { state.beatSens = +e.target.value; markDirty(); };
     $('#cpsync').onclick = syncBpm;
+    if ($('#cpadrop')) $('#cpadrop').onclick = () => {
+      state.autoDrop = !state.autoDrop; markDirty(); buildCpTab('audio');
+      toast(state.autoDrop ? '💥 Auto-DROP activo — la app arma el build y suelta el drop sola' : 'Auto-DROP off');
+    };
   } else if (id === 'ses') {
     b.innerHTML = `<div class="cph">ESTADO DEL SET</div>
       ${cpRow('Clips en la grilla', 'clips')}${cpRow('Videos sin enlazar', 'unlink')}
@@ -5578,6 +5638,7 @@ function mapTargetName(t) {
     xfade: 'Crossfader A/B', auto: 'Autopilot', react: '🎉 Ráfaga de reacciones',
   };
   if (flat[k]) return flat[k];
+  if (k === 'cue') return `📍 Cue ${+a + 1}`;
   if (k === 'cell') return `Celda CAPA ${+a + 1} · col ${+b + 1}`;
   if (k === 'col') return `Columna ${+a + 1}`;
   if (k === 'lop') return `Opacidad CAPA ${+a + 1}`;
@@ -6673,7 +6734,7 @@ function emptyCell(cell) {
   freeCellMedia(cell); // cierra los ImageBitmaps del GIF/imagen, revoca URL y frena cámara (evita fuga de RAM)
   Object.assign(cell, {
     kind: 'empty', name: '', presetIdx: -1, file: null, video: null, url: null,
-    thumb: '', tcanvas: null, gframes: null, camId: '', inT: 0, outT: 0, play: null,
+    thumb: '', tcanvas: null, gframes: null, camId: '', inT: 0, outT: 0, play: null, cues: null,
   });
   refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
 }
@@ -7344,6 +7405,37 @@ function buildProps() {
   else if (propTab === 'capa') buildPropLayer(b);
   else buildPropComp(b);
 }
+/* --- cue points: marcas de posición en un video, saltables con click o MIDI --- */
+function buildCueChips(cell) {
+  const box = $('#ppcues');
+  if (!box) return;
+  box.innerHTML = '';
+  cell.cues = cell.cues || [];
+  cell.cues.forEach((t2, i) => {
+    const ch = el('button', 'mini');
+    ch.textContent = '📍' + (i + 1) + ' ' + t2.toFixed(1) + 's';
+    ch.title = 'click = saltar · click derecho = borrar · 🎹 learn: click en modo MIDI learn';
+    ch.dataset.map = 'cue:' + i; // mapeable a un pad con MIDI learn
+    ch.onclick = () => {
+      if (midiLearn) return; // en learn, el click es para mapear
+      if (cell.video) { try { cell.video.currentTime = t2; cell.video.play().catch(() => { }); } catch (e) { } }
+    };
+    ch.oncontextmenu = e => { e.preventDefault(); cell.cues.splice(i, 1); markDirty(); buildCueChips(cell); };
+    box.appendChild(ch);
+  });
+  if (cell.cues.length < 8) {
+    const add = el('button', 'mini on');
+    add.textContent = '＋ marcar acá';
+    add.title = 'marca un cue en la posición actual del video';
+    add.onclick = () => {
+      const t2 = cell.video ? cell.video.currentTime : 0;
+      cell.cues.push(+t2.toFixed(2));
+      cell.cues.sort((x, y) => x - y);
+      markDirty(); buildCueChips(cell);
+    };
+    box.appendChild(add);
+  }
+}
 /* --- animación de parámetros: UI dentro de Propiedades CLIP --- */
 const ANIM_LABELS = { sc: 'Escala', x: 'Posición X', y: 'Posición Y', rot: 'Rotación', p1: 'P1 velocidad', p2: 'P2 tono' };
 const ANIM_MODES = [['off', 'apagada'], ['lfo', '〰 loop (sync BPM)'], ['bass', '🔊 graves'], ['mid', '🔊 medios'],
@@ -7397,7 +7489,8 @@ function buildPropClip(b) {
       ${pRow('Fin (seg)', `<input type="number" id="ppout" min="0" step="0.1" value="${cell.outT || 0}">`)}
       ${pRow('Reproducción', `<select id="ppplay">
         <option value="loop"${(cell.play || 'loop') === 'loop' ? ' selected' : ''}>🔁 bucle</option>
-        <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez (queda en el último frame)</option></select>`)}`;
+        <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez (queda en el último frame)</option></select>`)}
+      ${pRow('📍 Cues', `<span id="ppcues" style="display:flex;gap:4px;flex-wrap:wrap"></span>`)}`;
   } else if (cell.kind === 'gif' && cell.isImage) {
     extra = `<div class="cph">IMAGEN 🖼</div>
       <div class="cprow"><span class="v">Imagen fija. Usá el TRANSFORM de arriba para escala/posición/rotación.</span></div>`;
@@ -7446,6 +7539,7 @@ function buildPropClip(b) {
   $('#ppspd').oninput = e => { cell.spd = +e.target.value; applyAllSpeeds(); markDirty(); };
   $('#pptr0').onclick = () => { cell.tr = { sc: 1, x: 0, y: 0, rot: 0 }; cell.spd = 1; applyAllSpeeds(); markDirty(); buildProps(); };
   wireAnimUI(cell);
+  if ($('#ppcues')) buildCueChips(cell);
   if ($('#ppplay')) $('#ppplay').onchange = e => {
     cell.play = e.target.value;
     // reiniciar el clip para que el modo nuevo se note de una
