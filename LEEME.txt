@@ -136,6 +136,60 @@ AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
   psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
   el golpe visual del drop sale solo.
 
+OBJETOS 3D 🧊 (GLB → wireframe audio-rítmico)
+  Arrastrá un archivo .glb (el formato 3D estándar — Blender exporta,
+  y hay miles gratis en Sketchfab) a una celda: entra como WIREFRAME
+  de líneas neón girando en 3D. En sus Propiedades:
+  - Giro (velocidad de rotación) y late con los graves solo.
+  - DESARME: el objeto explota en pedazos y se vuelve a armar —
+    manual con el slider, o al ritmo (graves/beat/LFO).
+  - Color fijo o ciclo arcoíris; el brillo sigue el beat.
+  - Si el GLB trae ANIMACIONES propias (piezas que giran, se mueven),
+    aparece un selector para elegir cuál reproducir y su velocidad.
+    (Animación de huesos/esqueleto no — solo piezas rígidas.)
+  Es un clip más: capas, efectos, blend modes, todo aplica. Se
+  re-enlaza como los videos al abrir el set.
+
+SENSOR DE MOVIMIENTO 🏃
+  Panel → Audio → "Sensor de movimiento": una cámara mide cuánto se
+  mueve la gente (comparación de cuadros, sin IA) y eso queda
+  disponible como modulador "motion" en TODOS lados: opacidad de
+  capas, parámetros de efectos, desarme de objetos 3D. El público
+  baila → los visuales explotan.
+
+CHROMA KEY 🟢 (efecto)
+  En el rack: "Chroma Key" mata el fondo verde (o azul/magenta, con
+  la perilla de color). Cámara + fondo verde = vos adentro de los
+  visuales. Combinalo con blend Add/Screen en la capa de arriba.
+
+CALEIDOSCOPIO 🔮 (efecto)
+  Espejado radial de 2 a 12 sectores con giro — el clásico que
+  convierte cualquier clip en mandala.
+
+AUTO-GUARDADO A ARCHIVO 💾
+  Archivo → "Auto-guardar en archivo…": elegís un .json UNA vez y la
+  app escribe el set ahí sola cada 20 segundos. Se corta la luz,
+  se cierra el browser, da igual: tu set está en el disco. Al abrir
+  la app otro día, un click lo reactiva.
+
+FOTO DE LA SALIDA 📸
+  Archivo → "Foto de la salida": descarga un PNG del frame exacto
+  que está saliendo (para flyers, stories, portfolio).
+
+CUENTA REGRESIVA ⏱
+  Archivo → "Cuenta regresiva…": poné minutos (5) o la hora exacta
+  (23:59) y aparece el countdown gigante sobre la salida. Al llegar
+  a CERO mete el DROP con flash solo. Año nuevo resuelto.
+
+LOGO / MARCA 🖼
+  Panel → Render → LOGO: cargá un PNG (con transparencia) y queda
+  fijo en una esquina de la salida con la opacidad que quieras. La
+  marca del evento o tu firma VJ. Viaja con el set.
+
+DESHACER ↩
+  Ctrl+Z deshace (hasta 30 pasos) y Ctrl+Shift+Z / Ctrl+Y rehace.
+  Borraste una celda en pleno set → Ctrl+Z y como si nada.
+
 B2B 🤝 (dos VJs, dos compus)
   Panel → Remoto → sección B2B. El que RECIBE activa su remoto y pasa
   el código; el que MANDA pone ese código y "🤝 mandar mi salida".

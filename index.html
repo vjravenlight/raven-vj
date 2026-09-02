@@ -965,7 +965,7 @@ const state = {
     surfaces: [{ pts: [[0, 0], [1, 0], [1, 1], [0, 1]], src: [0, 0, 1, 1], on: true, _m: null }],
   },
   fxPresets: {}, mono: true, outScreen: -1, theme: 'fenix',
-  customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [], colColors: {},
+  customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [], colColors: {}, logo: null, cd: null,
   decks: null, deckIdx: 0,
 };
 const DECK_NAMES = ['A', 'B', 'C', 'D'];
@@ -1596,6 +1596,23 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  vec2 zuv=(v_uv-.5)*(1.-u_p2*.035)+.5;               // deriva: la estela se abre hacia afuera
  vec3 pr=texture(u_prev,zuv).rgb*(.5+u_p1*.485);      // persistencia: cuánto dura la estela
  o=vec4(max(cur,pr),1.);}` },
+{ id: 'chroma', name: 'Chroma Key (fondo de color)', p: ['color clave', 'umbral'], fs: `void main(){
+ vec3 c=texture(u_tex,v_uv).rgb;
+ float d;                                             // qué tan "fondo" es este píxel
+ if(u_p1<.33) d=c.g-max(c.r,c.b);                     // verde
+ else if(u_p1<.66) d=c.b-max(c.r,c.g);                // azul
+ else d=min(c.r,c.b)-c.g;                             // magenta
+ float k=smoothstep(.5-u_p2*.45,.52-u_p2*.4,d);       // umbral con borde suave
+ o=vec4(c*(1.-k),1.);}` },
+{ id: 'kaleido', name: 'Caleidoscopio', p: ['sectores', 'giro'], fs: `void main(){
+ vec2 p=v_uv-.5; p.x*=u_res.x/u_res.y;
+ float n=floor(2.+u_p1*10.);                          // 2 a 12 espejos
+ float a=atan(p.y,p.x)+u_p2*6.2832+u_time*.1;
+ float r=length(p);
+ a=abs(mod(a,6.2832/n)-3.1416/n);                     // plegar el ángulo
+ vec2 q=vec2(cos(a),sin(a))*r;
+ q.x*=u_res.y/u_res.x;
+ o=vec4(texture(u_tex,clamp(q+.5,0.,1.)).rgb,1.);}` },
 { id: 'strobe', name: 'Estrobo', p: ['velocidad', 'oscuridad'], fs: `void main(){
  float st=max(u_bpm,30.)/60.*pow(2.,floor(u_p1*3.99)); // destellos por beat: 1/2/4/8
  float duty=1.-u_p2*.85;                               // oscuridad: cuánto dura el negro
@@ -1911,7 +1928,7 @@ allocTargets();
 function slotTexture(s) {
   const gl = main.gl;
   if (s.kind === 'video' || s.kind === 'text' || s.kind === 'gif') { if (!s.tex) s.tex = makeTex(gl, 2, 2); return s.tex; }
-  if (s.kind === 'gen') { if (!s.tgt) s.tgt = makeTarget(gl, state.res[0], state.res[1]); return s.tgt.tex; }
+  if (s.kind === 'gen' || s.kind === 'glb') { if (!s.tgt) s.tgt = makeTarget(gl, state.res[0], state.res[1]); return s.tgt.tex; }
   return blackTex;
 }
 
@@ -2324,8 +2341,53 @@ function modValue(name) {
     case 'lfo1': return lfoVal(0); case 'lfo2': return lfoVal(1);
     case 'bass': return audio.bass; case 'mid': return audio.mid; case 'high': return audio.high;
     case 'beat': return beatEnv; case 'x': return state.xy.x; case 'y': return state.xy.y;
+    case 'motion': return motion.val; // 🏃 cuánto se mueve la gente frente a la cámara
   }
   return 0;
+}
+/* ---------------- sensor de movimiento 🏃: la cámara mide cuánto se mueve la gente (sin IA) ---------------- */
+const motion = { on: false, val: 0, stream: null, _v: null, _cv: null, _prev: null, _t: 0 };
+async function motionToggle() {
+  if (motion.on) {
+    motion.on = false; motion.val = 0;
+    if (motion.stream) motion.stream.getTracks().forEach(t => t.stop());
+    motion.stream = null; motion._prev = null;
+    toast('🏃 Sensor de movimiento apagado');
+    buildCpTab('audio');
+    return;
+  }
+  try {
+    motion.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 320 } } });
+  } catch (e) { toast('🏃 No pude abrir la cámara'); return; }
+  motion._v = document.createElement('video');
+  motion._v.srcObject = motion.stream; motion._v.muted = true; motion._v.playsInline = true;
+  motion._v.play().catch(() => { });
+  if (!motion._cv) {
+    motion._cv = document.createElement('canvas');
+    motion._cv.width = 48; motion._cv.height = 27;
+    motion._ctx = motion._cv.getContext('2d', { willReadFrequently: true });
+  }
+  motion.on = true;
+  toast('🏃 Sensor activo — el movimiento frente a la cámara ahora es un modulador más (como los graves)');
+  buildCpTab('audio');
+}
+function motionTick(dt) {
+  if (!motion.on || !motion._v || motion._v.readyState < 2) { motion.val *= .95; return; }
+  motion._t += dt;
+  if (motion._t < .066) return; // ~15 medidas por segundo alcanzan
+  motion._t = 0;
+  try {
+    motion._ctx.drawImage(motion._v, 0, 0, 48, 27);
+    const d = motion._ctx.getImageData(0, 0, 48, 27).data;
+    if (motion._prev) {
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4)
+        sum += Math.abs(d[i] - motion._prev[i]) + Math.abs(d[i + 1] - motion._prev[i + 1]);
+      const raw = Math.min(1, sum / (48 * 27 * 46)); // normalizado a "se mueve todo"
+      motion.val = Math.max(raw, motion.val * .9); // sube rápido, baja suave
+    }
+    motion._prev = d.slice();
+  } catch (e) { }
 }
 
 /* ---------------- animación de parámetros por clip (loops sync BPM) ---------------- */
@@ -2437,6 +2499,322 @@ function autopilotBeat() {
   }
 }
 
+/* ---------------- objetos 3D 🧊: GLB → wireframe audio-rítmico (parser propio, sin librerías) ---------------- */
+function m4mul(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
+    o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+  return o;
+}
+const M4I = () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+function m4persp(fovy, ar, n, f) {
+  const t = 1 / Math.tan(fovy / 2), d = 1 / (n - f);
+  return new Float32Array([t / ar, 0, 0, 0, 0, t, 0, 0, 0, 0, (n + f) * d, -1, 0, 0, 2 * n * f * d, 0]);
+}
+const m4rotY = a => new Float32Array([Math.cos(a), 0, -Math.sin(a), 0, 0, 1, 0, 0, Math.sin(a), 0, Math.cos(a), 0, 0, 0, 0, 1]);
+const m4rotX = a => new Float32Array([1, 0, 0, 0, 0, Math.cos(a), Math.sin(a), 0, 0, -Math.sin(a), Math.cos(a), 0, 0, 0, 0, 1]);
+const m4trans = (x, y, z) => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]);
+const m4scale = s => new Float32Array([s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1]);
+function m4fromTRS(t, q, s) { // T·R·S con cuaternión
+  let m = M4I();
+  if (t) m = m4mul(m, m4trans(t[0], t[1], t[2]));
+  if (q) {
+    const [x, y, z, w] = q;
+    m = m4mul(m, new Float32Array([
+      1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w), 0,
+      2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w), 0,
+      2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y), 0,
+      0, 0, 0, 1]));
+  }
+  if (s) m = m4mul(m, new Float32Array([s[0], 0, 0, 0, 0, s[1], 0, 0, 0, 0, s[2], 0, 0, 0, 0, 1]));
+  return m;
+}
+function m4fromNode(nd) { // matriz local de un nodo glTF
+  if (nd.matrix) return new Float32Array(nd.matrix);
+  return m4fromTRS(nd.translation, nd.rotation, nd.scale);
+}
+function parseGLB(buf) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== 0x46546C67) throw 'no es un archivo GLB';
+  let off = 12, g = null, bin = null;
+  const total = Math.min(dv.getUint32(8, true), buf.byteLength);
+  while (off + 8 <= total) {
+    const clen = dv.getUint32(off, true), ctype = dv.getUint32(off + 4, true);
+    const chunk = buf.slice(off + 8, off + 8 + clen);
+    if (ctype === 0x4E4F534A) g = JSON.parse(new TextDecoder().decode(chunk));
+    else if (ctype === 0x004E4942) bin = chunk;
+    off += 8 + clen + (3 - (clen + 3) % 4); // chunks alineados a 4
+  }
+  if (!g || !bin) throw 'GLB incompleto';
+  const readAcc = idx => {
+    const a = g.accessors[idx], bv = g.bufferViews[a.bufferView];
+    const start = (bv.byteOffset || 0) + (a.byteOffset || 0);
+    const compN = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[a.type] || 3;
+    const T = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array, 5121: Uint8Array }[a.componentType];
+    if (!T) return null;
+    const stride = bv.byteStride || 0, natural = compN * T.BYTES_PER_ELEMENT;
+    if (stride && stride !== natural) { // atributos entrelazados: copiar de a uno
+      const out = new T(a.count * compN);
+      const sv = new DataView(bin);
+      for (let i = 0; i < a.count; i++) for (let k = 0; k < compN; k++) {
+        const p2 = start + i * stride + k * T.BYTES_PER_ELEMENT;
+        out[i * compN + k] = T === Float32Array ? sv.getFloat32(p2, true) :
+          T === Uint32Array ? sv.getUint32(p2, true) : T === Uint16Array ? sv.getUint16(p2, true) : sv.getUint8(p2);
+      }
+      return { arr: out, count: a.count, compN };
+    }
+    return { arr: new T(bin, start, a.count * compN), count: a.count, compN };
+  };
+  // jerarquía de nodos (para las animaciones propias del GLB)
+  const nodesRaw = g.nodes || [];
+  const parents = nodesRaw.map(() => -1);
+  nodesRaw.forEach((nd, i) => (nd.children || []).forEach(c => { if (nodesRaw[c]) parents[c] = i; }));
+  // pistas de animación: solo nodos rígidos (T/R/S) — el skinning con huesos queda afuera
+  const anims = (g.animations || []).map((an, ai) => {
+    const chans = [];
+    for (const ch of an.channels || []) {
+      const sm = an.samplers && an.samplers[ch.sampler];
+      if (!sm || !ch.target || ch.target.node == null) continue;
+      const path = ch.target.path;
+      if (path !== 'translation' && path !== 'rotation' && path !== 'scale') continue;
+      const inp = readAcc(sm.input), out = readAcc(sm.output);
+      if (!inp || !out) continue;
+      let vals = out.arr;
+      if (sm.interpolation === 'CUBICSPLINE') { // nos quedamos con el valor central de cada tripleta
+        const v2 = new Float32Array(inp.count * out.compN);
+        for (let i = 0; i < inp.count; i++) for (let k = 0; k < out.compN; k++)
+          v2[i * out.compN + k] = vals[(i * 3 + 1) * out.compN + k];
+        vals = v2;
+      }
+      chans.push({ node: ch.target.node, path, times: Float32Array.from(inp.arr), vals: Float32Array.from(vals), comp: out.compN });
+    }
+    let dur = .001;
+    for (const c of chans) dur = Math.max(dur, c.times[c.times.length - 1] || 0);
+    return { name: an.name || 'anim ' + (ai + 1), dur, chans };
+  }).filter(a => a.chans.length);
+  const hasAnim = anims.length > 0;
+  // recorrer la escena: modelos ESTÁTICOS se hornean a mundo; los ANIMADOS guardan
+  // coordenadas locales + el "slot" de su nodo (la matriz viva se sube por frame)
+  const MAXSLOT = 32;
+  const slotOf = new Map(); // nodo con malla → slot 1..32 (0 = estático)
+  const pos = [], tris = [], vslot = [], wpos = [];
+  const walk = (ni, parent) => {
+    const nd = nodesRaw[ni];
+    if (!nd) return;
+    const m = m4mul(parent, m4fromNode(nd));
+    if (nd.mesh != null && g.meshes[nd.mesh]) {
+      let slot = 0;
+      if (hasAnim && slotOf.size < MAXSLOT) {
+        if (!slotOf.has(ni)) slotOf.set(ni, slotOf.size + 1);
+        slot = slotOf.get(ni);
+      }
+      for (const pr of g.meshes[nd.mesh].primitives || []) {
+        if ((pr.mode ?? 4) !== 4 || pr.attributes.POSITION == null) continue; // solo triángulos
+        const P = readAcc(pr.attributes.POSITION);
+        if (!P) continue;
+        const base = pos.length / 3;
+        for (let i = 0; i < P.count; i++) {
+          const x = P.arr[i * 3], y = P.arr[i * 3 + 1], z = P.arr[i * 3 + 2];
+          const wx = m[0] * x + m[4] * y + m[8] * z + m[12],
+            wy = m[1] * x + m[5] * y + m[9] * z + m[13],
+            wz = m[2] * x + m[6] * y + m[10] * z + m[14];
+          wpos.push(wx, wy, wz); // el mundo en pose base define el encuadre
+          if (slot > 0) pos.push(x, y, z); else pos.push(wx, wy, wz);
+          vslot.push(slot);
+        }
+        if (pr.indices != null) {
+          const I = readAcc(pr.indices);
+          if (I) for (let i = 0; i + 2 < I.arr.length; i += 3) tris.push(base + I.arr[i], base + I.arr[i + 1], base + I.arr[i + 2]);
+        } else for (let i = 0; i + 2 < P.count; i += 3) tris.push(base + i, base + i + 1, base + i + 2);
+      }
+    }
+    (nd.children || []).forEach(c => walk(c, m));
+  };
+  const scene = g.scenes && g.scenes[g.scene || 0];
+  ((scene && scene.nodes) || nodesRaw.map((_, i) => i)).forEach(ni => walk(ni, M4I()));
+  if (!tris.length) throw 'el GLB no tiene mallas de triángulos';
+  // encuadre: centrado y tamaño unitario (sobre la pose base)
+  let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+  for (let i = 0; i < wpos.length; i += 3) for (let k = 0; k < 3; k++) {
+    if (wpos[i + k] < mn[k]) mn[k] = wpos[i + k];
+    if (wpos[i + k] > mx[k]) mx[k] = wpos[i + k];
+  }
+  const cx = (mn[0] + mx[0]) / 2, cy = (mn[1] + mx[1]) / 2, cz = (mn[2] + mx[2]) / 2;
+  const R = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2 || 1;
+  const bake = !hasAnim; // sin animaciones, la normalización va horneada en los vértices
+  // des-indexar por triángulo (cada uno con su dirección de "explosión") + tope para modelos gigantes
+  const nT = tris.length / 3, CAP = 60000;
+  const step = nT > CAP ? nT / CAP : 1;
+  const outN = Math.min(nT, CAP);
+  const vp = new Float32Array(outN * 9), vd = new Float32Array(outN * 9), vn = new Float32Array(outN * 3), idx = new Uint32Array(outN * 6);
+  for (let o2 = 0; o2 < outN; o2++) {
+    const t2 = Math.floor(o2 * step) * 3;
+    let gx = 0, gy = 0, gz = 0;
+    for (let k = 0; k < 3; k++) {
+      const vi = tris[t2 + k] * 3;
+      vp[o2 * 9 + k * 3] = bake ? (pos[vi] - cx) / R : pos[vi];
+      vp[o2 * 9 + k * 3 + 1] = bake ? (pos[vi + 1] - cy) / R : pos[vi + 1];
+      vp[o2 * 9 + k * 3 + 2] = bake ? (pos[vi + 2] - cz) / R : pos[vi + 2];
+      // la explosión empuja según dónde quedó la pieza en el mundo (pose base)
+      gx += (wpos[vi] - cx) / R; gy += (wpos[vi + 1] - cy) / R; gz += (wpos[vi + 2] - cz) / R;
+    }
+    const gl2 = Math.hypot(gx / 3, gy / 3, gz / 3) || 1;
+    for (let k = 0; k < 3; k++) {
+      vd[o2 * 9 + k * 3] = gx / 3 / gl2; vd[o2 * 9 + k * 3 + 1] = gy / 3 / gl2; vd[o2 * 9 + k * 3 + 2] = gz / 3 / gl2;
+      vn[o2 * 3 + k] = vslot[tris[t2 + k]];
+    }
+    const b2 = o2 * 3;
+    idx.set([b2, b2 + 1, b2 + 1, b2 + 2, b2 + 2, b2], o2 * 6);
+  }
+  return {
+    pos: vp, dir: vd, ni: vn, idx, tris: outN, anims,
+    nodes: nodesRaw.map((nd, i) => ({ parent: parents[i], matrix: nd.matrix || null, t: nd.translation || null, r: nd.rotation || null, s: nd.scale || null })),
+    slots: [...slotOf.entries()],
+    normC: [cx, cy, cz], normR: R,
+  };
+}
+function glbSample(ch, tt) { // valor de una pista en el tiempo tt (lineal / nlerp para cuaterniones)
+  const T = ch.times, n = T.length, c = ch.comp;
+  if (!n) return null;
+  if (tt <= T[0]) return Array.from(ch.vals.slice(0, c));
+  if (tt >= T[n - 1]) return Array.from(ch.vals.slice((n - 1) * c, n * c));
+  let i = 1;
+  while (i < n && T[i] < tt) i++;
+  const f = (tt - T[i - 1]) / Math.max(1e-6, T[i] - T[i - 1]);
+  const a = ch.vals.subarray((i - 1) * c, i * c), b = ch.vals.subarray(i * c, (i + 1) * c);
+  const out = new Array(c);
+  if (c === 4 && ch.path === 'rotation') {
+    const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    const sg = dot < 0 ? -1 : 1;
+    let l = 0;
+    for (let k = 0; k < 4; k++) { out[k] = a[k] * (1 - f) + b[k] * sg * f; l += out[k] * out[k]; }
+    l = Math.sqrt(l) || 1;
+    for (let k = 0; k < 4; k++) out[k] /= l;
+  } else for (let k = 0; k < c; k++) out[k] = a[k] * (1 - f) + b[k] * f;
+  return out;
+}
+function glbNodeMats(geo, g3) { // matrices vivas por slot (normalización incluida)
+  const trs = geo.nodes.map(nd => ({ m: nd.matrix, t: nd.t, r: nd.r, s: nd.s }));
+  const ai = g3.anim == null ? 0 : +g3.anim;
+  if (ai >= 0 && geo.anims[ai]) {
+    const an = geo.anims[ai];
+    const tt = (nowSec * (g3.aspd || 1)) % an.dur;
+    for (const ch of an.chans) {
+      const v = glbSample(ch, tt);
+      const tr = trs[ch.node];
+      if (!v || !tr) continue;
+      tr.m = null; // el TRS animado pisa la matriz fija
+      if (ch.path === 'translation') tr.t = v;
+      else if (ch.path === 'rotation') tr.r = v;
+      else tr.s = v;
+    }
+  }
+  const world = new Array(trs.length).fill(null);
+  const wOf = i => {
+    if (world[i]) return world[i];
+    const loc = trs[i].m ? new Float32Array(trs[i].m) : m4fromTRS(trs[i].t, trs[i].r, trs[i].s);
+    const p = geo.nodes[i].parent;
+    return world[i] = p >= 0 ? m4mul(wOf(p), loc) : loc;
+  };
+  const Nm = m4mul(m4scale(1 / geo.normR), m4trans(-geo.normC[0], -geo.normC[1], -geo.normC[2]));
+  const mats = new Float32Array(33 * 16);
+  mats.set(Nm, 0); // slot 0: partes estáticas, ya en mundo
+  for (const [ni2, slot] of geo.slots) mats.set(m4mul(Nm, wOf(ni2)), slot * 16);
+  return mats;
+}
+const GLB_STATIC_MATS = (() => { const m = new Float32Array(33 * 16); m.set(M4I(), 0); return m; })();
+function glbProg(gl) {
+  if (main._glbP && main._glbPGl === gl) return main._glbP;
+  const vs = `#version 300 es
+layout(location=0) in vec3 a_pos; layout(location=1) in vec3 a_dir; layout(location=2) in float a_ni;
+uniform mat4 u_mvp; uniform mat4 u_node[33]; uniform float u_expl;
+void main(){
+  vec4 wp = u_node[int(a_ni + .5)] * vec4(a_pos, 1.);   // matriz viva del nodo (animaciones del GLB)
+  gl_Position = u_mvp * vec4(wp.xyz + a_dir * u_expl, 1.);
+}`;
+  const fs = `#version 300 es
+precision mediump float; uniform vec3 u_col; out vec4 o;
+void main(){ o = vec4(u_col, 1.); }`;
+  const mk = (t, src) => {
+    const s = gl.createShader(t);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, mk(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  main._glbP = p; main._glbPGl = gl;
+  return p;
+}
+function hue2rgb(h) {
+  h = ((h % 1) + 1) % 1;
+  const f = n => { const k = (n + h * 6) % 6; return 1 - Math.max(0, Math.min(k, 4 - k, 1)); };
+  return [f(5) * .9 + .1, f(3) * .9 + .1, f(1) * .9 + .1];
+}
+function renderGlb(ctx, cell, target) {
+  const gl = ctx.gl, geo = cell.glb;
+  if (!geo) return;
+  let B = cell._g3buf;
+  if (!B || B.gl !== gl) { // buffers GPU (se rearman si el contexto se perdió)
+    B = { gl, vao: gl.createVertexArray(), vbo: gl.createBuffer(), dbo: gl.createBuffer(), nbo: gl.createBuffer(), ebo: gl.createBuffer() };
+    gl.bindVertexArray(B.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, geo.pos, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.dbo);
+    gl.bufferData(gl.ARRAY_BUFFER, geo.dir, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.nbo);
+    gl.bufferData(gl.ARRAY_BUFFER, geo.ni || new Float32Array(geo.pos.length / 3), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, B.ebo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geo.idx, gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    cell._g3buf = B;
+  }
+  const g3 = cell.g3 || {};
+  const spin = g3.spin != null ? g3.spin : .5;
+  const exSrc = g3.exMod && g3.exMod !== 'off' ? modValue(g3.exMod) : 0;
+  const expl = ((g3.expl || 0) + exSrc * .8) * 1.2; // que se desarme… y se vuelva a armar (sin irse de cámara)
+  const scale = 1 + audio.bass * .3; // late con los graves
+  const mvp = m4mul(m4persp(.8, target.w / target.h, .1, 100),
+    m4mul(m4trans(0, 0, -2.6),
+      m4mul(m4rotY(nowSec * spin * 1.5), m4mul(m4rotX(nowSec * spin * .6 + .4), m4scale(scale)))));
+  const col = g3.color && g3.color !== 'cycle' ? (() => {
+    const m = /^#?(..)(..)(..)/.exec(g3.color);
+    return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : [1, .5, .1];
+  })() : hue2rgb(nowSec * .07 + beatEnv * .12);
+  const glow = .55 + beatEnv * .45; // brillo del trazo clavado al beat
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+  gl.viewport(0, 0, target.w, target.h);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const p = glbProg(gl);
+  gl.useProgram(p);
+  gl.uniformMatrix4fv(gl.getUniformLocation(p, 'u_mvp'), false, mvp);
+  gl.uniformMatrix4fv(gl.getUniformLocation(p, 'u_node'), false,
+    geo.anims && geo.anims.length ? glbNodeMats(geo, g3) : GLB_STATIC_MATS);
+  gl.uniform1f(gl.getUniformLocation(p, 'u_expl'), expl);
+  gl.uniform3f(gl.getUniformLocation(p, 'u_col'), col[0] * glow, col[1] * glow, col[2] * glow);
+  gl.bindVertexArray(B.vao);
+  gl.drawElements(gl.LINES, geo.tris * 6, gl.UNSIGNED_INT, 0);
+  gl.bindVertexArray(null);
+}
+async function assignGLB(cell, file) {
+  try {
+    const geo = parseGLB(await file.arrayBuffer());
+    freeCellMedia(cell);
+    cell.kind = 'glb'; cell.file = file;
+    cell.name = file.name.replace(/\.[^.]+$/, '');
+    cell.video = null; cell.gframes = null; cell.thumb = ''; cell.presetIdx = -1;
+    cell.glb = geo; cell._g3buf = null;
+    cell.g3 = cell.g3 || { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' };
+    try { mediaPool.set(file.name, file); } catch (e) { }
+    refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
+    toast('🧊 ' + cell.name + ' → wireframe de ' + geo.tris + ' triángulos');
+  } catch (e) { toast('🧊 No pude leer el GLB: ' + e); }
+}
 /* ---------------- disparo de clips / capas ---------------- */
 function slotUsesVideo(v) {
   return state.layers.some(L => L.slots.some(s => s.kind === 'video' && s.video === v));
@@ -2461,6 +2839,10 @@ function loadSlot(s, cell) {
     s.kind = 'gif'; s._gt = 0; s._gidx = -1;
   } else if (cell.kind === 'text') {
     s.kind = 'text';
+  } else if (cell.kind === 'glb') {
+    if (!cell.glb) { s.kind = 'empty'; return; }
+    s.kind = 'glb';
+    if (!s.tgt) s.tgt = makeTarget(main.gl, state.res[0], state.res[1]);
   } else {
     s.kind = 'gen';
     if (!s.tgt) s.tgt = makeTarget(main.gl, state.res[0], state.res[1]);
@@ -2470,7 +2852,7 @@ function triggerCell(l, c, dk) {
   const g = dk != null && state.decks ? state.decks[dk] : state.grid;
   const cell = g && g[l] && g[l][c];
   if (!cell || cell.kind === 'empty') return;
-  if ((cell.kind === 'video' && !cell.video) || (cell.kind === 'gif' && !cell.gframes)) {
+  if ((cell.kind === 'video' && !cell.video) || (cell.kind === 'gif' && !cell.gframes) || (cell.kind === 'glb' && !cell.glb)) {
     toast('Clip sin enlazar — usá 🔗 RELINK'); return;
   }
   if (cell.kind === 'cam' && !cell.video) {
@@ -2799,7 +3181,7 @@ function renderTick() {
     }
   }
 
-  audioTick(dt); clockTick(dt); layerTick(dt); gpTick(); autoDropTick(dt);
+  audioTick(dt); clockTick(dt); layerTick(dt); gpTick(); autoDropTick(dt); motionTick(dt);
   if (scanFlat) { // escaneo de auto-máscara: proyectar plano blanco o negro
     const gfl = main.gl;
     gfl.bindFramebuffer(gfl.FRAMEBUFFER, null);
@@ -2843,6 +3225,10 @@ function renderTick() {
           const [ep1, ep2] = effGp(s.cell);
           renderGen(main, s.cell.presetIdx, s.tgt, ep1, ep2, L.genT);
         }
+        s.fit = [1, 1]; ok = 1;
+      }
+      else if (s.kind === 'glb' && s.cell) {
+        if (!skipGen) renderGlb(main, s.cell, s.tgt);
         s.fit = [1, 1]; ok = 1;
       }
       else if (s.kind === 'text' && s.cell) {
@@ -3034,7 +3420,9 @@ function renderTick() {
     draw(gl);
   }
   structsDraw(gl); // estructuras de líneas animadas sobre el mapping
+  overlayExtras(gl); // logo 🖼 y cuenta regresiva ⏱
   pubDraw(gl); // reacciones del público flotando sobre la salida
+  if (snapshotPNG._want) snapshotGrab(); // 📸 dentro del frame, con el buffer todavía vivo
 
   livePrevTick();
   previewTick();
@@ -3134,7 +3522,7 @@ function previewTick() {
 
 /* ---------------- grilla DOM ---------------- */
 const BLENDS = ['Normal', 'Add', 'Screen', 'Multiply', 'Difference', 'Lighten'];
-const OPMODS = ['off', 'bass', 'mid', 'high', 'lfo1', 'lfo2', 'beat'];
+const OPMODS = ['off', 'bass', 'mid', 'high', 'lfo1', 'lfo2', 'beat', 'motion'];
 function cellEl(l, c) { return document.querySelector(`.cell[data-l="${l}"][data-c="${c}"]`); }
 function setColColor(c, hx) { // 🎨 color de columna: para organizar el set a ojo (psy / techno / chill…)
   state.colColors = state.colColors || {};
@@ -3361,7 +3749,7 @@ function cellDom(l, c) {
 }
 function renderCell(d, cell) {
   d.className = 'cell' + (cell.kind === 'gen' ? ' gen' : '') + (cell.kind === 'text' ? ' text' : '') +
-    ((cell.kind === 'video' && !cell.video) || (cell.kind === 'gif' && !cell.gframes) ? ' unlinked' : '');
+    ((cell.kind === 'video' && !cell.video) || (cell.kind === 'gif' && !cell.gframes) || (cell.kind === 'glb' && !cell.glb) ? ' unlinked' : '');
   d.innerHTML = '';
   const th = el('div', 'thumb');
   if (cell.thumb) th.style.backgroundImage = `url(${cell.thumb})`;
@@ -3371,6 +3759,8 @@ function renderCell(d, cell) {
     `linear-gradient(135deg,#301040,#101014 70%)`;
   else if (cell.kind === 'cam') th.style.background =
     `linear-gradient(135deg,#0a2a3a,#101014 70%)`;
+  else if (cell.kind === 'glb') th.style.background =
+    `linear-gradient(135deg,#102a20,#0a1030 60%,#201040)`;
   d.appendChild(th);
   if (cell.kind === 'gen' || cell.kind === 'text' || cell.kind === 'cam') {
     const pv = el('canvas', 'genprev');
@@ -3382,7 +3772,7 @@ function renderCell(d, cell) {
     const nm = el('div', 'cname');
     nm.textContent = (cell.kind === 'gen' ? genIcon(cell.presetIdx) + ' ' :
       cell.kind === 'text' ? '💬 ' : cell.kind === 'gif' ? (cell.isImage ? '🖼 ' : '🎞 ') :
-      cell.kind === 'cam' ? (cell.isScreen ? '🖥 ' : '📷 ') : '') + cell.name;
+      cell.kind === 'cam' ? (cell.isScreen ? '🖥 ' : '📷 ') : cell.kind === 'glb' ? '🧊 ' : '') + cell.name;
     d.appendChild(nm);
     const cb = el('div', 'colbadge');
     cb.textContent = (cell.c + 1);
@@ -3608,7 +3998,7 @@ async function pickVideosFSA() { // "+ VIDEOS" con permisos persistentes cuando 
   try {
     const handles = await showOpenFilePicker({
       multiple: true,
-      types: [{ description: 'Videos e imágenes', accept: { 'video/*': ['.mp4', '.webm', '.mov', '.mkv'], 'image/*': ['.gif', '.png', '.jpg', '.jpeg', '.webp'] } }],
+      types: [{ description: 'Videos, imágenes y 3D', accept: { 'video/*': ['.mp4', '.webm', '.mov', '.mkv'], 'image/*': ['.gif', '.png', '.jpg', '.jpeg', '.webp'], 'model/gltf-binary': ['.glb'] } }],
     });
     const files = [];
     for (const h of handles) {
@@ -3620,7 +4010,7 @@ async function pickVideosFSA() { // "+ VIDEOS" con permisos persistentes cuando 
 function allUnlinkedCells() {
   const out = [];
   (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => {
-    if ((c.kind === 'video' && !c.video) || (c.kind === 'gif' && !c.gframes)) out.push(c);
+    if ((c.kind === 'video' && !c.video) || (c.kind === 'gif' && !c.gframes) || (c.kind === 'glb' && !c.glb)) out.push(c);
   })));
   return out;
 }
@@ -3666,11 +4056,18 @@ function freeCellMedia(cell) {
   if (cell.gframes) { for (const f of cell.gframes) { try { f.bmp && f.bmp.close(); } catch (e) { } } cell.gframes = null; }
   if (cell.url) { try { URL.revokeObjectURL(cell.url); } catch (e) { } cell.url = null; }
   if (cell.cvstream) { try { cell.cvstream.getTracks().forEach(t => t.stop()); } catch (e) { } cell.cvstream = null; }
+  if (cell._g3buf && cell._g3buf.gl) { // buffers GPU del objeto 3D
+    const B = cell._g3buf, g = B.gl;
+    try { g.deleteBuffer(B.vbo); g.deleteBuffer(B.dbo); g.deleteBuffer(B.ebo); g.deleteVertexArray(B.vao); } catch (e) { }
+    cell._g3buf = null;
+  }
+  cell.glb = null;
 }
 function freeAllMedia() { (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(freeCellMedia))); }
-const isMediaFile = f => f.type.startsWith('video') || f.type.startsWith('image');
+const isMediaFile = f => f.type.startsWith('video') || f.type.startsWith('image') || /\.glb$/i.test(f.name);
 function assignMedia(cell, file) {
   try { mediaPool.set(file.name, file); } catch (e) { }
+  if (/\.glb$/i.test(file.name)) return assignGLB(cell, file); // objeto 3D → wireframe 🧊
   if (file.type === 'image/gif') return assignGif(cell, file);
   if (file.type.startsWith('image')) return assignImage(cell, file); // PNG, JPG, WebP, etc.
   return assignVideo(cell, file);
@@ -3883,7 +4280,7 @@ function buildShelf() {
 }
 
 /* ---------------- rack de efectos ---------------- */
-const MODS = ['none', 'lfo1', 'lfo2', 'bass', 'mid', 'high', 'beat', 'x', 'y'];
+const MODS = ['none', 'lfo1', 'lfo2', 'bass', 'mid', 'high', 'beat', 'x', 'y', 'motion'];
 function addEffect(id) {
   const def = FXDEFS.find(d => d.id === id);
   if (!def) return;
@@ -4665,6 +5062,7 @@ function serialize() {
     scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans, autoDrop: !!state.autoDrop,
     structs: state.structs && state.structs.length ? state.structs : null,
     colColors: state.colColors && Object.keys(state.colColors).length ? state.colColors : null,
+    logo: state.logo && state.logo.src ? state.logo : null,
     beatSens: state.beatSens, fpsCap: state.fpsCap, mono: state.mono, monoV: 2,
     outScreen: state.outScreen, theme: state.theme, gSpeed: state.gSpeed,
     res: state.res,
@@ -4706,6 +5104,7 @@ function serialize() {
       textStyle: c.textStyle, inT: c.inT || 0, outT: c.outT || 0, camId: c.camId || '',
       play: c.play && c.play !== 'loop' ? c.play : null, isImage: c.isImage ? 1 : 0, isScreen: c.isScreen ? 1 : 0,
       cues: c.cues && c.cues.length ? c.cues : null,
+      g3: c.kind === 'glb' && c.g3 ? c.g3 : null,
       fileName: c.file ? c.file.name : (c.kind === 'video' || c.kind === 'gif' ? c.name : null),
       thumb: c.thumb,
     })),
@@ -4772,6 +5171,7 @@ function deserialize(d) {
     cell.inT = cd.inT || 0; cell.outT = cd.outT || 0; cell.play = cd.play || undefined;
     cell.isImage = cd.isImage ? true : undefined;
     cell.cues = Array.isArray(cd.cues) ? cd.cues.filter(x => isFinite(x)).slice(0, 8) : undefined;
+    if (cd.kind === 'glb') cell.g3 = cd.g3 && typeof cd.g3 === 'object' ? cd.g3 : { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' };
     cell.camId = cd.camId || '';
     if (cd.kind === 'video' || cd.kind === 'gif')
       cell.name = cd.fileName ? cd.fileName.replace(/\.[^.]+$/, '') : cd.name;
@@ -4796,6 +5196,7 @@ function deserialize(d) {
   state.colColors = {};
   if (d.colColors && typeof d.colColors === 'object')
     for (const k in d.colColors) if (/^#[0-9a-f]{6}$/i.test(String(d.colColors[k]))) state.colColors[k | 0] = d.colColors[k];
+  state.logo = d.logo && typeof d.logo === 'object' && /^data:image\//.test(String(d.logo.src || '')) ? d.logo : null;
   $('#rndSel').value = state.rndBeats;
   state.xfade = d.xfade ?? .5;
   $('#xfadeIn').value = state.xfade;
@@ -4878,7 +5279,7 @@ $('#setIn').onchange = async e => {
 };
 function unlinkedCells() {
   return state.grid.flat().filter(c =>
-    (c.kind === 'video' && !c.video) || (c.kind === 'gif' && !c.gframes));
+    (c.kind === 'video' && !c.video) || (c.kind === 'gif' && !c.gframes) || (c.kind === 'glb' && !c.glb));
 }
 function updateRelinkBar() {
   const u = unlinkedCells();
@@ -4969,6 +5370,7 @@ function redo() {
 /* autosave de estructura (los File no se pueden persistir) */
 let dirty = false;
 function markDirty() { dirty = true; histSnap(); }
+setInterval(() => { autoFileWrite(); }, 20000); // 💾 a disco cada 20 s (si hay archivo elegido)
 setInterval(() => {
   if (!dirty) return; dirty = false;
   try {
@@ -5037,6 +5439,159 @@ for (let i = 0; i < 8; i++) {
   $('#sceneBtns').appendChild(b);
 }
 
+/* ---------------- overlays de fiesta: logo 🖼 + cuenta regresiva ⏱ sobre la salida ---------------- */
+let logoImg = null, logoImgSrc = '';
+function overlayExtras(gl) {
+  const lg = state.logo, cd = state.cd;
+  const showLogo = lg && lg.on && lg.src;
+  const showCd = cd && cd.end;
+  if (!showLogo && !showCd) return;
+  const W = main.canvas.width, H = main.canvas.height;
+  const me = overlayExtras;
+  if (!me.cv || me.cv.width !== W || me.cv.height !== H) {
+    me.cv = document.createElement('canvas'); me.cv.width = W; me.cv.height = H;
+    me.ctx = me.cv.getContext('2d');
+  }
+  const x = me.ctx;
+  x.clearRect(0, 0, W, H);
+  if (showLogo) {
+    if (logoImgSrc !== lg.src) { logoImg = new Image(); logoImg.src = lg.src; logoImgSrc = lg.src; }
+    if (logoImg.complete && logoImg.naturalWidth) {
+      const h2 = H * (lg.sc || .16);
+      const w2 = h2 * logoImg.naturalWidth / logoImg.naturalHeight;
+      const m = H * .03;
+      const px = String(lg.pos || 'br').includes('l') ? m : W - w2 - m;
+      const py = String(lg.pos || 'br').includes('t') ? m : H - h2 - m;
+      x.globalAlpha = lg.op != null ? lg.op : .85;
+      x.drawImage(logoImg, px, py, w2, h2);
+      x.globalAlpha = 1;
+    }
+  }
+  if (showCd) {
+    const left = Math.max(0, cd.end - Date.now());
+    const s = Math.ceil(left / 1000);
+    const txt = s >= 3600
+      ? Math.floor(s / 3600) + ':' + String(Math.floor(s % 3600 / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0')
+      : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    x.save();
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    const urgente = s <= 10;
+    const sz = H * (urgente ? .34 : .2) * (urgente ? 1 + beatEnv * .08 : 1);
+    x.font = '900 ' + Math.round(sz) + 'px "Segoe UI",Arial,sans-serif';
+    x.fillStyle = '#fff';
+    x.shadowColor = urgente ? '#ff3d54' : '#000';
+    x.shadowBlur = H * .045;
+    x.fillText(txt, W / 2, H / 2);
+    x.restore();
+    if (left <= 0) { state.cd = null; buildDrop(); toast('⏱ ¡CERO! 💥'); }
+  }
+  if (!me.tex) me.tex = makeTex(gl, 2, 2);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, me.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, me.cv); }
+  catch (e) {
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    return;
+  }
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  const bp = program(main, 'blit', BLIT_FS);
+  gl.useProgram(bp);
+  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  draw(gl);
+  gl.disable(gl.BLEND);
+}
+function countdownPrompt() { // ⏱ minutos ("5") u hora exacta ("23:59")
+  if (state.cd) { state.cd = null; toast('⏱ Cuenta regresiva cancelada'); return; }
+  const v = prompt('⏱ Cuenta regresiva sobre la salida:\n· minutos (ej: 5)\n· o la hora exacta (ej: 23:59)\nAl llegar a cero mete el DROP con flash.', '5');
+  if (!v) return;
+  const hm = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
+  let end;
+  if (hm) {
+    const d = new Date();
+    d.setHours(+hm[1], +hm[2], 0, 0);
+    if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1); // ya pasó hoy → mañana
+    end = d.getTime();
+  } else {
+    const mins = parseFloat(v.replace(',', '.'));
+    if (!(mins > 0)) { toast('No entendí — poné minutos (5) u hora (23:59)'); return; }
+    end = Date.now() + mins * 60000;
+  }
+  state.cd = { end };
+  toast('⏱ Cuenta regresiva en la salida — click de nuevo en el menú para cancelarla');
+}
+function snapshotPNG() { // 📸 se captura DENTRO del frame (el buffer GL no sobrevive fuera del render)
+  snapshotPNG._want = true;
+  toast('📸 Capturando…');
+}
+function snapshotGrab() {
+  snapshotPNG._want = false;
+  try {
+    main.canvas.toBlob(b => {
+      if (!b) { toast('No pude capturar'); return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'ravenvj-foto-' + new Date().toISOString().slice(11, 19).replace(/:/g, '') + '.png';
+      a.click();
+      toast('📸 Foto de la salida descargada');
+    }, 'image/png');
+  } catch (e) { toast('No pude capturar: ' + e); }
+}
+/* ---------------- auto-guardado a ARCHIVO 💾: el set se escribe solo en un .json de tu disco ---------------- */
+let autoFileHandle = null;
+async function autoFilePick() {
+  if (autoFileHandle) {
+    autoFileHandle = null;
+    try { await fsaPut('__autosave__', null); } catch (e) { }
+    toast('💾 Auto-guardado a archivo APAGADO (queda el autosave normal del navegador)');
+    return;
+  }
+  if (!window.showSaveFilePicker) { toast('Este navegador no deja escribir archivos (usá Chrome/Edge)'); return; }
+  try {
+    const h = await showSaveFilePicker({
+      suggestedName: 'ravenvj-set.json',
+      types: [{ description: 'Set RAVEN VJ', accept: { 'application/json': ['.json'] } }],
+    });
+    autoFileHandle = h;
+    try { await fsaPut('__autosave__', h); } catch (e) { }
+    await autoFileWrite();
+    toast('💾 Auto-guardado ACTIVO: el set se escribe solo en "' + h.name + '" — nunca más perder un set');
+  } catch (e) { /* cancelado */ }
+}
+async function autoFileWrite() {
+  if (!autoFileHandle) return;
+  try {
+    const w = await autoFileHandle.createWritable();
+    await w.write(JSON.stringify(serialize()));
+    await w.close();
+    autoFileWrite._err = false;
+  } catch (e) {
+    if (!autoFileWrite._err) toast('💾 No pude escribir el auto-guardado — reactivalo en Archivo → auto-guardar');
+    autoFileWrite._err = true;
+    autoFileHandle = null;
+  }
+}
+async function autoFileBoot() { // reconectar el archivo elegido en sesiones anteriores
+  try {
+    const h = await fsaGet('__autosave__');
+    if (!h || !h.queryPermission) return;
+    const p = await h.queryPermission({ mode: 'readwrite' });
+    if (p === 'granted') { autoFileHandle = h; return; }
+    actionToast('💾 Auto-guardado a archivo: hay un archivo de otra sesión', 'reactivar', async () => {
+      try {
+        if (await h.requestPermission({ mode: 'readwrite' }) === 'granted') {
+          autoFileHandle = h;
+          toast('💾 Auto-guardado reactivado en "' + h.name + '"');
+        }
+      } catch (e) { }
+    }, 12000);
+  } catch (e) { }
+}
 /* ---------------- time machine ⏪: los últimos segundos de la salida, listos para replay ---------------- */
 /* Dos grabadores desfasados: mientras uno rota, el otro siempre tiene el pasado reciente completo. */
 const tm = { on: false, recs: [null, null], chunks: [[], []], t0: [0, 0], SEG: 20 };
@@ -5182,6 +5737,8 @@ main.canvas.addEventListener('webglcontextlost', e => {
 main.canvas.addEventListener('webglcontextrestored', () => {
   main.progs.clear();
   blackTex = null;
+  main._glbP = null; // el programa y los buffers de los 🧊 se rearman solos
+  (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => { c._g3buf = null; })));
   for (const L of state.layers) for (const s of L.slots) { s.tex = null; s.tgt = null; s.nT = null; s.fxT = null; s.fxP = null; s._gidx = -1; }
   allocTargets();
   toast('Render recuperado ✔');
@@ -5465,6 +6022,18 @@ function buildCpTab(id) {
       <div class="cprow"><span class="v">Graba los últimos ~${tm.SEG} s de tu salida en segundo plano.
         REPLAY los mete como clip en una celda vacía: rebobiná el momento épico y loopealo.
         (usa algo de CPU: prendela cuando la vayas a usar)</span></div>
+      <div class="cph">🖼 LOGO / MARCA</div>
+      <div class="cprow"><b>Logo del evento</b><span style="display:flex;gap:5px;align-items:center">
+        <button id="cplogo" class="mini">${state.logo && state.logo.src ? 'cambiar…' : '🖼 cargar PNG…'}</button>
+        ${state.logo && state.logo.src ? `
+        <button id="cplogoon" class="mini${state.logo.on ? ' on' : ''}">${state.logo.on ? 'visible' : 'oculto'}</button>
+        <select id="cplogopos" class="mini">
+          ${[['br', '↘ abajo der.'], ['bl', '↙ abajo izq.'], ['tr', '↗ arriba der.'], ['tl', '↖ arriba izq.']].map(([v, n]) =>
+        `<option value="${v}"${(state.logo.pos || 'br') === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
+        <input id="cplogoop" type="range" min="0.15" max="1" step="0.05" value="${state.logo.op != null ? state.logo.op : .85}" style="width:60px" title="opacidad">
+        <button id="cplogox" class="mini">✕</button>` : ''}</span></div>
+      <div class="cprow"><span class="v">Un PNG (con transparencia, idealmente) fijo sobre la salida —
+        la marca del evento, tu firma VJ. Viaja con el set.</span></div>
       <div class="cph">MONITOR DE SALIDA</div>
       <div class="cprow"><b>Pantallas conectadas</b><span>
         <button id="cpscr" class="mini">🔍 detectar</button></span></div>
@@ -5514,6 +6083,27 @@ function buildCpTab(id) {
     if ($('#cplutmix')) $('#cplutmix').oninput = e => { lutMix = +e.target.value; };
     if ($('#cptm')) $('#cptm').onclick = tmToggle;
     if ($('#cptmgo')) $('#cptmgo').onclick = tmReplay;
+    if ($('#cplogo')) $('#cplogo').onclick = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/png,image/webp,image/jpeg';
+      inp.onchange = () => {
+        const f = inp.files[0];
+        if (!f) return;
+        if (f.size > 400 * 1024) { toast('🖼 Muy pesado (máx 400 KB) — achicalo, para un logo alcanza'); return; }
+        const r = new FileReader();
+        r.onload = () => {
+          state.logo = { on: true, src: r.result, pos: (state.logo && state.logo.pos) || 'br', op: .85, sc: .16 };
+          markDirty(); buildCpTab('render');
+          toast('🖼 Logo puesto en la salida');
+        };
+        r.readAsDataURL(f);
+      };
+      inp.click();
+    };
+    if ($('#cplogoon')) $('#cplogoon').onclick = () => { state.logo.on = !state.logo.on; markDirty(); buildCpTab('render'); };
+    if ($('#cplogopos')) $('#cplogopos').onchange = e => { state.logo.pos = e.target.value; markDirty(); };
+    if ($('#cplogoop')) $('#cplogoop').oninput = e => { state.logo.op = +e.target.value; markDirty(); };
+    if ($('#cplogox')) $('#cplogox').onclick = () => { state.logo = null; markDirty(); buildCpTab('render'); toast('🖼 Logo quitado'); };
     $('#cpglreset').onclick = () => {
       const ext = main.gl.getExtension('WEBGL_lose_context');
       if (ext) { ext.loseContext(); setTimeout(() => ext.restoreContext(), 150); }
@@ -5739,9 +6329,12 @@ function buildCpTab(id) {
         <span class="v" data-tv="sens"></span></span></div>
       <div class="cprow"><b>Detectar BPM del audio</b><span><button id="cpsync" class="mini">SYNC</button></span></div>
       <div class="cprow"><b>💥 Auto-DROP (beta)</b><span>
-        <button id="cpadrop" class="mini${state.autoDrop ? ' on' : ''}" title="detecta el build-up y el drop de la música SOLO: arma el BUILD en el riser y suelta el flash cuando vuelve el bombo (análisis de energía, sin IA)">${state.autoDrop ? 'ON 🤖' : 'off'}</button></span></div>`;
+        <button id="cpadrop" class="mini${state.autoDrop ? ' on' : ''}" title="detecta el build-up y el drop de la música SOLO: arma el BUILD en el riser y suelta el flash cuando vuelve el bombo (análisis de energía, sin IA)">${state.autoDrop ? 'ON 🤖' : 'off'}</button></span></div>
+      <div class="cprow"><b>🏃 Sensor de movimiento</b><span>
+        <button id="cpmotion" class="mini${motion.on ? ' on' : ''}" title="una cámara mide cuánto se mueve la gente (comparación de frames, sin IA) y eso queda como modulador 'motion' en opacidades, efectos y objetos 3D — el público baila y los visuales explotan">${motion.on ? 'ON 📷 (' + Math.round(motion.val * 100) + '%)' : 'activar cámara'}</button></span></div>`;
     $('#cpaudio').onclick = async () => { await audioToggle(); buildCpTab('audio'); };
     if ($('#cpsys')) $('#cpsys').onclick = async () => { await sysAudioStart(); buildCpTab('audio'); };
+    if ($('#cpmotion')) $('#cpmotion').onclick = motionToggle;
     $('#cpsens').value = state.beatSens || 1.32;
     $('#cpsens').oninput = e => { state.beatSens = +e.target.value; markDirty(); };
     $('#cpsync').onclick = syncBpm;
@@ -7369,6 +7962,7 @@ function emptyCell(cell) {
   Object.assign(cell, {
     kind: 'empty', name: '', presetIdx: -1, file: null, video: null, url: null,
     thumb: '', tcanvas: null, gframes: null, camId: '', inT: 0, outT: 0, play: null, cues: null,
+    glb: null, g3: null, _g3buf: null,
   });
   refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
 }
@@ -8126,6 +8720,32 @@ function buildPropClip(b) {
         <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez (queda en el último frame)</option></select>`)}
       ${pRow('📍 Cues', `<span id="ppcues" style="display:flex;gap:4px;flex-wrap:wrap"></span>`)}
       ${pRow('🎚 Jog', `<button class="mini" data-map="lseek:${propLayer}" title="mapealo a una perilla/fader MIDI (modo LEARN y girá): la perilla pasa a ser el cabezal del video de la CAPA ${propLayer + 1} — scratch con la mano">mapear a MIDI</button>`)}`;
+  } else if (cell.kind === 'glb') {
+    const g3 = cell.g3 || (cell.g3 = { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' });
+    const anims = (cell.glb && cell.glb.anims) || [];
+    extra = `<div class="cph">OBJETO 3D 🧊 (wireframe)</div>
+      ${anims.length ? pRow('Animación del GLB', `<select id="ppg3anim">
+        <option value="-1"${+(g3.anim ?? 0) === -1 ? ' selected' : ''}>⏸ quieta (pose base)</option>
+        ${anims.map((a, i) => `<option value="${i}"${+(g3.anim ?? 0) === i ? ' selected' : ''}>▶ ${a.name} (${a.dur.toFixed(1)}s)</option>`).join('')}
+      </select>`) + pRow('Velocidad anim', `<input type="range" id="ppg3aspd" min="0.1" max="3" step="0.05" value="${g3.aspd || 1}">`) : ''}
+      ${pRow('Giro', `<input type="range" id="ppg3spin" min="0" max="2" step="0.05" value="${g3.spin}">`)}
+      ${pRow('Desarme', `<input type="range" id="ppg3expl" min="0" max="1" step="0.02" value="${g3.expl}" title="0 = armado · 1 = explotado en pedazos">`)}
+      ${pRow('Desarme al ritmo', `<select id="ppg3mod">
+        <option value="off"${g3.exMod === 'off' ? ' selected' : ''}>apagado</option>
+        <option value="bass"${g3.exMod === 'bass' ? ' selected' : ''}>🔊 graves</option>
+        <option value="mid"${g3.exMod === 'mid' ? ' selected' : ''}>🔊 medios</option>
+        <option value="high"${g3.exMod === 'high' ? ' selected' : ''}>🔊 agudos</option>
+        <option value="beat"${g3.exMod === 'beat' ? ' selected' : ''}>💥 beat (se desarma y arma)</option>
+        <option value="lfo1"${g3.exMod === 'lfo1' ? ' selected' : ''}>〰 LFO 1</option>
+        <option value="lfo2"${g3.exMod === 'lfo2' ? ' selected' : ''}>〰 LFO 2</option></select>`)}
+      ${pRow('Color', `<span style="display:flex;gap:4px;align-items:center">
+        <select id="ppg3cm">
+          <option value="cycle"${g3.color === 'cycle' ? ' selected' : ''}>🌈 ciclo</option>
+          <option value="pick"${g3.color !== 'cycle' ? ' selected' : ''}>🎨 fijo</option></select>
+        <input type="color" id="ppg3col" value="${g3.color !== 'cycle' ? g3.color : '#ff7a1a'}"
+          style="width:26px;height:20px;padding:0;border:none;background:none${g3.color === 'cycle' ? ';display:none' : ''}"></span>`)}
+      <div class="cprow"><span class="v">El trazo late con los graves y brilla al beat.
+        Triángulos: ${cell.glb ? cell.glb.tris : '— (sin enlazar, usá 🔗 RELINK)'}</span></div>`;
   } else if (cell.kind === 'gif' && cell.isImage) {
     extra = `<div class="cph">IMAGEN 🖼</div>
       <div class="cprow"><span class="v">Imagen fija. Usá el TRANSFORM de arriba para escala/posición/rotación.</span></div>`;
@@ -8175,6 +8795,16 @@ function buildPropClip(b) {
   $('#pptr0').onclick = () => { cell.tr = { sc: 1, x: 0, y: 0, rot: 0 }; cell.spd = 1; applyAllSpeeds(); markDirty(); buildProps(); };
   wireAnimUI(cell);
   if ($('#ppcues')) buildCueChips(cell);
+  if ($('#ppg3spin')) { // controles del objeto 3D 🧊
+    const g3 = cell.g3;
+    if ($('#ppg3anim')) $('#ppg3anim').onchange = e => { g3.anim = +e.target.value; markDirty(); };
+    if ($('#ppg3aspd')) $('#ppg3aspd').oninput = e => { g3.aspd = +e.target.value; markDirty(); };
+    $('#ppg3spin').oninput = e => { g3.spin = +e.target.value; markDirty(); };
+    $('#ppg3expl').oninput = e => { g3.expl = +e.target.value; markDirty(); };
+    $('#ppg3mod').onchange = e => { g3.exMod = e.target.value; markDirty(); };
+    $('#ppg3cm').onchange = e => { g3.color = e.target.value === 'cycle' ? 'cycle' : $('#ppg3col').value; markDirty(); buildProps(); };
+    $('#ppg3col').oninput = e => { g3.color = e.target.value; markDirty(); };
+  }
   if ($('#ppplay')) $('#ppplay').onchange = e => {
     cell.play = e.target.value;
     // reiniciar el clip para que el modo nuevo se note de una
@@ -8508,6 +9138,10 @@ const MENUS = {
     { label: '💾 Guardar set (JSON)', fn: () => $('#saveBtn').click() },
     { label: '📂 Abrir set…', fn: () => $('#setIn').click() },
     { label: '🔗 Relink de videos…', fn: () => $('#relinkIn').click() },
+    { label: '💾 Auto-guardar en archivo… (se escribe solo)', fn: autoFilePick },
+    '-',
+    { label: '📸 Foto de la salida (PNG)', fn: snapshotPNG },
+    { label: '⏱ Cuenta regresiva en la salida…', fn: countdownPrompt },
     '-',
     {
       label: '📦 Plantillas de uso…', fn: () => setTimeout(() =>
@@ -9265,6 +9899,7 @@ if (!uiPrefs.lang) { // primera vez: detectar el idioma de la computadora
 if (curLang() !== 'es') applyLang(); // idioma elegido (persistido en prefs de UI)
 if (!uiPrefs.welcomed) showWelcome(); // cartel de bienvenida en el primer arranque
 setTimeout(autoRelinkBoot, 1800); // los videos vuelven solos si hay permisos guardados
+setTimeout(autoFileBoot, 2600); // reconectar el auto-guardado a archivo de otras sesiones
 if (uiPrefs.propDock) setPropDock(true); // arrancar con Propiedades acoplada si quedó así
 midiInit();
 requestAnimationFrame(frame);
