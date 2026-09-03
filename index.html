@@ -7548,6 +7548,8 @@ function mapTargetName(t) {
     master: 'Master', fade: 'Fade', tap: 'Tap tempo', sync: 'Sync BPM', blackout: 'Blackout',
     flash: 'Flash', panic: 'Pánico', dice: 'Randomizar FX', x: 'Pad X', y: 'Pad Y',
     xfade: 'Crossfader A/B', auto: 'Autopilot', react: '🎉 Ráfaga de reacciones',
+    resync: 'Resync (1 del compás)', mono: 'Modo 1× (mono)', build: 'BUILD → DROP', gspeed: 'Velocidad global',
+    party: '🎊 Confeti', resample: '⏺ Resample',
   };
   if (flat[k]) return flat[k];
   if (k === 'cue') return `📍 Cue ${+a + 1}`;
@@ -7557,6 +7559,11 @@ function mapTargetName(t) {
   if (k === 'lspd') return `Velocidad CAPA ${+a + 1}`;
   if (k === 'lclear') return `Apagar CAPA ${+a + 1}`;
   if (k === 'lfreeze') return `❄ Congelar CAPA ${+a + 1}`;
+  if (k === 'lsolo') return `Solo CAPA ${+a + 1}`;
+  if (k === 'lbyp') return `Bypass CAPA ${+a + 1}`;
+  if (k === 'lfx') return `FX CAPA ${+a + 1} · ${b === 'p1' ? 'parám. 1' : b === 'p2' ? 'parám. 2' : b}`;
+  if (k === 'deck') return `Deck ${['A', 'B', 'C', 'D'][+a] || +a + 1}`;
+  if (k === 'macro') return `🎛 Macro M${+a + 1}`;
   if (k === 'lseek') return `🎚 Jog/cabezal CAPA ${+a + 1}`;
   if (k === 'brep') return `🔁 Beat-repeat ${+a || 1}`;
   if (k === 'resample') return `⏺ Resample ${+a || 8} beats`;
@@ -9363,6 +9370,18 @@ document.addEventListener('contextmenu', e => {
           if (tc < 0) { addColumns(1); tc = COLS - 1; }
           const dst = state.grid[l][tc];
           if (cell.kind === 'video' && cell.file) assignVideo(dst, cell.file);
+          else if (cell.kind === 'glb') { // 🧊 objeto 3D: regenerar geometría propia (los buffers GPU no se comparten)
+            emptyCell(dst);
+            const g3copy = cell.g3 ? JSON.parse(JSON.stringify(cell.g3)) : null;
+            const after = () => { if (g3copy) dst.g3 = g3copy; };
+            if (cell.is3dText) { textTo3D(dst, cell.is3dText); after(); }
+            else if (cell.file) assignGLB(dst, cell.file).then(after);
+            else toast('🧊 Ese objeto 3D no tiene archivo — no se puede duplicar');
+          }
+          else if (cell.kind === 'gif' && cell.slide && cell.gframes) { // 🖼 slideshow: todas las imágenes, no solo la primera
+            emptyCell(dst);
+            Object.assign(dst, { kind: 'gif', isImage: true, name: cell.name, gframes: cell.gframes, gtotal: cell.gtotal, slide: cell.slide, thumb: cell.thumb, file: cell.file });
+          }
           else if (cell.kind === 'gif' && cell.file) assignMedia(dst, cell.file);
           else {
             emptyCell(dst);
@@ -9377,6 +9396,7 @@ document.addEventListener('contextmenu', e => {
           dst.tr = cell.tr ? { ...cell.tr } : undefined;
           dst.anim = cell.anim ? JSON.parse(JSON.stringify(cell.anim)) : undefined;
           dst.spd = cell.spd; dst.inT = cell.inT || 0; dst.outT = cell.outT || 0; dst.play = cell.play;
+          dst.font = cell.font; dst.cues = cell.cues ? [...cell.cues] : undefined; // tipografía y cues también viajan
           refreshCell(l, tc); markDirty();
           toast('Clip duplicado en la columna ' + (tc + 1));
         }

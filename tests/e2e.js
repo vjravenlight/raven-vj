@@ -607,6 +607,28 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   });
   t('ensayo: el techno interno alimenta el análisis', r.analiza && r.conBombo, JSON.stringify(r));
 
+  // ================= AUDITORÍA: duplicar 3D/texto + nombres de targets =================
+  r = await page.evaluate(async () => {
+    const cell = state.grid[3][2];
+    textTo3D(cell, 'DUP');
+    cell.g3.rmode = 'points'; cell.font = 'Impact';
+    const d = cellEl(3, 2);
+    d.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 200, clientY: 200 }));
+    const item = [...document.querySelectorAll('#ctxmenu .ci')].find(x => x.textContent.includes('Duplicar'));
+    if (!item) { hideMenu(); return { menu: false }; }
+    item.click();
+    await new Promise(res => setTimeout(res, 500));
+    const dst = state.grid[3][3];
+    const ok = dst.kind === 'glb' && !!dst.glb && dst.glb.tris > 10 && dst.is3dText === 'DUP' && dst.g3 && dst.g3.rmode === 'points';
+    const buffersPropios = dst.glb !== cell.glb && dst.glb.pos !== cell.glb.pos; // geometría propia, no compartida
+    const nombres = ['lsolo:0', 'lbyp:1', 'deck:2', 'macro:1', 'mono', 'build', 'party', 'lfx:0:p1'].map(mapTargetName);
+    const legibles = nombres.every(n => !/^[a-z]+:\d/.test(n) && n.length > 3);
+    emptyCell(cell); emptyCell(dst);
+    return { menu: true, ok, buffersPropios, legibles, nombres };
+  });
+  t('auditoría: duplicar un texto 3D crea geometría propia', r.menu && r.ok && r.buffersPropios, JSON.stringify(r));
+  t('auditoría: todos los targets MIDI tienen nombre legible', r.legibles, (r.nombres || []).join(' | '));
+
   // ================= errores acumulados =================
   const errs = await page.evaluate(() => window.__errs || []);
   t('sin errores JS acumulados', !errs.length, errs.join(' | ').slice(0, 200));
