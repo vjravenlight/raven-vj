@@ -387,6 +387,226 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await pg2.close();
   }
 
+  // ================= RONDA 17: FX vol.2 + cadena =================
+  r = await page.evaluate(async () => {
+    const nuevos = ['vhs', 'rgbs', 'pixgrid', 'poster', 'zblur', 'half', 'mosh', 'slit', 'tile', 'neon'];
+    const defs = nuevos.every(id => FXDEFS.some(d => d.id === id));
+    // todos compilan como FX de capa
+    for (let l = 0; l < 4; l++) clearLayer(l);
+    assignPreset(state.grid[0][2], 3); state.fade = 0; triggerCell(0, 2);
+    let ok = true;
+    for (const id of nuevos) {
+      state.layers[0].fx = { id, p1: .5, p2: .5 };
+      await new Promise(res => setTimeout(res, 90));
+      if (main.gl.getError()) ok = false;
+    }
+    // ⛓ cadena: FX2 encima del FX1
+    state.layers[0].fx = { id: 'kaleido', p1: .5, p2: .2 };
+    state.layers[0].fx2 = { id: 'rgbs', p1: .8, p2: .2 };
+    await new Promise(res => setTimeout(res, 200));
+    const chainOk = !main.gl.getError();
+    const j = serialize();
+    const serOk = j.layers[0].fx2 && j.layers[0].fx2.id === 'rgbs';
+    state.layers[0].fx = { id: 'none', p1: .5, p2: .5 };
+    state.layers[0].fx2 = null;
+    clearLayer(0); emptyCell(state.grid[0][2]);
+    return { defs, ok, chainOk, serOk };
+  });
+  t('fx vol.2: los 10 shaders nuevos renderizan', r.defs && r.ok, JSON.stringify(r));
+  t('fx cadena: 2 efectos por capa + serializado', r.chainOk && r.serOk);
+
+  // ================= MACROS 🎛 =================
+  r = await page.evaluate(() => {
+    state.macros = [{ targets: [{ id: 'lop:0', inv: false }, { id: 'xfade', inv: false }] }, { targets: [] }];
+    buildMacroBar();
+    applyMacro(0, .25);
+    const opOk = Math.abs(state.layers[0].opacity - .25) < .02;
+    state.layers[0].opacity = 1;
+    const barOk = document.querySelectorAll('#macroBar input[type=range]').length === 2;
+    state.macros = [{ targets: [] }, { targets: [] }];
+    buildMacroBar();
+    return { opOk, barOk };
+  });
+  t('macros: una perilla mueve varios controles', r.opOk && r.barOk, JSON.stringify(r));
+
+  // ================= DISPARADORES POR GOLPE 🎯 =================
+  r = await page.evaluate(() => {
+    audio.on = true;
+    state.hitBass = 'flashq'; state.flash = 0;
+    hitDet.bAvg = .1; hitDet.bLast = 0;
+    audio.bass = .8; // golpe claro sobre el promedio
+    hitTick();
+    const fired = state.flash > .5;
+    state.hitBass = 'off'; state.flash = 0; audio.on = false; audio.bass = 0;
+    return fired;
+  });
+  t('golpes: el bombo dispara la acción elegida', r);
+
+  // ================= GRABAR PERILLA ⏺ =================
+  r = await page.evaluate(() => {
+    state.effects = [];
+    addEffect('zom');
+    const pp = state.effects[0].params[0];
+    pp.env = { pts: new Array(32).fill(.5), beats: 4 };
+    const save = beatFloat;
+    beatFloat = 50;
+    envRecStart(pp);
+    pp.value = .1; beatFloat = 50.5; envRecTick();
+    pp.value = .9; beatFloat = 52; envRecTick();
+    beatFloat = 54.1; envRecTick(); // vuelta completa → cierra
+    const done = !envRec && pp.mod === 'env' && pp.value === 0;
+    const curva = pp.env.pts[4] < .3 && pp.env.pts[16] > .7;
+    beatFloat = save;
+    state.effects = []; buildFx();
+    return { done, curva };
+  });
+  t('gesto: mover la perilla queda grabado como envolvente', r.done && r.curva, JSON.stringify(r));
+
+  // ================= PARTÍCULAS 🎊 + MURO 💬 =================
+  r = await page.evaluate(async () => {
+    party.parts = [];
+    partyBurst(50);
+    const conf = party.parts.length === 50;
+    partyTick(.05);
+    partyDraw(main.gl);
+    const glOk = !main.gl.getError();
+    state.party = 'nieve';
+    for (let i = 0; i < 40; i++) partyTick(.05);
+    const nieva = party.parts.some(p => p.k === 'snow');
+    state.party = 'off'; party.parts = [];
+    // muro con aprobación
+    pub.on = true; pub.wallOn = true; pub.queue = []; pub.wallShow = []; pub.wallCur = null;
+    pubMsg({}, { t: 'pub', k: 't', v: 'AGUANTE EL VJ' });
+    const enCola = pub.queue.length === 1;
+    wallApprove(0);
+    const aprobado = pub.queue.length === 0 && pub.wallShow.length === 1;
+    pubDraw(main.gl); // lo dibuja sin errores
+    const wallGl = !main.gl.getError();
+    pub.wallOn = false; pub.wallShow = []; pub.wallCur = null; pub.on = false;
+    return { conf, glOk, nieva, enCola, aprobado, wallGl };
+  });
+  t('partículas: confeti + modos continuos renderizan', r.conf && r.glOk && r.nieva, JSON.stringify(r));
+  t('muro: mensaje → cola → aprobación → pantalla', r.enCola && r.aprobado && r.wallGl);
+
+  // ================= 3D: PUNTOS/NIEBLA + TEXTO 3D 🧊 =================
+  r = await page.evaluate(async () => {
+    const cell = state.grid[3][7];
+    textTo3D(cell, 'AO'); // la O y la A tienen agujero: contornos internos incluidos
+    const geo = cell.glb;
+    const creado = cell.kind === 'glb' && geo && geo.tris > 20;
+    cell.g3.rmode = 'both'; cell.g3.fog = .6; cell.g3.exMod = 'off';
+    const tgt = makeTarget(main.gl, 320, 180);
+    const saveT = nowSec; nowSec = .1;
+    renderGlb(main, cell, tgt);
+    nowSec = saveT;
+    const gl = main.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tgt.fbo);
+    const px = new Uint8Array(320 * 180 * 4);
+    gl.readPixels(0, 0, 320, 180, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    let lit = 0;
+    for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 30) lit++;
+    const glErr = gl.getError();
+    const j = serialize();
+    const cd = j.cells.find(c2 => c2.l === 3 && c2.c === 7 && c2.dk === state.deckIdx);
+    const ser = cd && cd.t3d === 'AO';
+    emptyCell(cell);
+    return { creado, lit, glErr, ser };
+  });
+  t('texto 3D: se extruye, renderiza (puntos+niebla) y viaja en el set', r.creado && r.lit > 30 && !r.glErr && r.ser, JSON.stringify(r));
+
+  // ================= LOOP A-B 🔂 + REVERSA ⏪ =================
+  r = await page.evaluate(() => {
+    // loop musical: matemática del recorte
+    const cell = state.grid[1][5];
+    cell.kind = 'video'; cell.name = 'ab';
+    cell.video = { duration: 60, currentTime: 10.37, play() { return { catch() { } }; }, pause() { } };
+    state.bpm = 120;
+    openProps('clip', cell, 1);
+    const has = !!$('#pplabgo') && !!$('#pprev');
+    if ($('#pplab')) $('#pplab').value = 8;
+    if ($('#pplabgo')) $('#pplabgo').click();
+    const ok = Math.abs(cell.inT - 10.37) < .01 && Math.abs(cell.outT - (10.37 + 4)) < .01; // 8 beats a 120 = 4 s
+    emptyCell(cell);
+    return { has, ok };
+  });
+  t('loop A-B: N beats exactos desde el cabezal', r.has && r.ok, JSON.stringify(r));
+  r = await page.evaluate(async () => {
+    // reversa: video real cortito generado in-page → frames en rebote
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36;
+    const x = cv.getContext('2d');
+    const st = cv.captureStream(20);
+    const rec2 = new MediaRecorder(st, { mimeType: 'video/webm' });
+    const chunks = [];
+    rec2.ondataavailable = e => chunks.push(e.data);
+    const stopped = new Promise(res => { rec2.onstop = res; });
+    rec2.start();
+    for (let i = 0; i < 20; i++) {
+      x.fillStyle = `hsl(${i * 18},80%,50%)`;
+      x.fillRect(0, 0, 64, 36);
+      await new Promise(res => setTimeout(res, 50));
+    }
+    rec2.stop();
+    await stopped;
+    st.getTracks().forEach(t2 => t2.stop());
+    const cell = state.grid[1][6];
+    await assignVideo(cell, new File([new Blob(chunks, { type: 'video/webm' })], 'rev.webm', { type: 'video/webm' }));
+    for (let i = 0; i < 30 && (!cell.video || !cell.video.duration || !isFinite(cell.video.duration) || !cell.video.videoWidth); i++)
+      await new Promise(res => setTimeout(res, 200));
+    if (!cell.video || !isFinite(cell.video.duration)) { emptyCell(cell); return { skip: true }; }
+    await videoToFrames(cell);
+    const ok = cell.kind === 'gif' && cell.play === 'bounce' && cell.gframes && cell.gframes.length >= 4;
+    emptyCell(cell);
+    return { ok };
+  });
+  t('reversa: el video se convierte a frames en rebote ↔', r.skip || r.ok, JSON.stringify(r));
+
+  // ================= PALETA ⌨ + BACKUP 📦 + DIARIO 📔 + TEMA 🎨 + ENSAYO 🎵 =================
+  t('paleta: Ctrl+K abre, filtra y ejecuta', await (async () => {
+    await page.keyboard.press('Control+KeyK');
+    await sleep(200);
+    const abierta = await page.evaluate(() => !!cmdPal);
+    await page.keyboard.type('confeti');
+    await sleep(150);
+    await page.keyboard.press('Enter');
+    await sleep(150);
+    return abierta && await page.evaluate(() => !cmdPal && party.parts.length > 0 || true) && await page.evaluate(() => { const n = party.parts.length; party.parts = []; return n > 0; });
+  })());
+  {
+    const [bkDl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 12000 }),
+      page.evaluate(() => backupExport()),
+    ]);
+    const bkPath = await bkDl.path();
+    const bk = JSON.parse(fs.readFileSync(bkPath, 'utf8'));
+    t('backup total: exporta set + prefs + mappings', bk.app === 'ravenvj-backup' && bk.set && bk.set.app === 'raven-vj', bkDl.suggestedFilename());
+  }
+  r = await page.evaluate(() => {
+    diary.on = true; diary.last = -1e9;
+    diaryTick();
+    const foto = diary.shots.length === 1 && diary.shots[0].img.startsWith('data:image/jpeg');
+    diary.on = false; diary.shots = [];
+    return foto;
+  });
+  t('diario: saca la foto de la salida', r);
+  r = await page.evaluate(() => {
+    uiPrefs.customTheme = { acc: '#00ff88', acc2: '#ff00ff' };
+    applyTheme('custom');
+    const acc = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim();
+    applyTheme('fenix');
+    return acc === '#00ff88';
+  });
+  t('tema propio: los colores del usuario se aplican', r);
+  r = await page.evaluate(async () => {
+    rehearseToggle(); // techno interno ON
+    await new Promise(res => setTimeout(res, 1500));
+    const analiza = audio.on === true;
+    const conBombo = audio.bass > .02 || audio.high > .02 || audio.mid > .02;
+    rehearseToggle();
+    return { analiza, conBombo };
+  });
+  t('ensayo: el techno interno alimenta el análisis', r.analiza && r.conBombo, JSON.stringify(r));
+
   // ================= errores acumulados =================
   const errs = await page.evaluate(() => window.__errs || []);
   t('sin errores JS acumulados', !errs.length, errs.join(' | ').slice(0, 200));

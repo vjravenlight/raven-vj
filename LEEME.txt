@@ -136,6 +136,89 @@ AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
   psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
   el golpe visual del drop sale solo.
 
+PALETA DE COMANDOS ⌨ (Ctrl+K)
+  La app tiene tantas funciones que ahora tiene buscador: Ctrl+K,
+  escribís "confeti" o "escena 3" o "rec", Enter, y se ejecuta.
+  Flechas para elegir, Esc para cerrar. El atajo de los que saben.
+
+PACK DE EFECTOS VOL.2 ✨ (10 nuevos en el rack)
+  📼 VHS/CRT (scanlines+ruido+tracking), 🌈 RGB Split, 🟪 Pixelate
+  (con modo "late al beat"), 🎨 Posterize, 💨 Zoom Blur radial,
+  ⚫ Halftone (puntos de imprenta), 🧟 Datamosh/derretir (el frame
+  anterior chorrea), 🪞 Slit-scan (cascada temporal), 🔲 Mosaico
+  repetido con espejo, ⚡ Neón (bordes brillantes). Por capa o master.
+
+CADENA DE EFECTOS POR CAPA ⛓
+  Cada capa ahora acepta DOS efectos encadenados (Propiedades de la
+  capa → Efecto 2): caleidoscopio + RGB split, pixelate + neón…
+
+MACROS 🎛
+  Arriba del rack de efectos: 2 perillas M1/M2 que mueven VARIOS
+  controles a la vez. Apretá ＋, clickeá las perillas/botones que
+  quieras agrupar, y listo: una perilla = tu "modo caos" personal.
+  Mapeables a MIDI, viajan con el set.
+
+DISPARADORES POR GOLPE 🎯
+  Panel → Audio: "cada golpe GRAVE dispara [flash / próximo clip /
+  🎲 / ráfaga / confeti]" y lo mismo para los AGUDOS. El bombo y el
+  hi-hat manejan la app solos.
+
+GRABAR GESTOS ⏺ (perillas que se acuerdan)
+  En una envolvente (✏ curva), botón ⏺: mové la perilla del
+  parámetro durante una vuelta y tu movimiento queda grabado como
+  curva que loopea. Automatización por gesto, sin dibujar.
+
+PARTÍCULAS DE FIESTA 🎊
+  Panel → Render: 🎊 CONFETI (ráfaga, mapeable a un pad — imaginate
+  el drop), y modos continuos 🌧 lluvia, ❄ nieve, ✨ chispas al beat.
+
+MURO DE MENSAJES CON APROBACIÓN 💬
+  Panel → Remoto → PÚBLICO → Muro: la gente escribe desde el celu,
+  los mensajes van a TU cola, y solo lo que VOS aprobás sale GRANDE
+  en pantalla. Dedicatorias sin sorpresas.
+
+TEXTO 3D 🧊
+  Click derecho en una celda → "Texto 3D": escribís algo y se vuelve
+  un objeto 3D wireframe extruido (con los agujeros de las letras y
+  todo) que gira, late y se desarma como los GLB. El nombre de la
+  fiesta flotando en 3D.
+
+3D: NUBE DE PUNTOS + NIEBLA ✨
+  Los objetos 3D ahora se pueden ver como wireframe, nube de puntos
+  o ambos, y con niebla de profundidad (lo lejano se apaga).
+
+LOOP MUSICAL 🔂
+  Propiedades de un video: "marcar desde acá" con 2/4/8/16 beats →
+  el recorte queda EXACTO al BPM. Loops clavados a la música.
+
+REVERSA / REBOTE ↔
+  Propiedades de un video: "convertir a rebote" pasa el recorte
+  (máx 6 s) a frames en memoria → reproducción ida y vuelta, que el
+  browser no puede hacer con video normal. Ideal para loops cortos.
+
+MODO ENSAYO 🎵
+  Panel → Audio → "techno interno": la app se genera su propio
+  techno al BPM que tengas y todo el análisis reacciona igual que
+  con música real. Practicá a las 3 de la tarde sin molestar.
+
+BACKUP TOTAL 📦
+  Archivo → "Backup TOTAL": un solo .json con tu set + preferencias
+  + mappings de lugares + tus fuentes. Restaurás en otra PC y estás
+  en casa. (El auto-guardado sigue existiendo aparte.)
+
+DIARIO DE LA NOCHE 📔
+  Archivo → "Diario": foto de la salida cada 5 minutos. Al final,
+  "descargar galería" te da un HTML con toda la noche para elegir
+  stories. La memoria del set.
+
+TEMA PROPIO 🎨
+  Panel → Apariencia: elegí tus 2 colores y la interfaz entera se
+  arma con ellos. Tu cabina, tus colores.
+
+LOGO QUE LATE 💓
+  El logo del evento ahora puede latir con el beat (botón 💓 en la
+  sección LOGO).
+
 BEAT-REPEAT 🔁 (tartamudeo rítmico)
   Botón 🔁 en la topbar: loopea el último tramo de los clips que
   están sonando, clavado al beat. Click derecho cambia el largo

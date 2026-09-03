@@ -484,6 +484,7 @@ body.kiosk #outCanvas{position:fixed;inset:0;width:100vw;height:100vh;object-fit
           <select id="lfo1r"><option value="0.25" selected>¼</option><option value="0.5">½</option>
             <option value="1">1</option><option value="2">2</option><option value="4">4</option></select>
         </span></h3>
+      <div id="macroBar" title="MACROS 🎛: una perilla que mueve varios controles a la vez — ＋ y clickeá lo que quieras agrupar" style="display:flex;gap:10px;align-items:center;padding:3px 6px;border-bottom:1px solid var(--line);font-size:10px;flex-wrap:wrap"></div>
       <div id="fxList"></div>
     </div>
     <div id="splitM" class="split splitv" title="arrastrá para cambiar el ancho"></div>
@@ -981,6 +982,7 @@ const state = {
   fxPresets: {}, mono: true, outScreen: -1, theme: 'fenix',
   customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [], colColors: {}, logo: null, cd: null,
   morphBeats: 0, autoEnergy: false, energyScenes: { calm: -1, hard: -1 },
+  macros: [{ targets: [] }, { targets: [] }], hitBass: 'off', hitHigh: 'off', party: 'off',
   decks: null, deckIdx: 0,
 };
 const DECK_NAMES = ['A', 'B', 'C', 'D'];
@@ -1007,9 +1009,23 @@ const THEMES = {
     grad: 'linear-gradient(135deg,#00c2ff,#00ffb3)',
   },
 };
+function customThemeDef() { // 🎨 tema propio armado desde 2 colores elegidos por el usuario
+  const c = (typeof uiPrefs !== 'undefined' && uiPrefs.customTheme) || { acc: '#ff7a1a', acc2: '#ff3d54' };
+  const hex2rgb = h => { const m = /^#?(..)(..)(..)/.exec(h) || [0, '14', '14', '18']; return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]; };
+  const [r, g, b] = hex2rgb(c.acc);
+  const mixDark = k => '#' + [r, g, b].map(v => Math.round(v * k + 10 * (1 - k)).toString(16).padStart(2, '0')).join('');
+  return {
+    label: '🎨 Propio',
+    vars: {
+      bg: mixDark(.045), panel: mixDark(.08), panel2: mixDark(.115), line: mixDark(.2),
+      txt: '#e8e8ea', dim: mixDark(.55), acc: c.acc, acc2: c.acc2, warn: '#ffd23f',
+    },
+    grad: 'linear-gradient(135deg,' + c.acc + ',' + c.acc2 + ')',
+  };
+}
 function applyTheme(name) {
-  const th = THEMES[name] || THEMES.fenix;
-  state.theme = THEMES[name] ? name : 'fenix';
+  const th = name === 'custom' ? customThemeDef() : (THEMES[name] || THEMES.fenix);
+  state.theme = name === 'custom' || THEMES[name] ? name : 'fenix';
   const rs = document.documentElement.style;
   for (const [k, v] of Object.entries(th.vars)) rs.setProperty('--' + k, v);
   rs.setProperty('--grad', th.grad);
@@ -1703,6 +1719,84 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  vec2 q=vec2(cos(a),sin(a))*r;
  q.x*=u_res.y/u_res.x;
  o=vec4(texture(u_tex,clamp(q+.5,0.,1.)).rgb,1.);}` },
+{ id: 'vhs', name: 'VHS / CRT', p: ['ruido', 'tracking'], fs: `void main(){
+ float h1=fract(sin(dot(vec2(floor(v_uv.y*270.),floor(u_time*13.)),vec2(12.9898,78.233)))*43758.5);
+ vec2 uv=v_uv;
+ uv.x+=(h1-.5)*u_p2*.03*step(.92,h1);                    // tirones de tracking
+ uv.y+=step(.96,fract(sin(floor(u_time*2.7))*437.5))*u_p2*.1; // salto vertical ocasional
+ vec3 c;
+ c.r=texture(u_tex,uv+vec2(.002+u_p1*.003,0.)).r;        // sangrado de color
+ c.g=texture(u_tex,uv).g;
+ c.b=texture(u_tex,uv-vec2(.002+u_p1*.003,0.)).b;
+ float scan=.82+.18*sin(v_uv.y*u_res.y*3.14159);          // scanlines
+ float n=fract(sin(dot(v_uv*u_res+u_time*97.,vec2(12.9898,78.233)))*43758.5);
+ c=c*scan+(n-.5)*u_p1*.25;
+ o=vec4(c,1.);}` },
+{ id: 'rgbs', name: 'RGB Split', p: ['cantidad', 'ángulo'], fs: `void main(){
+ float a=u_p2*6.2832;
+ vec2 d=vec2(cos(a),sin(a))*(u_p1*.02+u_bass*u_p1*.02);
+ o=vec4(texture(u_tex,v_uv+d).r,texture(u_tex,v_uv).g,texture(u_tex,v_uv-d).b,1.);}` },
+{ id: 'pixgrid', name: 'Pixelate', p: ['tamaño', 'al beat'], fs: `void main(){
+ float n=mix(160.,8.,u_p1*(1.-u_p2*.6*(1.-u_beat)));      // con p2, el mosaico late
+ vec2 g=vec2(n,n*u_res.y/u_res.x);
+ o=vec4(texture(u_tex,(floor(v_uv*g)+.5)/g).rgb,1.);}` },
+{ id: 'poster', name: 'Posterize', p: ['niveles', 'gamma'], fs: `void main(){
+ vec3 c=pow(texture(u_tex,v_uv).rgb,vec3(.6+u_p2*1.2));
+ float n=mix(12.,2.,u_p1);
+ o=vec4(floor(c*n+.5)/n,1.);}` },
+{ id: 'zblur', name: 'Zoom Blur (radial)', p: ['fuerza', 'al beat'], fs: `void main(){
+ float k=u_p1*.25*(1.-u_p2+u_p2*u_beat);
+ vec3 acc=vec3(0.);
+ for(int i=0;i<8;i++){
+  float f=1.-k*float(i)/8.;
+  acc+=texture(u_tex,(v_uv-.5)*f+.5).rgb;
+ }
+ o=vec4(acc/8.,1.);}` },
+{ id: 'half', name: 'Halftone (puntos)', p: ['tamaño', 'ángulo'], fs: `void main(){
+ float a=u_p2*1.5708;
+ mat2 R=mat2(cos(a),-sin(a),sin(a),cos(a));
+ float n=mix(120.,28.,u_p1);
+ vec2 p=R*(v_uv-.5)*vec2(u_res.x/u_res.y,1.)*n;
+ vec2 g=fract(p)-.5;
+ float lum=dot(texture(u_tex,v_uv).rgb,vec3(.299,.587,.114));
+ float m=step(length(g),sqrt(lum)*.62);
+ o=vec4(vec3(m)*texture(u_tex,v_uv).rgb*1.35,1.);}` },
+{ id: 'mosh', name: 'Datamosh / derretir', p: ['derretido', 'mezcla'], fs: `void main(){
+ vec2 bl=floor(v_uv*vec2(48.,27.));
+ float t=floor(u_time*(2.+u_p1*8.));
+ float h1=fract(sin(dot(bl+t,vec2(12.9898,78.233)))*43758.5);
+ float h2=fract(sin(dot(bl+t,vec2(39.3468,11.135)))*24634.6);
+ vec2 off=(vec2(h1,h2)-.5)*u_p1*.06;
+ vec3 cur=texture(u_tex,v_uv).rgb;
+ vec3 pr=texture(u_prev,v_uv+off).rgb*.985;               // la historia se arrastra y chorrea
+ o=vec4(mix(cur,max(pr,cur*.15),.35+u_p2*.62),1.);}` },
+{ id: 'slit', name: 'Slit-scan (cascada)', p: ['franja viva', 'dirección'], fs: `void main(){
+ float fr=.02+u_p1*.3;
+ if(u_p2<.5){                                             // vertical: lo nuevo entra por abajo
+  if(v_uv.y<fr) o=vec4(texture(u_tex,vec2(v_uv.x,v_uv.y/fr*.5+.25)).rgb,1.);
+  else o=vec4(texture(u_prev,v_uv-vec2(0.,1./u_res.y)).rgb,1.);
+ } else {                                                 // horizontal: entra por la izquierda
+  if(v_uv.x<fr) o=vec4(texture(u_tex,vec2(v_uv.x/fr*.5+.25,v_uv.y)).rgb,1.);
+  else o=vec4(texture(u_prev,v_uv-vec2(1./u_res.x,0.)).rgb,1.);
+ }}` },
+{ id: 'tile', name: 'Mosaico repetido', p: ['repeticiones', 'espejo'], fs: `void main(){
+ float n=floor(1.+u_p1*5.);
+ vec2 uv=v_uv*n;
+ vec2 cel=floor(uv);
+ uv=fract(uv);
+ if(u_p2>.5){                                             // espejado alternado (sin costuras)
+  if(mod(cel.x,2.)>.5) uv.x=1.-uv.x;
+  if(mod(cel.y,2.)>.5) uv.y=1.-uv.y;
+ }
+ o=vec4(texture(u_tex,uv).rgb,1.);}` },
+{ id: 'neon', name: 'Neón (bordes)', p: ['intensidad', 'tono'], fs: `void main(){
+ vec2 px=1./u_res;
+ float l0=dot(texture(u_tex,v_uv).rgb,vec3(.33));
+ float lx=dot(texture(u_tex,v_uv+vec2(px.x,0.)).rgb,vec3(.33))-l0;
+ float ly=dot(texture(u_tex,v_uv+vec2(0.,px.y)).rgb,vec3(.33))-l0;
+ float e=clamp(length(vec2(lx,ly))*(4.+u_p1*20.),0.,1.);
+ vec3 col=e*(.6+.4*u_beat)*hsv2rgb(vec3(fract(u_p2+v_uv.x*.15+u_time*.03),.9,1.));
+ o=vec4(col+texture(u_tex,v_uv).rgb*(1.-u_p1)*.35,1.);}` },
 { id: 'strobe', name: 'Estrobo', p: ['velocidad', 'oscuridad'], fs: `void main(){
  float st=max(u_bpm,30.)/60.*pow(2.,floor(u_p1*3.99)); // destellos por beat: 1/2/4/8
  float duty=1.-u_p2*.85;                               // oscuridad: cuánto dura el negro
@@ -2028,6 +2122,7 @@ function allocTargets() {
   for (const L of state.layers) for (const s of L.slots) {
     if (s.tgt) { freeTarget(gl, s.tgt); s.tgt = makeTarget(gl, w, h); }
     freeTarget(gl, s.nT); freeTarget(gl, s.fxT); freeTarget(gl, s.fxP); s.fxP = null;
+    freeTarget(gl, s.fxT2); freeTarget(gl, s.fxP2); s.fxT2 = null; s.fxP2 = null;
     s.nT = null; s.fxT = null;
   }
 }
@@ -2885,14 +2980,20 @@ function glbProg(gl) {
   if (main._glbP && main._glbPGl === gl) return main._glbP;
   const vs = `#version 300 es
 layout(location=0) in vec3 a_pos; layout(location=1) in vec3 a_dir; layout(location=2) in float a_ni;
-uniform mat4 u_mvp; uniform mat4 u_node[33]; uniform float u_expl;
+uniform mat4 u_mvp; uniform mat4 u_node[33]; uniform float u_expl, u_psize;
+out float v_d;
 void main(){
   vec4 wp = u_node[int(a_ni + .5)] * vec4(a_pos, 1.);   // matriz viva del nodo (animaciones del GLB)
   gl_Position = u_mvp * vec4(wp.xyz + a_dir * u_expl, 1.);
+  v_d = gl_Position.w;                                   // distancia para la niebla
+  gl_PointSize = u_psize;
 }`;
   const fs = `#version 300 es
-precision mediump float; uniform vec3 u_col; out vec4 o;
-void main(){ o = vec4(u_col, 1.); }`;
+precision mediump float; uniform vec3 u_col; uniform float u_fog; in float v_d; out vec4 o;
+void main(){
+  float fade = u_fog > 0.001 ? clamp(1. - (v_d - 1.6) * u_fog * .9, .04, 1.) : 1.; // lo lejano se apaga
+  o = vec4(u_col * fade, 1.);
+}`;
   const mk = (t, src) => {
     const s = gl.createShader(t);
     gl.shaderSource(s, src); gl.compileShader(s);
@@ -2954,10 +3055,118 @@ function renderGlb(ctx, cell, target) {
   gl.uniformMatrix4fv(gl.getUniformLocation(p, 'u_node'), false,
     geo.anims && geo.anims.length ? glbNodeMats(geo, g3) : GLB_STATIC_MATS);
   gl.uniform1f(gl.getUniformLocation(p, 'u_expl'), expl);
+  gl.uniform1f(gl.getUniformLocation(p, 'u_fog'), g3.fog || 0);
+  gl.uniform1f(gl.getUniformLocation(p, 'u_psize'), 2 + audio.bass * 4 + beatEnv * 2);
   gl.uniform3f(gl.getUniformLocation(p, 'u_col'), col[0] * glow, col[1] * glow, col[2] * glow);
   gl.bindVertexArray(B.vao);
-  gl.drawElements(gl.LINES, geo.tris * 6, gl.UNSIGNED_INT, 0);
+  const rm = g3.rmode || 'wire';
+  if (rm !== 'points') gl.drawElements(gl.LINES, geo.tris * 6, gl.UNSIGNED_INT, 0);
+  if (rm !== 'wire') gl.drawArrays(gl.POINTS, 0, geo.pos.length / 3); // ✨ nube de puntos
   gl.bindVertexArray(null);
+}
+/* texto 3D 🧊: renderiza el texto, traza TODOS sus contornos (agujeros incluidos) y los extruye */
+function traceAllContours(bin, W, H) {
+  const lab = new Int32Array(W * H);
+  const qx = new Int32Array(W * H), qy = new Int32Array(W * H);
+  let cur = 0;
+  const comps = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (!bin[i] || lab[i]) continue;
+    cur++;
+    let head = 0, tail = 0, n = 0, sx = x, sy = y;
+    qx[tail] = x; qy[tail] = y; tail++; lab[i] = cur;
+    while (head < tail) {
+      const cx = qx[head], cy = qy[head]; head++; n++;
+      if (cx + 1 < W && bin[cy * W + cx + 1] && !lab[cy * W + cx + 1]) { lab[cy * W + cx + 1] = cur; qx[tail] = cx + 1; qy[tail] = cy; tail++; }
+      if (cx > 0 && bin[cy * W + cx - 1] && !lab[cy * W + cx - 1]) { lab[cy * W + cx - 1] = cur; qx[tail] = cx - 1; qy[tail] = cy; tail++; }
+      if (cy + 1 < H && bin[(cy + 1) * W + cx] && !lab[(cy + 1) * W + cx]) { lab[(cy + 1) * W + cx] = cur; qx[tail] = cx; qy[tail] = cy + 1; tail++; }
+      if (cy > 0 && bin[(cy - 1) * W + cx] && !lab[(cy - 1) * W + cx]) { lab[(cy - 1) * W + cx] = cur; qx[tail] = cx; qy[tail] = cy - 1; tail++; }
+    }
+    if (n >= 12) comps.push({ id: cur, sx, sy });
+  }
+  const out = [];
+  for (const cm of comps) { // contorno Moore de cada componente
+    const at = (x, y) => x >= 0 && y >= 0 && x < W && y < H && lab[y * W + x] === cm.id;
+    const dirs = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+    const pts = [[cm.sx, cm.sy]];
+    let px2 = cm.sx, py2 = cm.sy, dir = 6;
+    for (let steps = 0; steps < W * H; steps++) {
+      let found = -1;
+      for (let k = 0; k < 8; k++) {
+        const d = (dir + 6 + k) % 8;
+        const nx2 = px2 + dirs[d][0], ny2 = py2 + dirs[d][1];
+        if (at(nx2, ny2)) { found = d; px2 = nx2; py2 = ny2; break; }
+      }
+      if (found < 0) break;
+      dir = found;
+      if (px2 === cm.sx && py2 === cm.sy) break;
+      pts.push([px2, py2]);
+    }
+    if (pts.length >= 8) out.push(pts);
+  }
+  return out;
+}
+function textTo3D(cell, txt) {
+  txt = String(txt || '').trim().slice(0, 16);
+  if (!txt) return;
+  const W = 480, H = 140, D = .5; // lienzo de muestreo + profundidad de extrusión
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d', { willReadFrequently: true });
+  x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#fff';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  let fpx = 110;
+  do { x.font = '900 ' + fpx + 'px ' + cellFont(cell.font ? cell : { font: 'Arial Black' }); fpx -= 6; }
+  while (x.measureText(txt).width > W - 20 && fpx > 20);
+  x.fillText(txt, W / 2, H / 2);
+  const d2 = x.getImageData(0, 0, W, H).data;
+  const bin = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) bin[i] = d2[i * 4] > 128 ? 1 : 0;
+  // contornos de las letras + AGUJEROS (componentes del fondo que no tocan el borde)
+  const contours = traceAllContours(bin, W, H);
+  const inv = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) inv[i] = 1 - bin[i];
+  for (const hole of traceAllContours(inv, W, H)) {
+    const touchesEdge = hole.some(p => p[0] <= 0 || p[1] <= 0 || p[0] >= W - 1 || p[1] >= H - 1);
+    if (!touchesEdge) contours.push(hole); // la panza de la A y la O
+  }
+  if (!contours.length) { toast('🧊 No pude trazar ese texto'); return; }
+  // extrusión → geometría de LÍNEAS en el formato del motor GLB
+  const AR2 = W / H;
+  const pos = [], idx = [], dirArr = [];
+  for (const c of contours) {
+    const simp = rdp(c, 1.4);
+    const n = simp.length, base = pos.length / 3;
+    for (const p of simp) { // cada punto del contorno, en cara frontal y trasera
+      const vx = (p[0] / W - .5) * AR2, vy = .5 - p[1] / H;
+      pos.push(vx, vy, D / 2, vx, vy, -D / 2);
+    }
+    for (let i = 0; i < n; i++) {
+      const f = base + i * 2, b = f + 1;
+      const nf = base + ((i + 1) % n) * 2, nb = nf + 1;
+      idx.push(f, nf, b, nb, f, b); // contorno delante, detrás y el conector
+    }
+  }
+  const vp = new Float32Array(pos), vidx = new Uint32Array(idx);
+  // normalizar y dirección de explosión radial
+  let mx = 0;
+  for (let i = 0; i < vp.length; i++) mx = Math.max(mx, Math.abs(vp[i]));
+  const vd = new Float32Array(vp.length);
+  for (let i = 0; i < vp.length; i += 3) {
+    vp[i] /= mx; vp[i + 1] /= mx; vp[i + 2] /= mx;
+    const l2 = Math.hypot(vp[i], vp[i + 1], vp[i + 2]) || 1;
+    vd[i] = vp[i] / l2; vd[i + 1] = vp[i + 1] / l2; vd[i + 2] = vp[i + 2] / l2;
+  }
+  freeCellMedia(cell);
+  cell.kind = 'glb'; cell.name = txt;
+  cell.file = null; cell.video = null; cell.gframes = null; cell.thumb = ''; cell.presetIdx = -1;
+  cell.glb = { pos: vp, dir: vd, ni: new Float32Array(vp.length / 3), idx: vidx, tris: vidx.length / 6, anims: [], nodes: [], slots: [], normC: [0, 0, 0], normR: 1 };
+  cell._g3buf = null;
+  cell.g3 = cell.g3 || { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' };
+  cell.is3dText = txt; // para re-generarlo al abrir el set
+  refreshCell(cell.l, cell.c); markDirty();
+  toast('🧊 "' + txt + '" en 3D — girando, desarmable y con todos los efectos');
 }
 async function assignGLB(cell, file) {
   try {
@@ -3214,29 +3423,38 @@ function layerFxPass(s, tex, fit, L, tr) {
     draw(gl);
     src = s.nT.tex;
   }
+  src = applyLayerFx(s, src, L.fx, '');
+  if (L.fx2 && L.fx2.id !== 'none') src = applyLayerFx(s, src, L.fx2, '2'); // ⛓ cadena: 2° FX de la capa
+  return src;
+}
+const FX_USES_PREV = new Set(['trail', 'mosh', 'slit']); // efectos con historia propia por capa
+function applyLayerFx(s, src, fx, sfx) {
+  const gl = main.gl;
+  const def = fx && FXDEFS.find(d => d.id === fx.id);
   if (!def) return src;
-  if (!s.fxT) s.fxT = makeTarget(gl, state.res[0], state.res[1]);
-  const isTrail = def.id === 'trail';
-  if (isTrail && !s.fxP) s.fxP = makeTarget(gl, state.res[0], state.res[1]); // historia propia de la capa
+  const kT = 'fxT' + sfx, kP = 'fxP' + sfx;
+  if (!s[kT]) s[kT] = makeTarget(gl, state.res[0], state.res[1]);
+  const usesPrev = FX_USES_PREV.has(def.id);
+  if (usesPrev && !s[kP]) s[kP] = makeTarget(gl, state.res[0], state.res[1]);
   const p = program(main, 'fx' + def.id, FX_PRE + def.fs);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, s.fxT.fbo);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, s[kT].fbo);
   gl.viewport(0, 0, state.res[0], state.res[1]);
   gl.useProgram(p);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src);
   gl.uniform1i(U(gl, p, 'u_tex'), 0);
-  // la estela usa el frame ANTERIOR de esta misma capa; el resto, el feedback global
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, (isTrail ? s.fxP : fbTgt).tex);
+  // los FX con historia usan el frame ANTERIOR de esta misma capa; el resto, el feedback global
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, (usesPrev ? s[kP] : fbTgt).tex);
   gl.uniform1i(U(gl, p, 'u_prev'), 1);
   gl.uniform2f(U(gl, p, 'u_res'), state.res[0], state.res[1]);
   setAudioUniforms(gl, p);
-  gl.uniform1f(U(gl, p, 'u_p1'), L.fx.p1);
-  gl.uniform1f(U(gl, p, 'u_p2'), L.fx.p2);
+  gl.uniform1f(U(gl, p, 'u_p1'), fx.p1);
+  gl.uniform1f(U(gl, p, 'u_p2'), fx.p2);
   draw(gl);
-  if (isTrail) { // ping-pong: lo recién escrito pasa a ser la historia del próximo frame
-    const t2 = s.fxT; s.fxT = s.fxP; s.fxP = t2;
+  if (usesPrev) { // ping-pong: lo recién escrito es la historia del próximo frame
+    const t2 = s[kT]; s[kT] = s[kP]; s[kP] = t2;
     return t2.tex;
   }
-  return s.fxT.tex;
+  return s[kT].tex;
 }
 /* GIFs animados: frames decodificados con ImageDecoder, subidos como textura */
 function uploadGif(gl, s, dtEff) {
@@ -3346,7 +3564,7 @@ function renderTick() {
   }
 
   audioTick(dt); clockTick(dt); layerTick(dt); gpTick(); autoDropTick(dt); motionTick(dt);
-  brepTick(); morphTick(); barTick(); energyTick(dt); hypeTick(dt);
+  brepTick(); morphTick(); barTick(); energyTick(dt); hypeTick(dt); hitTick(); envRecTick(); partyTick(dt); diaryTick();
   if (scanFlat) { // escaneo de auto-máscara: proyectar plano blanco o negro
     const gfl = main.gl;
     gfl.bindFramebuffer(gfl.FRAMEBUFFER, null);
@@ -3409,7 +3627,7 @@ function renderTick() {
       const tr = s.cell && effTr(s.cell);
       const hasTr = tr && (tr.sc !== 1 || tr.x || tr.y || tr.rot ||
         cellAnimOn(s.cell, ['sc', 'x', 'y', 'rot']));
-      if (ok && !skipGen && ((L.fx && L.fx.id !== 'none') || hasTr)) {
+      if (ok && !skipGen && ((L.fx && L.fx.id !== 'none') || (L.fx2 && L.fx2.id !== 'none') || hasTr)) {
         tex = layerFxPass(s, tex, fit, L, tr);
         fit = [1, 1];
       }
@@ -3592,6 +3810,7 @@ function renderTick() {
     draw(gl);
   }
   structsDraw(gl); // estructuras de líneas animadas sobre el mapping
+  partyDraw(gl); // 🎊 confeti / chispas / lluvia / nieve
   overlayExtras(gl); // logo 🖼 y cuenta regresiva ⏱
   pubDraw(gl); // reacciones del público flotando sobre la salida
   if (snapshotPNG._want) snapshotGrab(); // 📸 dentro del frame, con el buffer todavía vivo
@@ -4571,7 +4790,10 @@ function buildFx() {
           b.onclick = () => { pp.env.pts = Array.from({ length: 32 }, (_, i) => fn(i)); drawEnv(cv, pp.env); markDirty(); };
           shapes.appendChild(b);
         });
-        er.append(cv, bs, shapes);
+        const rec3 = el('button', 'mini'); rec3.textContent = '⏺';
+        rec3.title = 'GRABAR GESTO: mové la perilla del parámetro durante 1 vuelta y tu movimiento queda como curva';
+        rec3.onclick = () => envRecStart(pp);
+        er.append(cv, bs, shapes, rec3);
         d.appendChild(er);
         drawEnv(cv, pp.env);
       }
@@ -4715,6 +4937,327 @@ function autoDropTick(dt) {
     adrop.low = Math.max(0, adrop.low - dt * 2);
     if (adrop.armed && adrop.low <= 0) { state.building = false; adrop.armed = false; } // riser que se pinchó: bajar sin flash
   }
+}
+/* ---------------- paleta de comandos ⌨ (Ctrl+K): buscá cualquier función por nombre ---------------- */
+function cmdList() {
+  const cols = [];
+  for (let c2 = 0; c2 < Math.min(COLS, 16); c2++) cols.push({ n: '▶ Disparar columna ' + (c2 + 1), k: 'columna col ' + (c2 + 1), fn: () => qTriggerColumn(c2) });
+  return [
+    { n: '⚡ FLASH', k: 'flash golpe', fn: () => applyTarget('flash', 1, 'note', 1) },
+    { n: '💥 BUILD → DROP', k: 'build drop subida', fn: () => buildStart() },
+    { n: '⬛ Blackout', k: 'blackout negro', fn: toggleBlackout },
+    { n: '🚨 Pánico', k: 'panico reset', fn: panic },
+    { n: '🔁 Beat-repeat', k: 'repeat stutter tartamudeo', fn: () => brep.on ? brepStop() : brepStart(brep.len) },
+    { n: '❄ Congelar CAPA 1', k: 'freeze congelar', fn: () => toggleFreeze(0) },
+    { n: '🎲 Randomizar efectos', k: 'random azar dados', fn: () => randomizeFx() },
+    { n: '⏺ REC grabar salida', k: 'rec grabar video mp4', fn: toggleRec },
+    { n: '📸 Foto de la salida', k: 'foto captura png screenshot', fn: snapshotPNG },
+    { n: '⏺ Resample 8 beats', k: 'resample loop grabar beats', fn: () => resampleStart(8) },
+    { n: '⏪ Time machine REPLAY', k: 'replay rebobinar time machine', fn: tmReplay },
+    { n: '🎊 Confeti', k: 'confeti particulas fiesta', fn: () => partyBurst() },
+    { n: '⏱ Cuenta regresiva…', k: 'countdown cuenta regresiva', fn: countdownPrompt },
+    { n: '🗺 Editor de mapping', k: 'mapping editor superficies', fn: () => toggleMapWin(true) },
+    { n: '📷 Auto-máscara por cámara', k: 'automascara camara mascara', fn: autoMaskScan },
+    { n: '🖥 Ventana de SALIDA', k: 'output salida proyector ventana', fn: () => openOutput('ravenvj_out') },
+    { n: '🎤 Activar audio', k: 'audio microfono activar', fn: () => audioToggle() },
+    { n: '🎵 Modo ensayo (techno interno)', k: 'ensayo practica musica techno', fn: rehearseToggle },
+    { n: '💾 Guardar set', k: 'guardar set json save', fn: () => $('#saveBtn').click() },
+    { n: '💾 Auto-guardar en archivo…', k: 'autoguardado archivo', fn: autoFilePick },
+    { n: '📦 Backup total…', k: 'backup exportar todo', fn: backupExport },
+    { n: '🧪 Chequeo pre-show', k: 'preflight chequeo preshow', fn: () => { togglePanel(true); buildCpTab('ses'); } },
+    { n: '⚙ Panel de control', k: 'panel control opciones', fn: () => togglePanel(true) },
+    { n: '↩ Deshacer', k: 'undo deshacer', fn: undo },
+    { n: '📔 Diario de la noche on/off', k: 'diario fotos galeria noche', fn: diaryToggle },
+    ...cols,
+    ...state.scenes.map((s, i) => s ? { n: '🎬 Escena ' + (i + 1), k: 'escena ' + (i + 1), fn: () => recallScene(i) } : null).filter(Boolean),
+  ];
+}
+let cmdPal = null;
+function cmdPalette() {
+  if (cmdPal) { cmdPal.remove(); cmdPal = null; return; }
+  const d = el('div');
+  d.style.cssText = 'position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:120;background:var(--panel,#141418);border:1px solid var(--acc);border-radius:10px;padding:8px;width:340px;box-shadow:0 12px 40px #000c';
+  const inp = el('input');
+  inp.type = 'text'; inp.placeholder = '⌨ buscá una función… (Esc cierra)';
+  inp.style.cssText = 'width:100%;box-sizing:border-box;padding:7px;font-size:13px';
+  inp.setAttribute('data-noi18n', '');
+  const list = el('div');
+  list.style.cssText = 'max-height:290px;overflow-y:auto;margin-top:6px;display:flex;flex-direction:column;gap:2px';
+  let items = [], selIdx = 0;
+  const render = () => {
+    const q = inp.value.toLowerCase().trim();
+    items = cmdList().filter(c2 => !q || (c2.n + ' ' + c2.k).toLowerCase().includes(q)).slice(0, 14);
+    selIdx = Math.min(selIdx, Math.max(0, items.length - 1));
+    list.innerHTML = '';
+    items.forEach((c2, i) => {
+      const row = el('div');
+      row.textContent = c2.n;
+      row.style.cssText = 'padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px' + (i === selIdx ? ';background:var(--acc);color:#000;font-weight:700' : '');
+      row.onclick = () => { cmdPalette(); c2.fn(); };
+      row.onmouseenter = () => { selIdx = i; render(); };
+      list.appendChild(row);
+    });
+  };
+  inp.oninput = () => { selIdx = 0; render(); };
+  inp.onkeydown = e => {
+    if (e.key === 'Escape') { cmdPalette(); }
+    else if (e.key === 'ArrowDown') { selIdx = Math.min(items.length - 1, selIdx + 1); render(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { selIdx = Math.max(0, selIdx - 1); render(); e.preventDefault(); }
+    else if (e.key === 'Enter' && items[selIdx]) { const f = items[selIdx].fn; cmdPalette(); f(); }
+    e.stopPropagation();
+  };
+  d.append(inp, list);
+  document.body.appendChild(d);
+  cmdPal = d;
+  render();
+  inp.focus();
+}
+/* ---------------- backup total 📦: TODO tu mundo en un archivo (set + prefs + mappings + fuentes) ---------------- */
+async function backupExport() {
+  const data = {
+    app: 'ravenvj-backup', v: 1, fecha: new Date().toISOString(),
+    set: serialize(),
+    uiPrefs: { ...uiPrefs },
+    mapPresets: mapPresets(),
+    fonts: {},
+  };
+  try { // fuentes en base64 (si no pesan demasiado)
+    const db = await fontsDB();
+    const st = db.transaction('fonts').objectStore('fonts');
+    const keys = await new Promise(r => { const q = st.getAllKeys(); q.onsuccess = () => r(q.result || []); q.onerror = () => r([]); });
+    let total = 0;
+    for (const k of keys) {
+      const buf = await new Promise(r => { const q = db.transaction('fonts').objectStore('fonts').get(k); q.onsuccess = () => r(q.result); q.onerror = () => r(null); });
+      if (buf && total + buf.byteLength < 6e6) {
+        total += buf.byteLength;
+        data.fonts[k] = btoa(String.fromCharCode(...new Uint8Array(buf).subarray(0, buf.byteLength)));
+      }
+    }
+  } catch (e) { }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  a.download = 'ravenvj-backup-total.json';
+  a.click();
+  toast('📦 Backup total descargado — set, preferencias, mappings del lugar y fuentes');
+}
+async function backupImport(file) {
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== 'ravenvj-backup') { toast('Ese archivo no es un backup total de RAVEN VJ'); return; }
+    if (d.mapPresets) try { localStorage.setItem('ravenvj_mapPresets', JSON.stringify(d.mapPresets)); } catch (e) { }
+    if (d.uiPrefs) { Object.assign(uiPrefs, d.uiPrefs); saveUI(); }
+    if (d.fonts) {
+      const db = await fontsDB();
+      for (const [k, b64] of Object.entries(d.fonts)) {
+        try {
+          const bin = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0)).buffer;
+          db.transaction('fonts', 'readwrite').objectStore('fonts').put(bin, k);
+          await fontRegister(k, bin);
+        } catch (e) { }
+      }
+    }
+    if (d.set) deserialize(d.set);
+    toast('📦 Backup restaurado — bienvenido de vuelta a tu mundo');
+  } catch (e) { toast('No pude leer el backup: ' + e); }
+}
+/* ---------------- diario de la noche 📔: una foto de la salida cada tanto, galería exportable ---------------- */
+const diary = { on: false, shots: [], last: 0, MIN: 5 };
+function diaryToggle() {
+  diary.on = !diary.on;
+  toast(diary.on ? '📔 Diario ON — foto de la salida cada ' + diary.MIN + ' min (Archivo → descargar galería al final)' : '📔 Diario off (' + diary.shots.length + ' fotos guardadas)');
+}
+function diaryTick() {
+  if (!diary.on) return;
+  const now = performance.now();
+  if (now - diary.last < diary.MIN * 60000) return;
+  diary.last = now;
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = 640; cv.height = Math.round(640 * main.canvas.height / main.canvas.width);
+    cv.getContext('2d').drawImage(main.canvas, 0, 0, cv.width, cv.height);
+    diary.shots.push({ t: new Date().toLocaleTimeString(), img: cv.toDataURL('image/jpeg', .72) });
+    if (diary.shots.length > 80) diary.shots.shift();
+  } catch (e) { }
+}
+function diaryExport() {
+  if (!diary.shots.length) { toast('📔 Todavía no hay fotos — prendé el diario y dejalo correr'); return; }
+  const html = '<html><head><meta charset="utf-8"><title>RAVEN VJ — diario de la noche</title>' +
+    '<style>body{background:#0c0c0e;color:#eee;font-family:sans-serif;text-align:center}img{max-width:94vw;border-radius:10px;margin:8px 0}p{color:#888;font-size:12px}</style></head><body>' +
+    '<h2>📔 Diario de la noche — ' + new Date().toLocaleDateString() + '</h2>' +
+    diary.shots.map(s2 => '<p>' + s2.t + '</p><img src="' + s2.img + '">').join('') +
+    '</body></html>';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  a.download = 'ravenvj-diario.html';
+  a.click();
+  toast('📔 Galería descargada (' + diary.shots.length + ' fotos en un HTML) — abrila y elegí para stories');
+}
+/* ---------------- modo ensayo 🎵: techno interno para practicar sin música ---------------- */
+const rehearse = { on: false, ctx: null, timer: 0, step: 0, dest: null };
+function rehearseToggle() {
+  if (rehearse.on) {
+    rehearse.on = false;
+    clearInterval(rehearse.timer);
+    try { rehearse.ctx.close(); } catch (e) { }
+    rehearse.ctx = null;
+    toast('🎵 Ensayo terminado');
+    return;
+  }
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  rehearse.ctx = ctx;
+  rehearse.dest = ctx.createMediaStreamDestination();
+  const master = ctx.createGain();
+  master.gain.value = .9;
+  master.connect(ctx.destination);      // lo escuchás
+  master.connect(rehearse.dest);        // y la app lo analiza
+  rehearse.master = master;
+  rehearse.on = true; rehearse.step = 0;
+  const kick = t => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + .12);
+    g.gain.setValueAtTime(.9, t);
+    g.gain.exponentialRampToValueAtTime(.001, t + .25);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + .3);
+  };
+  const hat = (t, open) => {
+    const len = open ? .18 : .05;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * len, ctx.sampleRate);
+    const d2 = buf.getChannelData(0);
+    for (let i = 0; i < d2.length; i++) d2[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d2.length, 2);
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = buf; f.type = 'highpass'; f.frequency.value = 8000; g.gain.value = .32;
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t);
+  };
+  const bass = (t, fq) => {
+    const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    o.type = 'sawtooth'; o.frequency.value = fq;
+    f.type = 'lowpass'; f.frequency.value = 340;
+    g.gain.setValueAtTime(.24, t);
+    g.gain.exponentialRampToValueAtTime(.001, t + .16);
+    o.connect(f); f.connect(g); g.connect(master);
+    o.start(t); o.stop(t + .2);
+  };
+  const NOTES = [55, 55, 65.4, 55, 49, 55, 73.4, 65.4];
+  const sched = () => { // agenda el próximo compás completo
+    if (!rehearse.on) return;
+    const spb = 60 / state.bpm;
+    const t0 = ctx.currentTime + .05;
+    for (let i = 0; i < 4; i++) {
+      const t = t0 + i * spb;
+      const bar16 = (rehearse.step + i);
+      kick(t);
+      hat(t + spb / 2, bar16 % 8 === 7); // contratiempo, abierto al final de la vuelta
+      if (bar16 % 32 >= 24) hat(t + spb / 4, false); // relleno en el "build"
+      bass(t + spb * .5, NOTES[bar16 % 8]);
+      bass(t + spb * .75, NOTES[(bar16 + 3) % 8] / 2);
+    }
+    rehearse.step += 4;
+  };
+  sched();
+  rehearse.timer = setInterval(sched, 4 * 60 / state.bpm * 1000 - 60);
+  connectAudioStream(rehearse.dest.stream); // el beat interno alimenta TODO el análisis
+  toast('🎵 MODO ENSAYO: techno interno a ' + state.bpm + ' BPM — practicá tranquilo (todo reacciona igual que con música real)');
+}
+/* ---------------- macros 🎛: una perilla mueve VARIOS controles a la vez ---------------- */
+let armMacro = -1; // modo asignación: el próximo control clickeado se suma a la macro N
+function applyMacro(i, val) {
+  const m = state.macros && state.macros[i];
+  if (!m) return;
+  for (const tg of m.targets) {
+    const v = tg.inv ? 1 - val : val;
+    try { applyTarget(tg.id, v, 'cc', v > .5 ? 1 : 0); } catch (e) { }
+  }
+  if (midiRefs['macro:' + i]) midiRefs['macro:' + i].value = val;
+}
+document.addEventListener('click', e => { // asignación por click (estilo LEARN)
+  if (armMacro < 0) return;
+  const el2 = e.target.closest('[data-map]');
+  if (!el2 || el2.dataset.map.startsWith('macro:')) return;
+  e.preventDefault(); e.stopPropagation();
+  const m = state.macros[armMacro];
+  if (!m.targets.some(t2 => t2.id === el2.dataset.map)) {
+    m.targets.push({ id: el2.dataset.map, inv: false });
+    toast('🎛 M' + (armMacro + 1) + ' + ' + mapTargetName(el2.dataset.map) + ' (' + m.targets.length + ') — otro control, o click en ✔ para terminar');
+    markDirty(); buildMacroBar();
+  }
+}, true);
+function buildMacroBar() {
+  const bar = $('#macroBar');
+  if (!bar) return;
+  state.macros = state.macros || [{ targets: [] }, { targets: [] }];
+  bar.innerHTML = '';
+  state.macros.forEach((m, i) => {
+    const g = el('span');
+    g.style.cssText = 'display:flex;gap:3px;align-items:center';
+    const lb = el('b'); lb.textContent = 'M' + (i + 1);
+    lb.title = m.targets.length ? m.targets.map(t2 => mapTargetName(t2.id)).join('\n') : 'macro vacía — ＋ para asignarle controles';
+    const sl = el('input'); sl.type = 'range'; sl.min = 0; sl.max = 1; sl.step = .01; sl.value = 0;
+    sl.style.width = '70px';
+    sl.dataset.map = 'macro:' + i;
+    sl.oninput = () => applyMacro(i, +sl.value);
+    midiRefs['macro:' + i] = sl;
+    const add = el('button', 'mini' + (armMacro === i ? ' on' : ''));
+    add.textContent = armMacro === i ? '✔' : '＋';
+    add.title = 'asignar controles a esta macro: click acá y después click en las perillas/botones que quieras agrupar (⛓ ' + m.targets.length + ' asignados)';
+    add.onclick = () => { armMacro = armMacro === i ? -1 : i; buildMacroBar(); if (armMacro === i) toast('🎛 Tocá los controles que quieras sumar a M' + (i + 1)); };
+    const clr = el('button', 'mini'); clr.textContent = '✕'; clr.title = 'vaciar la macro';
+    clr.onclick = () => { m.targets = []; markDirty(); buildMacroBar(); };
+    g.append(lb, sl, add, clr);
+    bar.appendChild(g);
+  });
+}
+/* ---------------- disparadores por golpe 🎯: cada bombo/hi-hat ejecuta una acción ---------------- */
+const hitDet = { bAvg: 0, hAvg: 0, bLast: 0, hLast: 0 };
+const HIT_ACTIONS = [['off', 'nada'], ['flashq', '⚡ flash corto'], ['ladv0', '⏭ próx. clip C1'], ['ladv1', '⏭ próx. clip C2'],
+  ['ladv2', '⏭ próx. clip C3'], ['ladv3', '⏭ próx. clip C4'], ['dice', '🎲 randomizar FX'], ['react', '🎉 ráfaga'], ['burst', '🎊 partículas']];
+function runHitAction(a) {
+  if (a === 'flashq') state.flash = Math.max(state.flash || 0, .7);
+  else if (a.startsWith('ladv')) layerAdvance(+a[4]);
+  else if (a === 'dice') randomizeFx(true);
+  else if (a === 'react') pubBurst(3);
+  else if (a === 'burst') partyBurst();
+}
+function hitTick() {
+  if (!audio.on) return;
+  const now = performance.now();
+  hitDet.bAvg += (audio.bass - hitDet.bAvg) * .04;
+  hitDet.hAvg += (audio.high - hitDet.hAvg) * .04;
+  const hb = state.hitBass || 'off', hh = state.hitHigh || 'off';
+  if (hb !== 'off' && audio.bass > hitDet.bAvg * 1.45 + .08 && now - hitDet.bLast > 140) {
+    hitDet.bLast = now; runHitAction(hb);
+  }
+  if (hh !== 'off' && audio.high > hitDet.hAvg * 1.6 + .06 && now - hitDet.hLast > 110) {
+    hitDet.hLast = now; runHitAction(hh);
+  }
+}
+/* ---------------- grabar perilla ⏺: tu gesto en vivo queda como envolvente que loopea ---------------- */
+let envRec = null; // { pp, t0, beats }
+function envRecStart(pp) {
+  pp.env = pp.env || { pts: new Array(32).fill(.5), beats: 4 };
+  envRec = { pp, t0: beatFloat, beats: pp.env.beats || 4, touched: new Array(32).fill(false) };
+  toast('⏺ Grabando ' + envRec.beats + ' beats — mové la perilla del parámetro AHORA');
+}
+function envRecTick() {
+  if (!envRec) return;
+  const k = (beatFloat - envRec.t0) / envRec.beats;
+  if (k >= 1) { // vuelta completa: rellenar huecos y activar
+    const pts = envRec.pp.env.pts;
+    let lastV = null;
+    for (let i = 0; i < 32; i++) if (envRec.touched[i]) { lastV = pts[i]; break; }
+    for (let i = 0; i < 32; i++) { if (envRec.touched[i]) lastV = pts[i]; else if (lastV != null) pts[i] = lastV; }
+    envRec.pp.mod = 'env';
+    envRec.pp.value = 0; envRec.pp.amt = 1; // la curva ES el valor
+    envRec = null;
+    buildFx(); markDirty();
+    toast('⏺ ¡Gesto grabado! El parámetro repite tu movimiento en loop');
+    return;
+  }
+  const i = Math.min(31, Math.floor(k * 32));
+  envRec.pp.env.pts[i] = envRec.pp.value;
+  envRec.touched[i] = true;
 }
 /* ---------------- beat-repeat 🔁: tartamudear el último tramo del clip al ritmo ---------------- */
 const brep = { on: false, len: 1, t0: 0, anchors: null };
@@ -5163,6 +5706,8 @@ function applyTarget(id, val, kind, on) {
     case 'react': if (on) pubBurst(); break;
     case 'lfreeze': if (on) toggleFreeze(+a); break;
     case 'brep': if (on) brepStart(+a || brep.len); else brepStop(); break; // momentáneo: apretado = tartamudea
+    case 'macro': applyMacro(+a, val); break;
+    case 'party': if (on) partyBurst(); break;
     case 'resample': if (on) resampleStart(+a || 8); break;
     case 'lseek': { // 🎚 jog/scratch: el fader ES el cabezal del video de esa capa
       const L = state.layers[+a];
@@ -5413,6 +5958,7 @@ function serialize() {
     lfo: state.lfo.map(l => ({ wave: l.wave, rate: l.rate })),
     scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans, autoDrop: !!state.autoDrop,
     morphBeats: state.morphBeats || 0, autoEnergy: !!state.autoEnergy, energyScenes: state.energyScenes || null,
+    macros: state.macros, hitBass: state.hitBass || 'off', hitHigh: state.hitHigh || 'off', party: state.party || 'off',
     structs: state.structs && state.structs.length ? state.structs : null,
     colColors: state.colColors && Object.keys(state.colColors).length ? state.colColors : null,
     logo: state.logo && state.logo.src ? state.logo : null,
@@ -5424,6 +5970,7 @@ function serialize() {
       solo: !!L.solo, byp: !!L.byp,
       auto: { mode: L.auto.mode, n: L.auto.n, rand: L.auto.rand, dip: L.auto.dip },
       fx: { id: L.fx.id, p1: L.fx.p1, p2: L.fx.p2 },
+      fx2: L.fx2 && L.fx2.id !== 'none' ? { id: L.fx2.id, p1: L.fx2.p1, p2: L.fx2.p2 } : null,
     })),
     setlistSteps: state.setlist.steps,
     nanoDefaults: state.nanoDefaults,
@@ -5460,7 +6007,7 @@ function serialize() {
       play: c.play && c.play !== 'loop' ? c.play : null, isImage: c.isImage ? 1 : 0, isScreen: c.isScreen ? 1 : 0,
       cues: c.cues && c.cues.length ? c.cues : null,
       g3: c.kind === 'glb' && c.g3 ? c.g3 : null,
-      font: c.font || null, slide: c.slide || null,
+      font: c.font || null, slide: c.slide || null, t3d: c.is3dText || null,
       fileName: c.file ? c.file.name : (c.kind === 'video' || c.kind === 'gif' ? c.name : null),
       thumb: c.thumb,
     })),
@@ -5505,6 +6052,7 @@ function deserialize(d) {
         { mode: 'off', n: 8, rand: false, dip: false, _count: 0, _t: 0, _lastVT: 0 },
         LD.auto || {});
       state.layers[l].fx = Object.assign({ id: 'none', p1: .5, p2: .5 }, LD.fx || {});
+      state.layers[l].fx2 = LD.fx2 && LD.fx2.id ? { id: LD.fx2.id, p1: +LD.fx2.p1 || .5, p2: +LD.fx2.p2 || .5 } : null;
       state.layers[l].solo = !!LD.solo;
       state.layers[l].byp = !!LD.byp;
     }
@@ -5530,6 +6078,10 @@ function deserialize(d) {
     if (cd.kind === 'glb') cell.g3 = cd.g3 && typeof cd.g3 === 'object' ? cd.g3 : { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' };
     cell.font = cd.font || undefined;
     cell.slide = cd.slide > 0 ? +cd.slide : undefined;
+    if (cd.kind === 'glb' && cd.t3d) { // el texto 3D se regenera solo (no necesita archivo)
+      const g3keep = cell.g3;
+      setTimeout(() => { try { textTo3D(cell, cd.t3d); if (g3keep) cell.g3 = g3keep; } catch (e) { } }, 400);
+    }
     cell.camId = cd.camId || '';
     if (cd.kind === 'video' || cd.kind === 'gif')
       cell.name = cd.fileName ? cd.fileName.replace(/\.[^.]+$/, '') : cd.name;
@@ -5559,6 +6111,13 @@ function deserialize(d) {
   state.energyScenes = d.energyScenes && typeof d.energyScenes === 'object'
     ? { calm: d.energyScenes.calm | 0, hard: d.energyScenes.hard | 0 } : { calm: -1, hard: -1 };
   sceneMorph = null;
+  state.macros = Array.isArray(d.macros) && d.macros.length === 2
+    ? d.macros.map(m => ({ targets: (m.targets || []).filter(t2 => typeof t2.id === 'string').slice(0, 16) }))
+    : [{ targets: [] }, { targets: [] }];
+  state.hitBass = HIT_ACTIONS.some(([v]) => v === d.hitBass) ? d.hitBass : 'off';
+  state.hitHigh = HIT_ACTIONS.some(([v]) => v === d.hitHigh) ? d.hitHigh : 'off';
+  state.party = ['off', 'lluvia', 'nieve', 'chispas'].includes(d.party) ? d.party : 'off';
+  buildMacroBar();
   state.structs = Array.isArray(d.structs)
     ? d.structs.filter(s => s && Array.isArray(s.pts) && s.pts.length > 1).slice(0, 24)
     : [];
@@ -5743,6 +6302,7 @@ function captureScene(i) {
       opacity: L.opacity, mode: L.mode, opMod: L.opMod, speed: L.speed,
       auto: { mode: L.auto.mode, n: L.auto.n, rand: L.auto.rand, dip: L.auto.dip },
       fx: { id: L.fx.id, p1: L.fx.p1, p2: L.fx.p2 },
+      fx2: L.fx2 && L.fx2.id !== 'none' ? { id: L.fx2.id, p1: L.fx2.p1, p2: L.fx2.p2 } : null,
       cell: (c => c ? { l: c.l, c: c.c, dk: c.dk || 0 } : null)(L.slots[L.target].cell),
     })),
     effects: JSON.parse(JSON.stringify(state.effects)),
@@ -5793,6 +6353,7 @@ function recallScene(i) {
     L.speed = sl.speed || 1;
     if (sl.auto) Object.assign(L.auto, sl.auto, { _count: 0, _t: 0, _lastVT: 0 });
     if (sl.fx) L.fx = { ...sl.fx };
+    L.fx2 = sl.fx2 ? { ...sl.fx2 } : null;
     applySpeed(L);
     const g = state.decks ? state.decks[sl.cell ? sl.cell.dk || 0 : 0] : state.grid;
     const cell = sl.cell && g && g[sl.cell.l] && g[sl.cell.l][sl.cell.c];
@@ -5831,6 +6392,85 @@ for (let i = 0; i < 8; i++) {
   $('#sceneBtns').appendChild(b);
 }
 
+/* ---------------- partículas de fiesta 🎊: confeti, chispas, lluvia, nieve sobre la salida ---------------- */
+const party = { parts: [] };
+const PARTY_COLORS = ['#ff3d54', '#ff7a1a', '#ffd21a', '#8dff3f', '#1ad8ff', '#b44aff', '#ff4ad0', '#ffffff'];
+function partyBurst(n) { // 🎊 explosión de confeti (manual, por MIDI, o en el drop)
+  n = n || 90;
+  for (let i = 0; i < n; i++) {
+    party.parts.push({
+      k: 'conf', x: .2 + Math.random() * .6, y: .45 + Math.random() * .2,
+      vx: (Math.random() - .5) * .5, vy: .35 + Math.random() * .5,
+      rot: Math.random() * 6.28, vr: (Math.random() - .5) * 9,
+      col: PARTY_COLORS[i % PARTY_COLORS.length], sz: .008 + Math.random() * .012, life: 3.6,
+    });
+  }
+  if (party.parts.length > 700) party.parts.splice(0, party.parts.length - 700);
+}
+function partyTick(dt) {
+  const mode = state.party || 'off';
+  // emisión continua según el modo
+  if (mode === 'lluvia') for (let i = 0; i < 4; i++)
+    party.parts.push({ k: 'rain', x: Math.random(), y: 1.05, vx: -.04, vy: -2.2 - Math.random(), col: '#9fd8ff', sz: .012, life: 1.2 });
+  else if (mode === 'nieve') { if (Math.random() < .5) party.parts.push({ k: 'snow', x: Math.random(), y: 1.03, vx: 0, vy: -.07 - Math.random() * .05, col: '#fff', sz: .004 + Math.random() * .005, life: 16, ph: Math.random() * 6.28 }); }
+  else if (mode === 'chispas') { if (beatEnv > .8 && Math.random() < .6) for (let i = 0; i < 8; i++) party.parts.push({ k: 'spark', x: .1 + Math.random() * .8, y: -.02, vx: (Math.random() - .5) * .3, vy: .8 + Math.random() * .8, col: PARTY_COLORS[1 + (Math.random() * 3 | 0)], sz: .004, life: 1.4 }); }
+  for (const p of party.parts) {
+    p.life -= dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.k === 'conf') { p.vy -= 1.6 * dt; p.vx *= .99; p.rot += p.vr * dt; }
+    else if (p.k === 'spark') p.vy -= 1.9 * dt;
+    else if (p.k === 'snow') p.x += Math.sin(nowSec * 1.2 + p.ph) * .04 * dt * 10;
+  }
+  party.parts = party.parts.filter(p => p.life > 0 && p.y > -.15 && p.y < 1.2);
+}
+function partyDraw(gl) {
+  if (!party.parts.length) return;
+  const W = main.canvas.width, H = main.canvas.height;
+  const me = partyDraw;
+  if (!me.cv || me.cv.width !== W || me.cv.height !== H) {
+    me.cv = document.createElement('canvas'); me.cv.width = W; me.cv.height = H;
+    me.ctx = me.cv.getContext('2d');
+  }
+  const x = me.ctx;
+  x.clearRect(0, 0, W, H);
+  for (const p of party.parts) {
+    const a2 = Math.min(1, p.life);
+    x.globalAlpha = a2;
+    const px = p.x * W, py = (1 - p.y) * H, s2 = p.sz * H;
+    if (p.k === 'conf') {
+      x.save();
+      x.translate(px, py); x.rotate(p.rot);
+      x.fillStyle = p.col;
+      x.fillRect(-s2, -s2 * .6 * Math.abs(Math.sin(p.rot * 2 + p.x * 9)), s2 * 2, s2 * 1.2 * Math.abs(Math.sin(p.rot * 2 + p.x * 9)) + 1);
+      x.restore();
+    } else if (p.k === 'rain') {
+      x.strokeStyle = p.col; x.lineWidth = Math.max(1, s2 * .15);
+      x.beginPath(); x.moveTo(px, py); x.lineTo(px + p.vx * 18, py - p.vy * 18); x.stroke();
+    } else {
+      x.fillStyle = p.col;
+      if (p.k === 'spark') { x.shadowColor = p.col; x.shadowBlur = s2 * 3; }
+      x.beginPath(); x.arc(px, py, Math.max(1, s2), 0, 6.2832); x.fill();
+      x.shadowBlur = 0;
+    }
+  }
+  x.globalAlpha = 1;
+  if (!me.tex) me.tex = makeTex(gl, 2, 2);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, me.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, me.cv); }
+  catch (e) { gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); return; }
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  const bp = program(main, 'blit', BLIT_FS);
+  gl.useProgram(bp);
+  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  draw(gl);
+  gl.disable(gl.BLEND);
+}
 /* ---------------- overlays de fiesta: logo 🖼 + cuenta regresiva ⏱ sobre la salida ---------------- */
 let logoImg = null, logoImgSrc = '';
 function overlayExtras(gl) {
@@ -5849,7 +6489,7 @@ function overlayExtras(gl) {
   if (showLogo) {
     if (logoImgSrc !== lg.src) { logoImg = new Image(); logoImg.src = lg.src; logoImgSrc = lg.src; }
     if (logoImg.complete && logoImg.naturalWidth) {
-      const h2 = H * (lg.sc || .16);
+      const h2 = H * (lg.sc || .16) * (lg.beat ? 1 + beatEnv * .13 : 1); // 💓 logo que late
       const w2 = h2 * logoImg.naturalWidth / logoImg.naturalHeight;
       const m = H * .03;
       const px = String(lg.pos || 'br').includes('l') ? m : W - w2 - m;
@@ -6131,7 +6771,7 @@ main.canvas.addEventListener('webglcontextrestored', () => {
   blackTex = null;
   main._glbP = null; // el programa y los buffers de los 🧊 se rearman solos
   (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => { c._g3buf = null; })));
-  for (const L of state.layers) for (const s of L.slots) { s.tex = null; s.tgt = null; s.nT = null; s.fxT = null; s.fxP = null; s._gidx = -1; }
+  for (const L of state.layers) for (const s of L.slots) { s.tex = null; s.tgt = null; s.nT = null; s.fxT = null; s.fxP = null; s.fxT2 = null; s.fxP2 = null; s._gidx = -1; }
   allocTargets();
   toast('Render recuperado ✔');
 });
@@ -6314,6 +6954,7 @@ document.addEventListener('keydown', e => {
     markDirty();
     return;
   }
+  if (e.ctrlKey && !e.altKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); cmdPalette(); return; } // ⌨ paleta
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
   if (e.ctrlKey && !e.altKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (e.ctrlKey && !e.altKey && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
@@ -6414,7 +7055,12 @@ function buildCpTab(id) {
       <div class="cprow"><b>Tema de colores</b><span><select id="cptheme">
         ${Object.entries(THEMES).map(([k, t]) =>
           `<option value="${k}"${state.theme === k ? ' selected' : ''}>${t.label}</option>`).join('')}
+        <option value="custom"${state.theme === 'custom' ? ' selected' : ''}>🎨 Propio</option>
       </select></span></div>
+      <div class="cprow"><b>🎨 Tema propio</b><span style="display:flex;gap:5px;align-items:center">
+        <input type="color" id="cpctA" value="${(uiPrefs.customTheme && uiPrefs.customTheme.acc) || '#ff7a1a'}" title="color de acento" style="width:26px;height:20px;padding:0;border:none;background:none">
+        <input type="color" id="cpctB" value="${(uiPrefs.customTheme && uiPrefs.customTheme.acc2) || '#ff3d54'}" title="color secundario" style="width:26px;height:20px;padding:0;border:none;background:none">
+        <button id="cpctGo" class="mini">aplicar</button></span></div>
       <div class="cph">RENDER</div>
       <div class="cprow"><b>Resolución</b><span><select id="cpres">${resOptionsHTML(state.res)}</select></span></div>
       <div class="cprow"><b>Límite de FPS</b><span><select id="cpfpscap">
@@ -6437,6 +7083,12 @@ function buildCpTab(id) {
       <div class="cprow"><span class="v">Graba los últimos ~${tm.SEG} s de tu salida en segundo plano.
         REPLAY los mete como clip en una celda vacía: rebobiná el momento épico y loopealo.
         (usa algo de CPU: prendela cuando la vayas a usar)</span></div>
+      <div class="cph">🎊 PARTÍCULAS DE FIESTA</div>
+      <div class="cprow"><b>Modo continuo</b><span style="display:flex;gap:4px">
+        ${[['off', 'off'], ['lluvia', '🌧 lluvia'], ['nieve', '❄ nieve'], ['chispas', '✨ chispas']].map(([v, n]) =>
+        `<button class="mini${(state.party || 'off') === v ? ' on' : ''}" data-party="${v}">${n}</button>`).join('')}</span></div>
+      <div class="cprow"><b>Ráfaga</b><span>
+        <button id="cpconf" class="mini on" data-map="party" title="explosión de confeti — mapeala a un pad para el drop">🎊 CONFETI</button></span></div>
       <div class="cph">⏺ RESAMPLE (loops de tu propia mezcla)</div>
       <div class="cprow"><b>Grabar beats exactos</b><span style="display:flex;gap:5px">
         <select id="cprsb" class="mini"><option value="4">4♪</option><option value="8" selected>8♪</option><option value="16">16♪</option></select>
@@ -6452,6 +7104,7 @@ function buildCpTab(id) {
           ${[['br', '↘ abajo der.'], ['bl', '↙ abajo izq.'], ['tr', '↗ arriba der.'], ['tl', '↖ arriba izq.']].map(([v, n]) =>
         `<option value="${v}"${(state.logo.pos || 'br') === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
         <input id="cplogoop" type="range" min="0.15" max="1" step="0.05" value="${state.logo.op != null ? state.logo.op : .85}" style="width:60px" title="opacidad">
+        <button id="cplogobeat" class="mini${state.logo.beat ? ' on' : ''}" title="el logo late con el beat">💓</button>
         <button id="cplogox" class="mini">✕</button>` : ''}</span></div>
       <div class="cprow"><span class="v">Un PNG (con transparencia, idealmente) fijo sobre la salida —
         la marca del evento, tu firma VJ. Viaja con el set.</span></div>
@@ -6480,6 +7133,12 @@ function buildCpTab(id) {
       ${cpRow('GPU', '', gpuName)}
       ${cpRow('Contexto', '', 'WebGL2 · 8 texturas de capa · ping-pong FX')}`;
     $('#cplang').onchange = e => { setLang(e.target.value); toast('Idioma: ' + LANGS[curLang()]); };
+    if ($('#cpctGo')) $('#cpctGo').onclick = () => {
+      uiPrefs.customTheme = { acc: $('#cpctA').value, acc2: $('#cpctB').value };
+      saveUI();
+      applyTheme('custom'); markDirty(); buildCpTab(cpTab);
+      toast('🎨 Tema propio aplicado — tus colores, tu cabina');
+    };
     $('#cptheme').onchange = e => {
       applyTheme(e.target.value);
       markDirty();
@@ -6510,6 +7169,10 @@ function buildCpTab(id) {
     if ($('#cplutmix')) $('#cplutmix').oninput = e => { lutMix = +e.target.value; };
     if ($('#cptm')) $('#cptm').onclick = tmToggle;
     if ($('#cptmgo')) $('#cptmgo').onclick = tmReplay;
+    document.querySelectorAll('[data-party]').forEach(b2 => {
+      b2.onclick = () => { state.party = b2.dataset.party; markDirty(); buildCpTab('render'); };
+    });
+    if ($('#cpconf')) $('#cpconf').onclick = () => partyBurst();
     if ($('#cprsgo')) $('#cprsgo').onclick = () => resampleStart(+$('#cprsb').value || 8);
     if ($('#cprsb')) $('#cprsb').onchange = e => { $('#cprsgo').dataset.map = 'resample:' + e.target.value; };
     if ($('#cplogo')) $('#cplogo').onclick = () => {
@@ -6532,6 +7195,7 @@ function buildCpTab(id) {
     if ($('#cplogoon')) $('#cplogoon').onclick = () => { state.logo.on = !state.logo.on; markDirty(); buildCpTab('render'); };
     if ($('#cplogopos')) $('#cplogopos').onchange = e => { state.logo.pos = e.target.value; markDirty(); };
     if ($('#cplogoop')) $('#cplogoop').oninput = e => { state.logo.op = +e.target.value; markDirty(); };
+    if ($('#cplogobeat')) $('#cplogobeat').onclick = () => { state.logo.beat = !state.logo.beat; markDirty(); buildCpTab('render'); };
     if ($('#cplogox')) $('#cplogox').onclick = () => { state.logo = null; markDirty(); buildCpTab('render'); toast('🖼 Logo quitado'); };
     $('#cpglreset').onclick = () => {
       const ext = main.gl.getExtension('WEBGL_lose_context');
@@ -6705,6 +7369,12 @@ function buildCpTab(id) {
           title="separadas con | (barra vertical)" data-noi18n></span></div>
       <div class="cprow"><b>Texto libre</b><span>
         <button id="cppubfree" class="mini${pub.free ? ' danger on' : ''}" title="⚠ deja que escriban CUALQUIER cosa — usalo solo con gente de confianza">${pub.free ? '⚠ ON' : 'off (recomendado)'}</button></span></div>
+      <div class="cprow"><b>💬 Muro con aprobación</b><span>
+        <button id="cpwall" class="mini${pub.wallOn ? ' on' : ''}" title="la gente escribe, los mensajes van a TU cola, y solo lo que VOS apruebes sale GRANDE en pantalla">${pub.wallOn ? 'ON' : 'off'}</button></span></div>
+      ${pub.wallOn && pub.queue.length ? `<div class="cprow"><b>Cola (${pub.queue.length})</b><span style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto">
+        ${pub.queue.map((q, i) => `<span style="display:flex;gap:4px;align-items:center">
+          <button class="mini on" data-wok="${i}">✔</button><button class="mini danger" data-wno="${i}">✕</button>
+          <span class="v" data-noi18n>${q.replace(/</g, '&lt;')}</span></span>`).join('')}</span></div>` : ''}
       <div class="cprow"><b>Tirar vos</b><span id="cppubfire" style="display:flex;gap:4px;flex-wrap:wrap"></span></div>
       <div class="cprow"><span class="v">💥 RÁFAGA también se puede mapear a un pad MIDI (botón 🎹 y tocás el pad).</span></div>
       <div class="cph">🗳 VOTACIÓN DEL PÚBLICO</div>
@@ -6743,6 +7413,14 @@ function buildCpTab(id) {
       pubBroadcastConfig(); buildCpTab('remote');
       toast(pub.free ? '⚠ Texto libre ON — el público puede escribir lo que quiera' : 'Texto libre off — solo tus frases');
     };
+    if ($('#cpwall')) $('#cpwall').onclick = () => {
+      pub.wallOn = !pub.wallOn;
+      if (!pub.wallOn) pub.queue = [];
+      pubBroadcastConfig(); buildCpTab('remote');
+      toast(pub.wallOn ? '💬 Muro ON — la gente escribe, VOS aprobás qué sale en pantalla' : '💬 Muro off');
+    };
+    document.querySelectorAll('[data-wok]').forEach(b2 => { b2.onclick = () => wallApprove(+b2.dataset.wok); });
+    document.querySelectorAll('[data-wno]').forEach(b2 => { b2.onclick = () => { pub.queue.splice(+b2.dataset.wno, 1); buildCpTab('remote'); }; });
     if ($('#cpvote')) $('#cpvote').onclick = () => {
       if (pub.vote) pubVoteEnd(true);
       else pubVoteStart((+$('#cpvotea').value || 1) - 1, (+$('#cpvoteb').value || 2) - 1, +$('#cpvotes').value || 30);
@@ -6780,6 +7458,14 @@ function buildCpTab(id) {
         <button id="cpadrop" class="mini${state.autoDrop ? ' on' : ''}" title="detecta el build-up y el drop de la música SOLO: arma el BUILD en el riser y suelta el flash cuando vuelve el bombo (análisis de energía, sin IA)">${state.autoDrop ? 'ON 🤖' : 'off'}</button></span></div>
       <div class="cprow"><b>🏃 Sensor de movimiento</b><span>
         <button id="cpmotion" class="mini${motion.on ? ' on' : ''}" title="una cámara mide cuánto se mueve la gente (comparación de frames, sin IA) y eso queda como modulador 'motion' en opacidades, efectos y objetos 3D — el público baila y los visuales explotan">${motion.on ? 'ON 📷 (' + Math.round(motion.val * 100) + '%)' : 'activar cámara'}</button></span></div>
+      <div class="cprow"><b>🎵 Modo ensayo</b><span>
+        <button id="cprehearse" class="mini${rehearse.on ? ' on' : ''}" title="techno interno generado por la app para practicar sin música — alimenta el análisis igual que música real">${rehearse.on ? '⏹ parar' : '▶ techno interno'}</button></span></div>
+      <div class="cprow"><b>🎯 Golpe GRAVE dispara</b><span>
+        <select id="cphitb" class="mini">${HIT_ACTIONS.map(([v, n]) =>
+          `<option value="${v}"${(state.hitBass || 'off') === v ? ' selected' : ''}>${n}</option>`).join('')}</select></span></div>
+      <div class="cprow"><b>🎯 Golpe AGUDO dispara</b><span>
+        <select id="cphith" class="mini">${HIT_ACTIONS.map(([v, n]) =>
+          `<option value="${v}"${(state.hitHigh || 'off') === v ? ' selected' : ''}>${n}</option>`).join('')}</select></span></div>
       <div class="cprow"><b>😴⚡ Auto-escenas por energía</b><span>
         <button id="cpenergy" class="mini${state.autoEnergy ? ' on' : ''}" title="cuando la música baja (breakdown) entra sola tu escena CALMA; cuando vuelve la energía, la FUERTE. Marcá las escenas con click derecho en sus botones">${state.autoEnergy ? 'ON 🤖' : 'off'}</button>
         <span class="v" style="margin-left:6px">😴 ${(state.energyScenes && state.energyScenes.calm >= 0) ? 'ESC ' + (state.energyScenes.calm + 1) : '–'} ·
@@ -6787,6 +7473,9 @@ function buildCpTab(id) {
     $('#cpaudio').onclick = async () => { await audioToggle(); buildCpTab('audio'); };
     if ($('#cpsys')) $('#cpsys').onclick = async () => { await sysAudioStart(); buildCpTab('audio'); };
     if ($('#cpmotion')) $('#cpmotion').onclick = motionToggle;
+    if ($('#cprehearse')) $('#cprehearse').onclick = () => { rehearseToggle(); buildCpTab('audio'); };
+    if ($('#cphitb')) $('#cphitb').onchange = e => { state.hitBass = e.target.value; markDirty(); };
+    if ($('#cphith')) $('#cphith').onchange = e => { state.hitHigh = e.target.value; markDirty(); };
     if ($('#cpenergy')) $('#cpenergy').onclick = () => {
       state.autoEnergy = !state.autoEnergy;
       const es = state.energyScenes || { calm: -1, hard: -1 };
@@ -7916,6 +8605,7 @@ const pub = {
   emojis: '🔥💜✨🍄👽🌀🙌❤️', texts: ['AGUANTE', 'VAMOS!', '🔥🔥🔥', 'EPAAA'], free: false,
   parts: [], canvas: null, ctx: null, tex: null, _last: new Map(),
   qrShow: false, qrImg: null,
+  wallOn: false, queue: [], wallShow: [], wallCur: null, // 💬 muro con aprobación
 };
 function pubLoadQR() { // QR para PROYECTAR en la salida (con CORS para no ensuciar el canvas)
   if (!pub.code) return;
@@ -7928,7 +8618,8 @@ function pubLoadQR() { // QR para PROYECTAR en la salida (con CORS para no ensuc
 }
 function pubConfigMsg() {
   return {
-    t: 'publayout', emojis: [...pub.emojis].filter(ch => !/\s/.test(ch)), texts: pub.texts.slice(0, 12), free: !!pub.free,
+    t: 'publayout', emojis: [...pub.emojis].filter(ch => !/\s/.test(ch)), texts: pub.texts.slice(0, 12),
+    free: !!(pub.free || pub.wallOn), // el muro también necesita que la gente pueda escribir
     vote: pub.vote ? { q: pub.vote.q, a: pub.vote.la, b: pub.vote.lb, until: pub.vote.until } : null,
   };
 }
@@ -8004,8 +8695,18 @@ function pubMsg(conn, d) {
     if ([...pub.emojis].includes(v)) pubSpawn(v);
   } else if (d.k === 't') { // texto: solo los predefinidos, salvo texto libre ON
     if (pub.texts.includes(v)) pubSpawn(v);
-    else if (pub.free && v.trim()) pubSpawn(v.replace(/[<>]/g, '').trim());
+    else if (pub.wallOn && v.trim()) { // 💬 muro: los mensajes van a TU cola de aprobación
+      if (pub.queue.length < 30) {
+        pub.queue.push(v.replace(/[<>]/g, '').trim().slice(0, 60));
+        buildCpTab('remote');
+      }
+    } else if (pub.free && v.trim()) pubSpawn(v.replace(/[<>]/g, '').trim());
   }
+}
+function wallApprove(i) { // ✔ el mensaje aprobado sale GRANDE en pantalla
+  const txt = pub.queue.splice(i, 1)[0];
+  if (txt) pub.wallShow.push(txt);
+  buildCpTab('remote');
 }
 function pubToggle() {
   if (pub.on || pub.peer) {
@@ -8188,7 +8889,7 @@ function structsDraw(gl) {
 }
 function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) sobre la salida
   const showQR = pub.qrShow && pub.qrImg && pub.qrImg.complete && pub.qrImg.naturalWidth > 0;
-  if (!pub.parts.length && !showQR && !pub.vote) return;
+  if (!pub.parts.length && !showQR && !pub.vote && !pub.wallCur && !pub.wallShow.length) return;
   const [W, H] = [main.canvas.width, main.canvas.height];
   if (!pub.canvas || pub.canvas.width !== W || pub.canvas.height !== H) {
     pub.canvas = document.createElement('canvas'); pub.canvas.width = W; pub.canvas.height = H;
@@ -8210,6 +8911,22 @@ function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) so
     x.shadowColor = '#000'; x.shadowBlur = 8;
     x.fillText('📱 escaneá y mandá tu reacción', qx + qs + pad, qy - pad - Math.round(H * .012));
     x.restore();
+  }
+  // 💬 muro: el mensaje aprobado sale grande abajo, uno a la vez
+  if (!pub.wallCur && pub.wallShow.length) pub.wallCur = { txt: pub.wallShow.shift(), until: now + 8000 };
+  if (pub.wallCur) {
+    if (now > pub.wallCur.until) pub.wallCur = null;
+    else {
+      const age = 1 - Math.max(0, (pub.wallCur.until - now - 7400)) / 600; // entra suave
+      x.save();
+      x.globalAlpha = Math.min(1, age) * Math.min(1, (pub.wallCur.until - now) / 500);
+      x.textAlign = 'center'; x.textBaseline = 'bottom';
+      x.font = `900 ${Math.round(H * .07)}px "Segoe UI Emoji","Segoe UI",sans-serif`;
+      x.fillStyle = '#fff';
+      x.shadowColor = '#000'; x.shadowBlur = H * .025;
+      x.fillText(pub.wallCur.txt, W / 2, H * .93);
+      x.restore();
+    }
   }
   if (pub.vote) { // 🗳 marcador de la votación arriba de todo
     let a = 0, b = 0;
@@ -8504,6 +9221,49 @@ function pickVideoFor(cell) {
   inp.onchange = () => { if (inp.files[0]) assignVideo(cell, inp.files[0]); };
   inp.click();
 }
+/* ⏪ reversa: el browser no reproduce video para atrás — lo convertimos a frames y listo */
+async function videoToFrames(cell) {
+  const v = cell.video;
+  if (!v || !v.duration || !isFinite(v.duration) || !v.videoWidth) { toast('⏪ El video no está listo'); return; }
+  if (videoToFrames._busy) { toast('⏪ Ya hay una conversión en curso'); return; }
+  const a0 = cell.inT || 0;
+  const b0 = cell.outT && cell.outT > a0 ? Math.min(cell.outT, v.duration) : v.duration;
+  const secs = Math.min(6, b0 - a0);
+  if (secs < .3) { toast('⏪ El recorte es muy corto'); return; }
+  const FPS = 15, n = Math.floor(secs * FPS);
+  videoToFrames._busy = true;
+  toast('⏪ Convirtiendo ' + secs.toFixed(1) + ' s (' + n + ' frames)… no toques el clip');
+  const w = 480, h = Math.max(2, Math.round(480 * v.videoHeight / v.videoWidth));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  v.pause();
+  const frames = [];
+  try {
+    for (let i = 0; i < n; i++) {
+      await new Promise(res => {
+        let done = false;
+        const fin = () => { if (done) return; done = true; v.removeEventListener('seeked', fin); res(); };
+        v.addEventListener('seeked', fin);
+        setTimeout(fin, 500);
+        try { v.currentTime = a0 + i / FPS; } catch (e) { fin(); }
+      });
+      x.drawImage(v, 0, 0, w, h);
+      frames.push({ bmp: await createImageBitmap(cv), dur: 1 / FPS });
+    }
+  } catch (e) { videoToFrames._busy = false; toast('⏪ Falló la conversión: ' + e); return; }
+  videoToFrames._busy = false;
+  if (frames.length < 4) { toast('⏪ Salieron muy pocos frames'); return; }
+  const name = cell.name;
+  freeCellMedia(cell);
+  cell.kind = 'gif'; cell.isImage = false;
+  cell.gframes = frames; cell.gtotal = frames.length / FPS;
+  cell.play = 'bounce'; // ⏪↔ la gracia de todo esto
+  cell.name = '↔ ' + name;
+  cell.video = null; cell.thumb = ''; cell.inT = 0; cell.outT = 0;
+  refreshCell(cell.l, cell.c); markDirty();
+  openProps('clip', cell);
+  toast('↔ "' + name + '" ahora va y vuelve (' + frames.length + ' frames en memoria) — cambiá el modo en Reproducción si querés');
+}
 function pickSlideshowFor(cell) { // 🖼 varias imágenes en UNA celda, rotando por beats
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp'; inp.multiple = true;
@@ -8558,6 +9318,10 @@ document.addEventListener('contextmenu', e => {
     }
     items.push({ label: '🎬 Cargar video acá…', fn: () => pickVideoFor(cell) });
     items.push({ label: '🖼 Slideshow de imágenes…', fn: () => pickSlideshowFor(cell) });
+    items.push({
+      label: '🧊 Texto 3D…',
+      fn: () => { const s2 = prompt('Texto para extruir en 3D (corto pega más):', cell.is3dText || 'RAVEN'); if (s2) textTo3D(cell, s2); },
+    });
     items.push({ label: '📷 Cámara / capturadora…', fn: () => camPicker(cell, e.clientX, e.clientY) });
     items.push({
       label: cell.kind === 'text' ? '✏ Editar texto…' : '💬 Poner texto…',
@@ -9301,7 +10065,11 @@ function buildPropClip(b) {
         <option value="loop"${(cell.play || 'loop') === 'loop' ? ' selected' : ''}>🔁 bucle</option>
         <option value="once"${cell.play === 'once' ? ' selected' : ''}>1️⃣ una vez (queda en el último frame)</option></select>`)}
       ${pRow('📍 Cues', `<span id="ppcues" style="display:flex;gap:4px;flex-wrap:wrap"></span>`)}
-      ${pRow('🎚 Jog', `<button class="mini" data-map="lseek:${propLayer}" title="mapealo a una perilla/fader MIDI (modo LEARN y girá): la perilla pasa a ser el cabezal del video de la CAPA ${propLayer + 1} — scratch con la mano">mapear a MIDI</button>`)}`;
+      ${pRow('🎚 Jog', `<button class="mini" data-map="lseek:${propLayer}" title="mapealo a una perilla/fader MIDI (modo LEARN y girá): la perilla pasa a ser el cabezal del video de la CAPA ${propLayer + 1} — scratch con la mano">mapear a MIDI</button>`)}
+      ${pRow('🔂 Loop musical', `<span style="display:flex;gap:4px;align-items:center">
+        <select id="pplab" class="mini">${[2, 4, 8, 16].map(n => `<option value="${n}"${n === 4 ? ' selected' : ''}>${n}♪</option>`).join('')}</select>
+        <button class="mini" id="pplabgo" title="marca inicio ACÁ y fin exactamente N beats después (al BPM actual): loop clavado a la música">marcar desde acá</button></span>`)}
+      ${pRow('⏪ Reversa', `<button class="mini" id="pprev" title="convierte el recorte (máx 6 s) a frames en memoria → reproducción en REBOTE ida y vuelta, imposible con video normal en el browser">convertir a rebote ↔</button>`)}`;
   } else if (cell.kind === 'glb') {
     const g3 = cell.g3 || (cell.g3 = { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' });
     const anims = (cell.glb && cell.glb.anims) || [];
@@ -9310,6 +10078,11 @@ function buildPropClip(b) {
         <option value="-1"${+(g3.anim ?? 0) === -1 ? ' selected' : ''}>⏸ quieta (pose base)</option>
         ${anims.map((a, i) => `<option value="${i}"${+(g3.anim ?? 0) === i ? ' selected' : ''}>▶ ${a.name} (${a.dur.toFixed(1)}s)</option>`).join('')}
       </select>`) + pRow('Velocidad anim', `<input type="range" id="ppg3aspd" min="0.1" max="3" step="0.05" value="${g3.aspd || 1}">`) : ''}
+      ${pRow('Render', `<select id="ppg3rm">
+        <option value="wire"${(g3.rmode || 'wire') === 'wire' ? ' selected' : ''}>🕸 wireframe</option>
+        <option value="points"${g3.rmode === 'points' ? ' selected' : ''}>✨ nube de puntos</option>
+        <option value="both"${g3.rmode === 'both' ? ' selected' : ''}>🕸✨ ambos</option></select>`)}
+      ${pRow('Niebla', `<input type="range" id="ppg3fog" min="0" max="1" step="0.05" value="${g3.fog || 0}" title="lo lejano se apaga (profundidad)">`)}
       ${pRow('Giro', `<input type="range" id="ppg3spin" min="0" max="2" step="0.05" value="${g3.spin}">`)}
       ${pRow('Desarme', `<input type="range" id="ppg3expl" min="0" max="1" step="0.02" value="${g3.expl}" title="0 = armado · 1 = explotado en pedazos">`)}
       ${pRow('Desarme al ritmo', `<select id="ppg3mod">
@@ -9392,9 +10165,22 @@ function buildPropClip(b) {
   wireAnimUI(cell);
   if ($('#ppcues')) buildCueChips(cell);
   if ($('#ppslide')) $('#ppslide').onchange = e => { cell.slide = +e.target.value; markDirty(); };
+  if ($('#pplabgo')) $('#pplabgo').onclick = () => { // 🔂 loop de N beats desde el cabezal
+    const v = cell.video;
+    if (!v || !v.duration) { toast('El video no está listo'); return; }
+    const beats = +$('#pplab').value || 4;
+    const secs = beats * 60 / state.bpm;
+    cell.inT = +v.currentTime.toFixed(2);
+    cell.outT = +Math.min(v.duration, cell.inT + secs).toFixed(2);
+    markDirty(); buildProps();
+    toast('🔂 Loop de ' + beats + ' beats (' + secs.toFixed(1) + ' s) desde ' + cell.inT + 's — clavado al BPM ' + state.bpm);
+  };
+  if ($('#pprev')) $('#pprev').onclick = () => videoToFrames(cell);
   if ($('#ppg3spin')) { // controles del objeto 3D 🧊
     const g3 = cell.g3;
     if ($('#ppg3anim')) $('#ppg3anim').onchange = e => { g3.anim = +e.target.value; markDirty(); };
+    if ($('#ppg3rm')) $('#ppg3rm').onchange = e => { g3.rmode = e.target.value; markDirty(); };
+    if ($('#ppg3fog')) $('#ppg3fog').oninput = e => { g3.fog = +e.target.value; markDirty(); };
     if ($('#ppg3aspd')) $('#ppg3aspd').oninput = e => { g3.aspd = +e.target.value; markDirty(); };
     $('#ppg3spin').oninput = e => { g3.spin = +e.target.value; markDirty(); };
     $('#ppg3expl').oninput = e => { g3.expl = +e.target.value; markDirty(); };
@@ -9473,6 +10259,10 @@ function buildPropLayer(b) {
       `<option value="${d.id}"${L.fx.id === d.id ? ' selected' : ''}>${d.name}</option>`).join('')}</select>`)}
     ${pRow('Parámetro 1', `<input type="range" id="plfx1" min="0" max="1" step="0.01" value="${L.fx.p1}">`)}
     ${pRow('Parámetro 2', `<input type="range" id="plfx2" min="0" max="1" step="0.01" value="${L.fx.p2}">`)}
+    ${pRow('⛓ Efecto 2', `<select id="plfxB"><option value="none">FX 2 off</option>${FXDEFS.map(d =>
+      `<option value="${d.id}"${L.fx2 && L.fx2.id === d.id ? ' selected' : ''}>${d.name}</option>`).join('')}</select>`)}
+    ${L.fx2 && L.fx2.id !== 'none' ? pRow('FX2 · Parám. 1', `<input type="range" id="plfxB1" min="0" max="1" step="0.01" value="${L.fx2.p1}">`) +
+      pRow('FX2 · Parám. 2', `<input type="range" id="plfxB2" min="0" max="1" step="0.01" value="${L.fx2.p2}">`) : ''}
     <div class="cph">ACCIONES</div>
     ${pRow('', `<button class="mini${L.solo ? ' on' : ''}" id="plsolo">S solo</button>
       <button class="mini${L.byp ? ' danger on' : ''}" id="plbyp">B bypass</button>
@@ -9512,6 +10302,12 @@ function buildPropLayer(b) {
     if (midiRefs[`lfx:${l}:p2`]) midiRefs[`lfx:${l}:p2`].value = L.fx.p2;
     markDirty();
   };
+  $('#plfxB').onchange = e => {
+    L.fx2 = e.target.value === 'none' ? null : { id: e.target.value, p1: .5, p2: .5 };
+    markDirty(); buildProps();
+  };
+  if ($('#plfxB1')) $('#plfxB1').oninput = e => { L.fx2.p1 = +e.target.value; markDirty(); };
+  if ($('#plfxB2')) $('#plfxB2').oninput = e => { L.fx2.p2 = +e.target.value; markDirty(); };
   $('#plsolo').onclick = () => { L.solo = !L.solo; buildGrid(); markDirty(); buildProps(); };
   $('#plbyp').onclick = () => { L.byp = !L.byp; buildGrid(); markDirty(); buildProps(); };
   $('#ploff').onclick = () => clearLayer(l);
@@ -9741,6 +10537,18 @@ const MENUS = {
     '-',
     { label: '📸 Foto de la salida (PNG)', fn: snapshotPNG },
     { label: '⏱ Cuenta regresiva en la salida…', fn: countdownPrompt },
+    { label: '📔 Diario de la noche (foto c/5 min)', fn: diaryToggle },
+    { label: '📔 Descargar galería del diario', fn: diaryExport },
+    '-',
+    { label: '📦 Backup TOTAL (set+prefs+fuentes+mappings)', fn: backupExport },
+    {
+      label: '📦 Restaurar backup total…', fn: () => {
+        const inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = '.json';
+        inp.onchange = () => { if (inp.files[0]) backupImport(inp.files[0]); };
+        inp.click();
+      },
+    },
     '-',
     {
       label: '📦 Plantillas de uso…', fn: () => setTimeout(() =>
@@ -9784,7 +10592,7 @@ const MENUS = {
     fn: () => {
       state.layers.forEach(L => {
         L.opacity = 1; L.speed = 1; L.opMod = 'off';
-        L.solo = false; L.byp = false; L.fx = { id: 'none', p1: .5, p2: .5 };
+        L.solo = false; L.byp = false; L.fx = { id: 'none', p1: .5, p2: .5 }; L.fx2 = null;
         L.auto.mode = 'off';
       });
       buildGrid(); markDirty(); toast('Capas reseteadas');
@@ -10500,6 +11308,7 @@ if (!uiPrefs.welcomed) showWelcome(); // cartel de bienvenida en el primer arran
 setTimeout(autoRelinkBoot, 1800); // los videos vuelven solos si hay permisos guardados
 setTimeout(autoFileBoot, 2600); // reconectar el auto-guardado a archivo de otras sesiones
 fontsBoot(); // recargar las tipografías .ttf guardadas en esta PC
+buildMacroBar(); // 🎛 barra de macros (necesita midiRefs ya inicializado)
 (function kioskBoot() { // 🤖 modo kiosko: la app corre sola (instalaciones, vidrieras)
   const q = new URLSearchParams(location.search);
   if (q.get('kiosk') !== '1') return;
