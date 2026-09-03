@@ -136,6 +136,74 @@ AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
   psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
   el golpe visual del drop sale solo.
 
+BEAT-REPEAT 🔁 (tartamudeo rítmico)
+  Botón 🔁 en la topbar: loopea el último tramo de los clips que
+  están sonando, clavado al beat. Click derecho cambia el largo
+  (½/1/2/4 beats). Mapeado a un pad MIDI es MOMENTÁNEO: apretás y
+  tartamudea, soltás y sigue. El clásico de los clásicos.
+
+MORPH DE ESCENAS 🎚
+  Selector al lado de las escenas: en vez de entrar de golpe,
+  opacidades, crossfader y perillas de efectos se DESLIZAN hacia la
+  escena nueva en 2/4/8 beats. Mezclar escenas como quien mezcla
+  temas. Los clips igual entran con su transición.
+
+CONTADOR DE FRASES 🧮
+  En la topbar ves compás·beat (ej: 3·2). Cuando la frase de 16 (o
+  32) beats está por terminar, PARPADEA EN ROJO: ahí es donde el
+  tema cambia — cambiá el visual justo donde cambia la música.
+  Click = "este es el 1" (re-anclar). Click derecho = frase 16/32.
+
+RESAMPLE ⏺ (mezclar tu propia mezcla)
+  Panel → Render → RESAMPLE: graba 4/8/16 beats EXACTOS de tu salida
+  (arranca clavado en el beat) y cae como LOOP en una celda vacía.
+  Armaste un momento hermoso → lo capturás → lo seguís mezclando.
+  Mapeable a MIDI.
+
+AUTO-ESCENAS POR ENERGÍA 😴⚡
+  Marcá con click derecho una escena como CALMA y otra como FUERTE.
+  Panel → Audio → auto-escenas ON: cuando la música baja (breakdown)
+  entra sola la calma; cuando vuelve el bombo, la fuerte. El hermano
+  del Auto-DROP.
+
+HYPE DEL PÚBLICO 🔥
+  La página del público ahora tiene un botón 🔥 HYPE machacable.
+  Cuanto más lo machaca la gente, más sube el modulador "hype" —
+  usalo en opacidades, efectos o el desarme 3D: el público controla
+  la intensidad con los dedos.
+
+EDGE BLENDING 🏢 (dos proyectores sin costura)
+  En el mapping, cada superficie tiene fundido POR LADO (izq/der/
+  arriba/abajo) con curva gamma. Solapá dos proyectores, fundí los
+  bordes que se tocan, y la unión desaparece.
+
+MAPPING VIVO 🌊
+  Cada superficie puede latir 💓, temblar 🫨 o derivar 🌊 al ritmo,
+  con perilla de intensidad. El mapping deja de ser estático.
+
+MAPPING POR LUGAR 📚
+  Panel → Render → "Mapping del lugar": guardá el mapping de cada
+  lugar donde tocás con su nombre. Llegás al bar de siempre → un
+  click → superficies en su lugar. (Queda en esta PC.)
+
+TIPOGRAFÍAS PROPIAS 🔤
+  Propiedades de un texto → 🔤 Tipografía: fuentes del sistema o
+  "＋ .ttf" para cargar la fuente del flyer del evento. Quedan
+  guardadas en esta PC para siempre.
+
+SLIDESHOW 🖼
+  Click derecho en una celda → "Slideshow de imágenes": varias
+  imágenes en UNA celda rotando cada N beats (sync BPM). Logos de
+  sponsors, flyers, fotos del evento.
+
+MODO KIOSKO 🤖 (instalaciones)
+  Abrí la app con ?kiosk=1&col=1 al final de la URL: se esconde
+  toda la interfaz, la salida ocupa la pantalla, dispara la columna
+  1 sola y se auto-vigila (si algo se cuelga, se reinicia sola).
+  Para vidrieras, ferias e instalaciones que corren días enteros:
+    chrome --kiosk "https://www.ravenlight.net/ravenvj/?kiosk=1&col=1"
+  (El set sale del auto-guardado del navegador — armalo antes.)
+
 ENVOLVENTES DIBUJABLES ✏ (efectos coreografiados)
   En el rack de efectos, poné el modulador de un parámetro en
   "✏ curva": aparece un mini-lienzo donde DIBUJÁS con el mouse la

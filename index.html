@@ -66,6 +66,14 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #wizbox .wbtns{display:flex;gap:6px;justify-content:center}
 #wizbox .wnote{margin-top:10px;font-size:9px;color:var(--dim)}
 canvas.envcv{background:#0a0a0d;border:1px solid var(--line);border-radius:4px;cursor:crosshair;touch-action:none}
+#barLbl{min-width:34px;color:var(--dim);font-variant-numeric:tabular-nums}
+body.kiosk #menubar,body.kiosk #topbar,body.kiosk #bottom,body.kiosk #gridwrap,
+body.kiosk #clock,body.kiosk #relinkBar,body.kiosk #welcome,body.kiosk .welcome,
+body.kiosk #splitH,body.kiosk #splitM,body.kiosk #splitG{display:none!important}
+body.kiosk{overflow:hidden;cursor:none}
+body.kiosk #outCanvas{position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:80}
+#barLbl.warn{color:#ff3d54;font-weight:800;animation:barwarn .5s infinite alternate}
+@keyframes barwarn{from{opacity:1}to{opacity:.45}}
 .connask{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);z-index:95;
   background:var(--panel);border:1px solid var(--acc);border-radius:12px;padding:12px 16px;
   display:flex;flex-direction:column;gap:9px;align-items:center;box-shadow:0 10px 40px #000c;font-size:12px}
@@ -415,9 +423,14 @@ canvas.envcv{background:#0a0a0d;border:1px solid var(--line);border-radius:4px;c
         <option value="0">✖ fundido</option><option value="1">◧ barrido ↔</option>
         <option value="2">⬒ barrido ↕</option><option value="3">◎ círculo</option>
         <option value="4">▦ glitch</option><option value="5">⬛ por negro</option></select>
-      <button id="monoBtn" data-map="mono" title="MONO: un solo clip a la vez — cada disparo reemplaza al anterior con transición (liviano para la PC)">1×</button></span>
+      <button id="monoBtn" data-map="mono" title="MONO: un solo clip a la vez — cada disparo reemplaza al anterior con transición (liviano para la PC)">1×</button>
+      <button id="brepBtn" data-map="brep:1" title="🔁 BEAT-REPEAT: tartamudea el último tramo de los clips al ritmo — click para prender/apagar, click derecho cambia el largo (½/1/2/4 beats). En un pad MIDI es MOMENTÁNEO (apretado = repite)">🔁</button>
+      <button id="barLbl" title="compás·beat de la frase — click: re-anclar la frase acá (este es el 1) · click derecho: frase de 16/32 beats">1·1</button></span>
     <span class="grp" title="escenas: click = disparar · click derecho = guardar snapshot · F1-F8">
-      <label>ESC</label><span id="sceneBtns"></span></span>
+      <label>ESC</label><span id="sceneBtns"></span>
+      <select id="morphSel" title="MORPH: la escena no entra de golpe — opacidades, crossfader y perillas se deslizan en N beats">
+        <option value="0">⚡ directa</option><option value="2">🎚 2♪</option>
+        <option value="4">🎚 4♪</option><option value="8">🎚 8♪</option></select></span>
     <span class="grp"><button id="diceBtn" data-map="dice" title="randomizar parámetros de los efectos">🎲</button>
       <select id="rndSel" title="randomizar FX automáticamente cada N beats">
         <option value="0">manual</option><option value="4">c/4</option><option value="8">c/8</option>
@@ -967,6 +980,7 @@ const state = {
   },
   fxPresets: {}, mono: true, outScreen: -1, theme: 'fenix',
   customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [], colColors: {}, logo: null, cd: null,
+  morphBeats: 0, autoEnergy: false, energyScenes: { calm: -1, hard: -1 },
   decks: null, deckIdx: 0,
 };
 const DECK_NAMES = ['A', 'B', 'C', 'D'];
@@ -1006,8 +1020,8 @@ function newSurface() {
     op: 1, mask: 0, maskInv: 0, soft: 0, line: 0, flipX: 0, flipY: 0, layer: -1 };
 }
 /* homografía: cuadrado unitario → 4 esquinas, invertida para el shader */
-function computeWarp(sf) {
-  const [p0, p1, p2, p3] = sf.pts;
+function warpFromPts(ptsArr) {
+  const [p0, p1, p2, p3] = ptsArr;
   const px = p0[0] - p1[0] + p2[0] - p3[0];
   const py = p0[1] - p1[1] + p2[1] - p3[1];
   let a, b, c, d, e, f, g, h, i;
@@ -1029,9 +1043,84 @@ function computeWarp(sf) {
   const A = e * i - f * h, B = c * h - b * i, C = b * f - c * e;
   const D = f * g - d * i, E = a * i - c * g, F = c * d - a * f;
   const G = d * h - e * g, H2 = b * g - a * h, I = a * e - b * d;
-  sf._m = new Float32Array([A, D, G, B, E, H2, C, F, I]);
+  return new Float32Array([A, D, G, B, E, H2, C, F, I]);
 }
+function computeWarp(sf) { sf._m = warpFromPts(sf.pts); }
 function computeAllWarps() { state.map.surfaces.forEach(computeWarp); }
+/* restaurar un mapping serializado (del set o de un preset de lugar 📚) */
+function restoreMapData(md) {
+  if (!(md && Array.isArray(md.surfaces) && md.surfaces.length)) return false;
+  state.map.on = !!md.on;
+  state.map.test = !!md.test;
+  state.map.sel = Math.min(md.sel || 0, md.surfaces.length - 1);
+  state.map.surfaces = md.surfaces.map(sf => {
+    const s = {
+      pts: sf.pts, src: sf.src || [0, 0, 1, 1], on: sf.on !== false, _m: null,
+      mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
+      op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
+      flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
+      mesh: sf.mesh && Array.isArray(sf.mesh.pts) ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
+      bez: sf.bez && Array.isArray(sf.bez.c) && Array.isArray(sf.bez.h) ? { c: sf.bez.c, h: sf.bez.h } : null,
+      maskPts: Array.isArray(sf.maskPts) ? sf.maskPts : null,
+      maskSmooth: !!sf.maskSmooth, maskSvg: sf.maskSvg || null,
+      layer: typeof sf.layer === 'number' ? sf.layer : -1,
+      eblend: sf.eblend && typeof sf.eblend === 'object' ? { l: +sf.eblend.l || 0, r: +sf.eblend.r || 0, t: +sf.eblend.t || 0, b: +sf.eblend.b || 0 } : null,
+      vivo: sf.vivo && sf.vivo.mode && sf.vivo.mode !== 'off' ? { mode: String(sf.vivo.mode), amt: +sf.vivo.amt || .5 } : null,
+    };
+    if (s.bez) bezToMesh(s); else if (s.mesh) syncMeshCorners(s);
+    if (s.maskPts || s.maskSvg) { try { rasterizeMask(s); } catch (e) { } }
+    return s;
+  });
+  return true;
+}
+/* presets de mapping por lugar 📚 (guardados en esta PC, aparte del set) */
+function mapPresets() { try { return JSON.parse(localStorage.getItem('ravenvj_mapPresets') || '{}'); } catch (e) { return {}; } }
+function mapPresetSave() {
+  const name = (prompt('📚 Nombre del lugar (ej: "bar de siempre", "club X"):') || '').trim().slice(0, 30);
+  if (!name) return;
+  const all = mapPresets();
+  all[name] = JSON.parse(JSON.stringify(serialize().map));
+  try {
+    localStorage.setItem('ravenvj_mapPresets', JSON.stringify(all));
+    toast('📚 Mapping "' + name + '" guardado en esta PC');
+  } catch (e) { toast('No entró (¿storage lleno?) — probá borrar presets viejos'); }
+  buildCpTab('render');
+}
+function mapPresetLoad(name) {
+  const md = mapPresets()[name];
+  if (!md) return;
+  if (restoreMapData(md)) {
+    computeAllWarps(); markDirty(); mapEditorSync(); buildCpTab('render');
+    toast('📚 Mapping "' + name + '" cargado — superficies del lugar listas');
+  }
+}
+function mapPresetDel(name) {
+  const all = mapPresets();
+  delete all[name];
+  try { localStorage.setItem('ravenvj_mapPresets', JSON.stringify(all)); } catch (e) { }
+  buildCpTab('render');
+  toast('📚 "' + name + '" borrado');
+}
+/* mapping vivo 🌊: la superficie respira/tiembla/deriva al ritmo (solo quads simples) */
+function vivoWarpM(sf) {
+  const v = sf.vivo, amt = v.amt == null ? .5 : v.amt;
+  let pts = sf.pts;
+  if (v.mode === 'late') { // escala alrededor del centro con el beat
+    const sc = 1 + beatEnv * amt * .07;
+    let cx = 0, cy = 0;
+    pts.forEach(p => { cx += p[0] / 4; cy += p[1] / 4; });
+    pts = pts.map(p => [cx + (p[0] - cx) * sc, cy + (p[1] - cy) * sc]);
+  } else if (v.mode === 'tiembla') { // sacudida random, más fuerte en el beat
+    const k = amt * .012 * (.25 + beatEnv);
+    pts = pts.map(p => [p[0] + (Math.random() - .5) * k, p[1] + (Math.random() - .5) * k]);
+  } else if (v.mode === 'deriva') { // vaivén lento por esquina
+    pts = pts.map((p, i) => [
+      p[0] + Math.sin(nowSec * .7 + i * 1.7) * amt * .02,
+      p[1] + Math.cos(nowSec * .9 + i * 2.3) * amt * .02,
+    ]);
+  }
+  return warpFromPts(pts);
+}
 /* malla: puntos de control (N+1)² por interpolación bilineal de las 4 esquinas */
 function applyMeshMode(sf, mode) { // 'bez' | '1'..'5'
   if (mode === 'bez') setBezier(sf, true);
@@ -1672,6 +1761,7 @@ uniform sampler2D u_tex; uniform sampler2D u_mtex; uniform float u_master,u_flas
 uniform mat3 u_warp; uniform vec4 u_srcRect;
 uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test,u_mtexOn;
 uniform vec2 u_flip;
+uniform vec4 u_eblend;
 uniform mediump sampler3D u_lut; uniform float u_lutOn,u_lutN,u_lutMix;
 vec3 lutFix(vec3 c){
  if(u_lutOn<.5)return c;
@@ -1684,7 +1774,15 @@ void main(){
    base=hh.xy/hh.z;
    inQ=step(0.,base.x)*step(base.x,1.)*step(0.,base.y)*step(base.y,1.);
    eb=min(min(base.x,1.-base.x),min(base.y,1.-base.y));
-   if(u_soft>0.001) inQ*=smoothstep(0.,u_soft,eb); // soft edge / edge blending
+   if(u_soft>0.001) inQ*=smoothstep(0.,u_soft,eb); // soft edge parejo
+   if(u_eblend.x+u_eblend.y+u_eblend.z+u_eblend.w>0.001){ // edge blending por lado (solape de proyectores)
+     float e2=1.;
+     if(u_eblend.x>0.001) e2*=clamp(base.x/u_eblend.x,0.,1.);
+     if(u_eblend.y>0.001) e2*=clamp((1.-base.x)/u_eblend.y,0.,1.);
+     if(u_eblend.z>0.001) e2*=clamp((1.-base.y)/u_eblend.z,0.,1.);
+     if(u_eblend.w>0.001) e2*=clamp(base.y/u_eblend.w,0.,1.);
+     inQ*=pow(e2,1./2.2); // curva gamma: el solape suma parejo a la vista
+   }
    if(u_mask>.5){ // máscara de forma (estilo Advanced Output)
      vec2 mp=base-.5;
      float sft=max(u_soft,.012);
@@ -1734,6 +1832,7 @@ uniform sampler2D u_tex; uniform sampler2D u_mtex; uniform float u_master,u_flas
 uniform vec4 u_srcRect;
 uniform float u_mask,u_soft,u_line,u_beat,u_sop,u_minv,u_test,u_mtexOn;
 uniform vec2 u_flip,u_res;
+uniform vec4 u_eblend;
 uniform mediump sampler3D u_lut; uniform float u_lutOn,u_lutN,u_lutMix;
 vec3 lutFix(vec3 c){
  if(u_lutOn<.5)return c;
@@ -1743,6 +1842,14 @@ void main(){
  vec2 base=v_luv; float inQ=1.; float m=1.;
  float eb=min(min(base.x,1.-base.x),min(base.y,1.-base.y));
  if(u_soft>0.001) inQ*=smoothstep(0.,u_soft,eb);
+ if(u_eblend.x+u_eblend.y+u_eblend.z+u_eblend.w>0.001){
+   float e2=1.;
+   if(u_eblend.x>0.001) e2*=clamp(base.x/u_eblend.x,0.,1.);
+   if(u_eblend.y>0.001) e2*=clamp((1.-base.x)/u_eblend.y,0.,1.);
+   if(u_eblend.z>0.001) e2*=clamp((1.-base.y)/u_eblend.z,0.,1.);
+   if(u_eblend.w>0.001) e2*=clamp(base.y/u_eblend.w,0.,1.);
+   inQ*=pow(e2,1./2.2);
+ }
  if(u_mtexOn>.5) inQ*=texture(u_mtex,gl_FragCoord.xy/u_res).r; // máscara dibujada (pluma / SVG)
  if(u_mask>.5){
    vec2 mp=base-.5; float sft=max(u_soft,.012);
@@ -2123,6 +2230,55 @@ function renderGen(ctx, presetIdx, target, p1, p2, time) {
 }
 /* celdas de TEXTO: canvas 2D que late con el beat, subido como textura */
 const TEXT_STYLES = ['pulso', 'scroll', 'onda', '3d', 'zoom'];
+/* tipografías 🔤: fuentes del sistema + .ttf/.otf/.woff cargadas por el usuario (persisten en esta PC) */
+const customFonts = []; // nombres ya registrados en document.fonts
+function cellFont(cell) {
+  return (cell.font ? '"' + cell.font.replace(/"/g, '') + '", ' : '') + 'Arial, sans-serif';
+}
+function fontsDB() {
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open('ravenvj-fonts', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('fonts');
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+async function fontRegister(name, buf) {
+  const face = new FontFace(name, buf);
+  await face.load();
+  document.fonts.add(face);
+  if (!customFonts.includes(name)) customFonts.push(name);
+}
+async function fontImport() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.ttf,.otf,.woff,.woff2';
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    if (f.size > 3e6) { toast('🔤 Muy pesada (máx 3 MB)'); return; }
+    const name = f.name.replace(/\.[^.]+$/, '').replace(/[^\w \-]/g, '').slice(0, 30) || 'fuente';
+    try {
+      const buf = await f.arrayBuffer();
+      await fontRegister(name, buf);
+      const db = await fontsDB();
+      db.transaction('fonts', 'readwrite').objectStore('fonts').put(buf, name);
+      toast('🔤 Fuente "' + name + '" lista — elegila en las propiedades del texto');
+      if (propOpen) buildProps();
+    } catch (e) { toast('🔤 No pude leer esa fuente: ' + e); }
+  };
+  inp.click();
+}
+async function fontsBoot() { // recargar las fuentes guardadas en esta PC
+  try {
+    const db = await fontsDB();
+    const st = db.transaction('fonts').objectStore('fonts');
+    const keys = await new Promise(r => { const q = st.getAllKeys(); q.onsuccess = () => r(q.result || []); q.onerror = () => r([]); });
+    for (const k of keys) {
+      const buf = await new Promise(r => { const q = db.transaction('fonts').objectStore('fonts').get(k); q.onsuccess = () => r(q.result); q.onerror = () => r(null); });
+      if (buf) try { await fontRegister(k, buf); } catch (e) { }
+    }
+  } catch (e) { }
+}
 function drawTextCell(cell) {
   if (!cell.tcanvas) {
     cell.tcanvas = document.createElement('canvas');
@@ -2134,7 +2290,7 @@ function drawTextCell(cell) {
   const st = cell.textStyle || 'pulso';
   x.textAlign = 'center'; x.textBaseline = 'middle';
   if (st === 'scroll') {
-    x.font = '900 170px Arial, sans-serif';
+    x.font = '900 170px ' + cellFont(cell);
     const w = x.measureText(cell.name).width + 500;
     const px = 960 - ((nowSec * (150 + audio.bass * 250)) % (960 + w));
     x.textAlign = 'left';
@@ -2142,7 +2298,7 @@ function drawTextCell(cell) {
     x.fillStyle = `hsl(${hue},100%,65%)`;
     x.fillText(cell.name, px, 270);
   } else if (st === 'onda') {
-    x.font = '900 110px Arial, sans-serif';
+    x.font = '900 110px ' + cellFont(cell);
     const chars = [...cell.name];
     let tw = 0;
     const ws = chars.map(ch => { const w2 = x.measureText(ch).width; tw += w2; return w2; });
@@ -2160,7 +2316,7 @@ function drawTextCell(cell) {
     x.save();
     x.translate(480, 270);
     x.transform(Math.max(.1, Math.abs(sc)) * (sc < 0 ? -1 : 1), Math.sin(a) * .12, 0, 1, 0, 0);
-    x.font = '900 130px Arial, sans-serif';
+    x.font = '900 130px ' + cellFont(cell);
     for (let dz = 9; dz >= 1; dz--) { // extrusión falsa
       x.fillStyle = `hsl(${hue},80%,${10 + dz * 3}%)`;
       x.fillText(cell.name, dz * 2.4, dz * 2.4, 860);
@@ -2175,7 +2331,7 @@ function drawTextCell(cell) {
     x.translate(480, 270);
     x.scale(.25 + ph * 3.4, .25 + ph * 3.4);
     x.globalAlpha = Math.max(0, Math.min(1, 2.2 - ph * 2.2));
-    x.font = '900 120px Arial, sans-serif';
+    x.font = '900 120px ' + cellFont(cell);
     x.shadowColor = `hsl(${hue},100%,60%)`; x.shadowBlur = 24;
     x.fillStyle = `hsl(${hue},100%,65%)`;
     x.fillText(cell.name, 0, 0, 860);
@@ -2186,7 +2342,7 @@ function drawTextCell(cell) {
     x.translate(480, 270);
     x.scale(1 + beatEnv * .18, 1 + beatEnv * .18);
     x.rotate(Math.sin(nowSec * .8) * .03);
-    x.font = '900 120px Arial, sans-serif';
+    x.font = '900 120px ' + cellFont(cell);
     x.shadowColor = `hsl(${hue},100%,60%)`; x.shadowBlur = 34 + audio.bass * 40;
     x.fillStyle = `hsl(${hue},100%,${62 + audio.high * 25}%)`;
     x.fillText(cell.name, 0, 0, 880);
@@ -2343,6 +2499,7 @@ function modValue(name) {
     case 'bass': return audio.bass; case 'mid': return audio.mid; case 'high': return audio.high;
     case 'beat': return beatEnv; case 'x': return state.xy.x; case 'y': return state.xy.y;
     case 'motion': return motion.val; // 🏃 cuánto se mueve la gente frente a la cámara
+    case 'hype': return hype.val; // 🔥 cuánto machaca el público el botón del celu
   }
   return 0;
 }
@@ -3085,14 +3242,20 @@ function layerFxPass(s, tex, fit, L, tr) {
 function uploadGif(gl, s, dtEff) {
   const fr = s.cell && s.cell.gframes;
   if (!fr || !fr.length) return 0;
-  s._gt = (s._gt || 0) + dtEff;
-  const play = s.cell.play || 'loop', tot = s.cell.gtotal;
-  let te; // tiempo efectivo según el modo de reproducción
-  if (play === 'once') te = Math.min(s._gt, tot - 1e-4); // se queda en el último frame
-  else if (play === 'bounce') { const p = tot * 2; let x = s._gt % p; te = x > tot ? p - x : x; } // ida y vuelta
-  else te = s._gt % tot; // loop
-  let t = te, i = 0;
-  while (t > fr[i].dur && i < fr.length - 1) { t -= fr[i].dur; i++; }
+  let i;
+  if (s.cell.slide && s.cell.isImage) { // 🖼 slideshow: la imagen rota por BEATS, no por tiempo
+    i = Math.floor(Math.max(0, beatFloat) / s.cell.slide) % fr.length;
+  } else {
+    s._gt = (s._gt || 0) + dtEff;
+    const play = s.cell.play || 'loop', tot = s.cell.gtotal;
+    let te; // tiempo efectivo según el modo de reproducción
+    if (play === 'once') te = Math.min(s._gt, tot - 1e-4); // se queda en el último frame
+    else if (play === 'bounce') { const p = tot * 2; let x = s._gt % p; te = x > tot ? p - x : x; } // ida y vuelta
+    else te = s._gt % tot; // loop
+    let t = te;
+    i = 0;
+    while (t > fr[i].dur && i < fr.length - 1) { t -= fr[i].dur; i++; }
+  }
   if (i !== s._gidx) {
     const bmp = fr[i].bmp;
     if (!bmp || bmp.width === 0) return 1; // bitmap cerrado (celda liberada) → mantener el frame anterior, no crashear
@@ -3183,6 +3346,7 @@ function renderTick() {
   }
 
   audioTick(dt); clockTick(dt); layerTick(dt); gpTick(); autoDropTick(dt); motionTick(dt);
+  brepTick(); morphTick(); barTick(); energyTick(dt); hypeTick(dt);
   if (scanFlat) { // escaneo de auto-máscara: proyectar plano blanco o negro
     const gfl = main.gl;
     gfl.bindFramebuffer(gfl.FRAMEBUFFER, null);
@@ -3378,6 +3542,8 @@ function renderTick() {
         gl.uniform1f(U(gl, mp, 'u_minv'), sf.maskInv ? 1 : 0);
         gl.uniform1f(U(gl, mp, 'u_test'), testOn);
         gl.uniform2f(U(gl, mp, 'u_flip'), sf.flipX ? 1 : 0, sf.flipY ? 1 : 0);
+        const meb = sf.eblend || {};
+        gl.uniform4f(U(gl, mp, 'u_eblend'), meb.l || 0, meb.r || 0, meb.t || 0, meb.b || 0);
         gl.uniform2f(U(gl, mp, 'u_res'), main.canvas.width, main.canvas.height);
         gl.uniform1i(U(gl, mp, 'u_mtex'), 1);
         gl.uniform1f(U(gl, mp, 'u_mtexOn'), sf._mtex ? 1 : 0);
@@ -3390,7 +3556,8 @@ function renderTick() {
       }
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex); // composición o capa ruteada
       gl.uniform1f(U(gl, fp, 'u_warpOn'), 1);
-      gl.uniformMatrix3fv(U(gl, fp, 'u_warp'), false, sf._m || WARP_ID);
+      const vivoOn = sf.vivo && sf.vivo.mode && sf.vivo.mode !== 'off' && !sf.mesh && !sf.bez;
+      gl.uniformMatrix3fv(U(gl, fp, 'u_warp'), false, vivoOn ? vivoWarpM(sf) : (sf._m || WARP_ID));
       gl.uniform4f(U(gl, fp, 'u_srcRect'), sf.src[0], sf.src[1], sf.src[2], sf.src[3]);
       gl.uniform1f(U(gl, fp, 'u_mask'), sf.mask || 0);
       gl.uniform1f(U(gl, fp, 'u_soft'), sf.soft || 0);
@@ -3399,6 +3566,8 @@ function renderTick() {
       gl.uniform1f(U(gl, fp, 'u_minv'), sf.maskInv ? 1 : 0);
       gl.uniform1f(U(gl, fp, 'u_test'), testOn);
       gl.uniform2f(U(gl, fp, 'u_flip'), sf.flipX ? 1 : 0, sf.flipY ? 1 : 0);
+      const qeb = sf.eblend || {};
+      gl.uniform4f(U(gl, fp, 'u_eblend'), qeb.l || 0, qeb.r || 0, qeb.t || 0, qeb.b || 0);
       gl.uniform1i(U(gl, fp, 'u_mtex'), 1);
       gl.uniform1f(U(gl, fp, 'u_mtexOn'), sf._mtex ? 1 : 0);
       setLUTUniforms(gl, fp);
@@ -3417,6 +3586,7 @@ function renderTick() {
     gl.uniform1f(U(gl, fp, 'u_minv'), 0);
     gl.uniform1f(U(gl, fp, 'u_test'), 0);
     gl.uniform2f(U(gl, fp, 'u_flip'), 0, 0);
+    gl.uniform4f(U(gl, fp, 'u_eblend'), 0, 0, 0, 0);
     gl.uniform1f(U(gl, fp, 'u_mtexOn'), 0);
     setLUTUniforms(gl, fp);
     draw(gl);
@@ -3524,7 +3694,7 @@ function previewTick() {
 
 /* ---------------- grilla DOM ---------------- */
 const BLENDS = ['Normal', 'Add', 'Screen', 'Multiply', 'Difference', 'Lighten'];
-const OPMODS = ['off', 'bass', 'mid', 'high', 'lfo1', 'lfo2', 'beat', 'motion'];
+const OPMODS = ['off', 'bass', 'mid', 'high', 'lfo1', 'lfo2', 'beat', 'motion', 'hype'];
 function cellEl(l, c) { return document.querySelector(`.cell[data-l="${l}"][data-c="${c}"]`); }
 function setColColor(c, hx) { // 🎨 color de columna: para organizar el set a ojo (psy / techno / chill…)
   state.colColors = state.colColors || {};
@@ -4282,7 +4452,7 @@ function buildShelf() {
 }
 
 /* ---------------- rack de efectos ---------------- */
-const MODS = ['none', 'lfo1', 'lfo2', 'bass', 'mid', 'high', 'beat', 'x', 'y', 'motion'];
+const MODS = ['none', 'lfo1', 'lfo2', 'bass', 'mid', 'high', 'beat', 'x', 'y', 'motion', 'hype'];
 function addEffect(id) {
   const def = FXDEFS.find(d => d.id === id);
   if (!def) return;
@@ -4546,6 +4716,105 @@ function autoDropTick(dt) {
     if (adrop.armed && adrop.low <= 0) { state.building = false; adrop.armed = false; } // riser que se pinchó: bajar sin flash
   }
 }
+/* ---------------- beat-repeat 🔁: tartamudear el último tramo del clip al ritmo ---------------- */
+const brep = { on: false, len: 1, t0: 0, anchors: null };
+function brepStart(len) {
+  brep.len = len || brep.len || 1;
+  brep.on = true;
+  brep.t0 = beatFloat;
+  brep.anchors = new Map();
+  state.layers.forEach(L => {
+    const s = L.slots[L.target];
+    if (s.kind === 'video' && s.video) brep.anchors.set(s.video, s.video.currentTime);
+    else if (s.kind === 'gif') brep.anchors.set(s, s._gt || 0);
+  });
+  if ($('#brepBtn')) $('#brepBtn').classList.add('on');
+}
+function brepStop() {
+  if (!brep.on) return;
+  brep.on = false; brep.anchors = null;
+  if ($('#brepBtn')) $('#brepBtn').classList.remove('on');
+}
+function brepTick() {
+  if (!brep.on || !brep.anchors) return;
+  if (beatFloat - brep.t0 >= brep.len) { // se cumplió el tramo → volver al ancla
+    brep.t0 += brep.len * Math.floor((beatFloat - brep.t0) / brep.len);
+    brep.anchors.forEach((t, k) => {
+      if (k && k.tagName === 'VIDEO') { try { k.currentTime = t; } catch (e) { } }
+      else if (k && '_gt' in k) { k._gt = t; k._gidx = -1; }
+    });
+  }
+}
+/* ---------------- contador de compases y frases 🧮 ---------------- */
+let phraseAnchor = 0;
+function barTick() {
+  const bl = $('#barLbl');
+  if (!bl) return;
+  const pl = uiPrefs.phraseLen || 16;
+  const rel = Math.max(0, beatFloat - phraseAnchor);
+  const beat = Math.floor(rel) % 4 + 1;
+  const bar = Math.floor(rel / 4) % (pl / 4) + 1;
+  const rem = pl - (Math.floor(rel) % pl);
+  const txt = bar + '·' + beat;
+  if (bl.textContent !== txt) bl.textContent = txt;
+  bl.classList.toggle('warn', rem <= 4); // se viene el cambio de frase
+}
+/* ---------------- resample ⏺: grabar N beats exactos de tu salida → loop en la grilla ---------------- */
+let resamp = null;
+function resampleStart(beats) {
+  if (resamp) { toast('⏺ Ya hay un resample en curso'); return; }
+  beats = beats || 8;
+  const secs = beats * 60 / state.bpm;
+  const st = main.canvas.captureStream(60);
+  const mime = ['video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  const rec2 = new MediaRecorder(st, { mimeType: mime, videoBitsPerSecond: 12e6 });
+  const chunks = [];
+  rec2.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec2.onstop = () => {
+    st.getTracks().forEach(t => t.stop());
+    resamp = null;
+    let cell = null;
+    outer: for (let l = 0; l < LAYERS; l++) for (let c = 0; c < COLS; c++)
+      if (state.grid[l][c].kind === 'empty') { cell = state.grid[l][c]; break outer; }
+    if (!cell) { toast('⏺ No hay celdas vacías para el loop'); return; }
+    assignVideo(cell, new File([new Blob(chunks, { type: 'video/webm' })], 'loop-' + beats + 'b.webm', { type: 'video/webm' }));
+    toast('⏺ Loop de ' + beats + ' beats en la celda ' + (cell.c + 1) + ' de la CAPA ' + (cell.l + 1) + ' 🔁');
+  };
+  resamp = { rec: rec2, beats };
+  const startAt = Math.ceil(beatFloat); // arrancar clavado en el beat
+  toast('⏺ Resample armado (' + beats + ' beats) — arranca en el próximo beat');
+  const wait = setInterval(() => {
+    if (!resamp) { clearInterval(wait); return; }
+    if (beatFloat >= startAt) {
+      clearInterval(wait);
+      try { rec2.start(); } catch (e) { resamp = null; return; }
+      setTimeout(() => { try { rec2.stop(); } catch (e) { resamp = null; } }, secs * 1000);
+    }
+  }, 8);
+}
+/* ---------------- auto-escenas por energía 😴⚡ (hermano del auto-DROP) ---------------- */
+const energ = { avg: .3, state: '', hold: 0, cool: 0 };
+function energyTick(dt) {
+  if (!state.autoEnergy || !audio.on) { energ.hold = 0; return; }
+  energ.avg += (audio.bass - energ.avg) * Math.min(1, dt * .5); // media móvil de ~2 s
+  energ.cool = Math.max(0, energ.cool - dt);
+  const es = state.energyScenes || {};
+  const want = energ.avg < .16 ? 'calm' : energ.avg > .42 ? 'hard' : '';
+  if (want && want !== energ.state) {
+    energ.hold += dt;
+    if (energ.hold > 2.5 && energ.cool <= 0) {
+      const si = want === 'calm' ? es.calm : es.hard;
+      energ.state = want; energ.hold = 0; energ.cool = 20;
+      if (si >= 0 && state.scenes[si]) {
+        recallScene(si);
+        toast(want === 'calm' ? '😴 Bajó la energía → escena CALMA' : '⚡ Subió la energía → escena FUERTE');
+      }
+    }
+  } else energ.hold = Math.max(0, energ.hold - dt * 2);
+}
+/* ---------------- hype del público 🔥: el botón machacable del celu es un modulador ---------------- */
+const hype = { val: 0 };
+function hypeTick(dt) { hype.val *= Math.pow(.5, dt / 1.8); if (hype.val < .001) hype.val = 0; }
 /* ---------------- gamepad 🎮: joystick de PS/Xbox como controlador VJ ---------------- */
 let gpPrev = [], gpCol = -1;
 function gpTick() {
@@ -4893,6 +5162,8 @@ function applyTarget(id, val, kind, on) {
     case 'dice': if (on) randomizeFx(); break;
     case 'react': if (on) pubBurst(); break;
     case 'lfreeze': if (on) toggleFreeze(+a); break;
+    case 'brep': if (on) brepStart(+a || brep.len); else brepStop(); break; // momentáneo: apretado = tartamudea
+    case 'resample': if (on) resampleStart(+a || 8); break;
     case 'lseek': { // 🎚 jog/scratch: el fader ES el cabezal del video de esa capa
       const L = state.layers[+a];
       if (!L) break;
@@ -5141,6 +5412,7 @@ function serialize() {
     auto: { mode: state.auto.mode, beats: state.auto.beats },
     lfo: state.lfo.map(l => ({ wave: l.wave, rate: l.rate })),
     scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans, autoDrop: !!state.autoDrop,
+    morphBeats: state.morphBeats || 0, autoEnergy: !!state.autoEnergy, energyScenes: state.energyScenes || null,
     structs: state.structs && state.structs.length ? state.structs : null,
     colColors: state.colColors && Object.keys(state.colColors).length ? state.colColors : null,
     logo: state.logo && state.logo.src ? state.logo : null,
@@ -5171,6 +5443,8 @@ function serialize() {
         maskPts: sf.maskPts || null, maskSmooth: sf.maskSmooth ? 1 : 0,
         maskSvg: sf.maskSvg && sf.maskSvg.length < 400000 ? sf.maskSvg : null,
         layer: sf.layer == null ? -1 : sf.layer,
+        eblend: sf.eblend && (sf.eblend.l || sf.eblend.r || sf.eblend.t || sf.eblend.b) ? sf.eblend : null,
+        vivo: sf.vivo && sf.vivo.mode !== 'off' ? sf.vivo : null,
       })),
     },
     fxPresets: state.fxPresets,
@@ -5186,6 +5460,7 @@ function serialize() {
       play: c.play && c.play !== 'loop' ? c.play : null, isImage: c.isImage ? 1 : 0, isScreen: c.isScreen ? 1 : 0,
       cues: c.cues && c.cues.length ? c.cues : null,
       g3: c.kind === 'glb' && c.g3 ? c.g3 : null,
+      font: c.font || null, slide: c.slide || null,
       fileName: c.file ? c.file.name : (c.kind === 'video' || c.kind === 'gif' ? c.name : null),
       thumb: c.thumb,
     })),
@@ -5253,6 +5528,8 @@ function deserialize(d) {
     cell.isImage = cd.isImage ? true : undefined;
     cell.cues = Array.isArray(cd.cues) ? cd.cues.filter(x => isFinite(x)).slice(0, 8) : undefined;
     if (cd.kind === 'glb') cell.g3 = cd.g3 && typeof cd.g3 === 'object' ? cd.g3 : { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' };
+    cell.font = cd.font || undefined;
+    cell.slide = cd.slide > 0 ? +cd.slide : undefined;
     cell.camId = cd.camId || '';
     if (cd.kind === 'video' || cd.kind === 'gif')
       cell.name = cd.fileName ? cd.fileName.replace(/\.[^.]+$/, '') : cd.name;
@@ -5277,6 +5554,11 @@ function deserialize(d) {
   state.snap = d.snap || 0; if ($('#snapSel')) $('#snapSel').value = state.snap;
   state.trans = d.trans || 0; if ($('#transSel')) $('#transSel').value = state.trans;
   state.autoDrop = !!d.autoDrop;
+  state.morphBeats = d.morphBeats | 0; if ($('#morphSel')) $('#morphSel').value = state.morphBeats;
+  state.autoEnergy = !!d.autoEnergy;
+  state.energyScenes = d.energyScenes && typeof d.energyScenes === 'object'
+    ? { calm: d.energyScenes.calm | 0, hard: d.energyScenes.hard | 0 } : { calm: -1, hard: -1 };
+  sceneMorph = null;
   state.structs = Array.isArray(d.structs)
     ? d.structs.filter(s => s && Array.isArray(s.pts) && s.pts.length > 1).slice(0, 24)
     : [];
@@ -5292,27 +5574,7 @@ function deserialize(d) {
   state.setlist.steps = Array.isArray(d.setlistSteps) ? d.setlistSteps : [];
   state.setlist.running = false; state.setlist.idx = 0;
   state.nanoDefaults = d.nanoDefaults !== false;
-  if (d.map && Array.isArray(d.map.surfaces) && d.map.surfaces.length) {
-    state.map.on = !!d.map.on;
-    state.map.test = !!d.map.test;
-    state.map.sel = Math.min(d.map.sel || 0, d.map.surfaces.length - 1);
-    state.map.surfaces = d.map.surfaces.map(sf => {
-      const s = {
-        pts: sf.pts, src: sf.src || [0, 0, 1, 1], on: sf.on !== false, _m: null,
-        mask: sf.mask || 0, soft: sf.soft || 0, line: sf.line || 0,
-        op: sf.op == null ? 1 : sf.op, maskInv: sf.maskInv ? 1 : 0,
-        flipX: sf.flipX ? 1 : 0, flipY: sf.flipY ? 1 : 0,
-        mesh: sf.mesh && Array.isArray(sf.mesh.pts) ? { sub: sf.mesh.sub, pts: sf.mesh.pts } : null,
-        bez: sf.bez && Array.isArray(sf.bez.c) && Array.isArray(sf.bez.h) ? { c: sf.bez.c, h: sf.bez.h } : null,
-        maskPts: Array.isArray(sf.maskPts) ? sf.maskPts : null,
-        maskSmooth: !!sf.maskSmooth, maskSvg: sf.maskSvg || null,
-        layer: typeof sf.layer === 'number' ? sf.layer : -1,
-      };
-      if (s.bez) bezToMesh(s); else if (s.mesh) syncMeshCorners(s);
-      if (s.maskPts || s.maskSvg) { try { rasterizeMask(s); } catch (e) { } }
-      return s;
-    });
-  } else if (d.warp && Array.isArray(d.warp.pts) && d.warp.pts.length === 4) {
+  if (!restoreMapData(d.map)) if (d.warp && Array.isArray(d.warp.pts) && d.warp.pts.length === 4) {
     // migración del warp simple viejo
     state.map.on = !!d.warp.on;
     state.map.sel = 0;
@@ -5489,9 +5751,42 @@ function captureScene(i) {
   updateSceneBtns(-1); markDirty();
   toast('Escena ' + (i + 1) + ' guardada 📸');
 }
+/* morph 🎚: la escena no entra de golpe — los valores continuos se deslizan en N beats */
+let sceneMorph = null;
+function morphSnapshot() {
+  return {
+    ops: state.layers.map(L => L.opacity),
+    xfade: state.xfade, master: state.master,
+    fx: state.effects.map(f => ({ uid: f.uid, vals: f.params.map(p => p.value) })),
+  };
+}
+function morphTick() {
+  const m = sceneMorph;
+  if (!m) return;
+  let k = (beatFloat - m.t0) / m.len;
+  if (k < 0) k = 0;
+  if (k >= 1) k = 1;
+  const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // suave en ambas puntas
+  const lerp = (a, b) => a + (b - a) * e;
+  state.layers.forEach((L, l) => {
+    L.opacity = lerp(m.from.ops[l], m.to.ops[l]);
+    if (midiRefs['lop:' + l]) midiRefs['lop:' + l].value = L.opacity;
+  });
+  state.xfade = lerp(m.from.xfade, m.to.xfade); $('#xfadeIn').value = state.xfade;
+  state.master = lerp(m.from.master, m.to.master); $('#masterIn').value = state.master;
+  for (const f of state.effects) {
+    const pf = m.from.fx.find(x => x.uid === f.uid), tf = m.to.fx.find(x => x.uid === f.uid);
+    if (pf && tf) f.params.forEach((p, pi) => {
+      if (pf.vals[pi] != null && tf.vals[pi] != null) p.value = lerp(pf.vals[pi], tf.vals[pi]);
+    });
+  }
+  if (k >= 1) sceneMorph = null;
+}
 function recallScene(i) {
   const s = state.scenes[i];
   if (!s) { toast('Escena ' + (i + 1) + ' vacía — click derecho (o Shift+F' + (i + 1) + ') para guardar'); return; }
+  const mb = state.morphBeats | 0;
+  const pre = mb > 0 ? morphSnapshot() : null;
   s.layers.forEach((sl, l) => {
     const L = state.layers[l];
     L.opacity = sl.opacity; L.mode = sl.mode; L.opMod = sl.opMod || 'off';
@@ -5510,6 +5805,16 @@ function recallScene(i) {
   setXY(s.xy.x, s.xy.y);
   state.master = s.master; $('#masterIn').value = s.master;
   buildGrid(); buildFx(); updateSceneBtns(i);
+  if (pre) { // arrancar desde donde estábamos y deslizar hacia la escena
+    const to = morphSnapshot();
+    state.layers.forEach((L, l) => { L.opacity = pre.ops[l]; });
+    state.xfade = pre.xfade; state.master = pre.master;
+    for (const f of state.effects) {
+      const pf = pre.fx.find(x => x.uid === f.uid);
+      if (pf) f.params.forEach((p, pi) => { if (pf.vals[pi] != null) p.value = pf.vals[pi]; });
+    }
+    sceneMorph = { t0: beatFloat, len: mb, from: pre, to };
+  }
 }
 function updateSceneBtns(cur) {
   document.querySelectorAll('#sceneBtns button').forEach((b, i) => {
@@ -5878,6 +6183,29 @@ $('#transSel').onchange = e => {
   const nombres = ['fundido', 'barrido horizontal', 'barrido vertical', 'círculo', 'glitch', 'por negro'];
   toast('Transición: ' + nombres[state.trans]);
 };
+$('#brepBtn').onclick = () => { // sticky con click (en pad MIDI es momentáneo)
+  if (brep.on) brepStop(); else { brepStart(brep.len); toast('🔁 Beat-repeat ' + (brep.len < 1 ? '½' : brep.len) + '♪ — otro click lo suelta'); }
+};
+$('#brepBtn').oncontextmenu = e => {
+  e.preventDefault();
+  const lens = [.5, 1, 2, 4];
+  brep.len = lens[(lens.indexOf(brep.len) + 1) % lens.length];
+  $('#brepBtn').dataset.map = 'brep:' + brep.len;
+  toast('🔁 Largo del repeat: ' + (brep.len < 1 ? '½' : brep.len) + ' beat' + (brep.len > 1 ? 's' : ''));
+  if (brep.on) brepStart(brep.len);
+};
+$('#barLbl').onclick = () => { phraseAnchor = Math.floor(beatFloat); toast('🧮 Frase re-anclada: este es el 1'); };
+$('#barLbl').oncontextmenu = e => {
+  e.preventDefault();
+  uiPrefs.phraseLen = (uiPrefs.phraseLen || 16) === 16 ? 32 : 16;
+  saveUI();
+  toast('🧮 Frase de ' + uiPrefs.phraseLen + ' beats');
+};
+$('#morphSel').onchange = e => {
+  state.morphBeats = +e.target.value;
+  markDirty();
+  toast(state.morphBeats ? '🎚 Las escenas entran deslizándose en ' + state.morphBeats + ' beats' : '⚡ Escenas directas');
+};
 $('#snapSel').onchange = e => {
   state.snap = +e.target.value;
   if (!(state.snap > 0)) flushSnap(); // apagar SNAP dispara lo que estaba en cola
@@ -6109,6 +6437,12 @@ function buildCpTab(id) {
       <div class="cprow"><span class="v">Graba los últimos ~${tm.SEG} s de tu salida en segundo plano.
         REPLAY los mete como clip en una celda vacía: rebobiná el momento épico y loopealo.
         (usa algo de CPU: prendela cuando la vayas a usar)</span></div>
+      <div class="cph">⏺ RESAMPLE (loops de tu propia mezcla)</div>
+      <div class="cprow"><b>Grabar beats exactos</b><span style="display:flex;gap:5px">
+        <select id="cprsb" class="mini"><option value="4">4♪</option><option value="8" selected>8♪</option><option value="16">16♪</option></select>
+        <button id="cprsgo" class="mini on" data-map="resample:8">⏺ grabar loop</button></span></div>
+      <div class="cprow"><span class="v">Arranca clavado en el próximo beat, graba N beats de tu salida
+        y cae como LOOP en una celda vacía. Mezclás tu propia mezcla (mapeable a MIDI).</span></div>
       <div class="cph">🖼 LOGO / MARCA</div>
       <div class="cprow"><b>Logo del evento</b><span style="display:flex;gap:5px;align-items:center">
         <button id="cplogo" class="mini">${state.logo && state.logo.src ? 'cambiar…' : '🖼 cargar PNG…'}</button>
@@ -6130,6 +6464,12 @@ function buildCpTab(id) {
         <button id="cpwarp" class="mini${state.map.on ? ' on' : ''}">${state.map.on ? 'ON' : 'off'}</button>
         <button id="cpmapedit" class="mini">🗺 abrir editor</button>
         <button id="cpout2" class="mini">＋ ventana de salida</button></span></div>
+      <div class="cprow"><b>📚 Mapping del lugar</b><span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+        <button id="cpmpsave" class="mini" title="guardar el mapping actual con nombre (queda en esta PC, aparte del set) — uno por lugar donde tocás">💾 guardar…</button>
+        ${Object.keys(mapPresets()).map(n =>
+        `<span style="display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden">
+          <button class="mini" data-mpload="${n.replace(/"/g, '&quot;')}" title="cargar el mapping de este lugar">${n}</button>
+          <button class="mini" data-mpdel="${n.replace(/"/g, '&quot;')}" title="borrar">✕</button></span>`).join('')}</span></div>
       <div class="cprow"><b>Patrón de calibración</b><span style="display:flex;gap:6px">
         <button id="cptest" class="mini${state.map.test ? ' on' : ''}" title="grilla + cruz sobre cada superficie para alinear el proyector">${state.map.test ? 'ON' : 'off'}</button>
         <button id="cpaddsurf" class="mini">＋ superficie</button></span></div>
@@ -6170,6 +6510,8 @@ function buildCpTab(id) {
     if ($('#cplutmix')) $('#cplutmix').oninput = e => { lutMix = +e.target.value; };
     if ($('#cptm')) $('#cptm').onclick = tmToggle;
     if ($('#cptmgo')) $('#cptmgo').onclick = tmReplay;
+    if ($('#cprsgo')) $('#cprsgo').onclick = () => resampleStart(+$('#cprsb').value || 8);
+    if ($('#cprsb')) $('#cprsb').onchange = e => { $('#cprsgo').dataset.map = 'resample:' + e.target.value; };
     if ($('#cplogo')) $('#cplogo').onclick = () => {
       const inp = document.createElement('input');
       inp.type = 'file'; inp.accept = 'image/png,image/webp,image/jpeg';
@@ -6197,6 +6539,9 @@ function buildCpTab(id) {
     };
     $('#cpwarp').onclick = () => { mapToggle(); buildCpTab('render'); };
     $('#cpmapedit').onclick = () => toggleMapWin(true);
+    if ($('#cpmpsave')) $('#cpmpsave').onclick = mapPresetSave;
+    document.querySelectorAll('[data-mpload]').forEach(b2 => { b2.onclick = () => mapPresetLoad(b2.dataset.mpload); });
+    document.querySelectorAll('[data-mpdel]').forEach(b2 => { b2.onclick = () => mapPresetDel(b2.dataset.mpdel); });
     $('#cpout2').onclick = () => openOutput('ravenvj_out' + Math.floor(Math.random() * 1e4));
     $('#cptest').onclick = () => { state.map.test = !state.map.test; markDirty(); buildCpTab('render');
       toast(state.map.test ? '🎯 Patrón de calibración ON — alineá el proyector con la grilla' : 'Patrón de calibración off'); };
@@ -6434,10 +6779,22 @@ function buildCpTab(id) {
       <div class="cprow"><b>💥 Auto-DROP (beta)</b><span>
         <button id="cpadrop" class="mini${state.autoDrop ? ' on' : ''}" title="detecta el build-up y el drop de la música SOLO: arma el BUILD en el riser y suelta el flash cuando vuelve el bombo (análisis de energía, sin IA)">${state.autoDrop ? 'ON 🤖' : 'off'}</button></span></div>
       <div class="cprow"><b>🏃 Sensor de movimiento</b><span>
-        <button id="cpmotion" class="mini${motion.on ? ' on' : ''}" title="una cámara mide cuánto se mueve la gente (comparación de frames, sin IA) y eso queda como modulador 'motion' en opacidades, efectos y objetos 3D — el público baila y los visuales explotan">${motion.on ? 'ON 📷 (' + Math.round(motion.val * 100) + '%)' : 'activar cámara'}</button></span></div>`;
+        <button id="cpmotion" class="mini${motion.on ? ' on' : ''}" title="una cámara mide cuánto se mueve la gente (comparación de frames, sin IA) y eso queda como modulador 'motion' en opacidades, efectos y objetos 3D — el público baila y los visuales explotan">${motion.on ? 'ON 📷 (' + Math.round(motion.val * 100) + '%)' : 'activar cámara'}</button></span></div>
+      <div class="cprow"><b>😴⚡ Auto-escenas por energía</b><span>
+        <button id="cpenergy" class="mini${state.autoEnergy ? ' on' : ''}" title="cuando la música baja (breakdown) entra sola tu escena CALMA; cuando vuelve la energía, la FUERTE. Marcá las escenas con click derecho en sus botones">${state.autoEnergy ? 'ON 🤖' : 'off'}</button>
+        <span class="v" style="margin-left:6px">😴 ${(state.energyScenes && state.energyScenes.calm >= 0) ? 'ESC ' + (state.energyScenes.calm + 1) : '–'} ·
+        ⚡ ${(state.energyScenes && state.energyScenes.hard >= 0) ? 'ESC ' + (state.energyScenes.hard + 1) : '–'}</span></span></div>`;
     $('#cpaudio').onclick = async () => { await audioToggle(); buildCpTab('audio'); };
     if ($('#cpsys')) $('#cpsys').onclick = async () => { await sysAudioStart(); buildCpTab('audio'); };
     if ($('#cpmotion')) $('#cpmotion').onclick = motionToggle;
+    if ($('#cpenergy')) $('#cpenergy').onclick = () => {
+      state.autoEnergy = !state.autoEnergy;
+      const es = state.energyScenes || { calm: -1, hard: -1 };
+      markDirty(); buildCpTab('audio');
+      toast(state.autoEnergy
+        ? (es.calm >= 0 || es.hard >= 0 ? '😴⚡ Auto-escenas ON' : '⚠ Marcá una escena como CALMA o FUERTE (click derecho en su botón)')
+        : 'Auto-escenas off');
+    };
     $('#cpsens').value = state.beatSens || 1.32;
     $('#cpsens').oninput = e => { state.beatSens = +e.target.value; markDirty(); };
     $('#cpsync').onclick = syncBpm;
@@ -6512,6 +6869,8 @@ function mapTargetName(t) {
   if (k === 'lclear') return `Apagar CAPA ${+a + 1}`;
   if (k === 'lfreeze') return `❄ Congelar CAPA ${+a + 1}`;
   if (k === 'lseek') return `🎚 Jog/cabezal CAPA ${+a + 1}`;
+  if (k === 'brep') return `🔁 Beat-repeat ${+a || 1}`;
+  if (k === 'resample') return `⏺ Resample ${+a || 8} beats`;
   if (k === 'scene') return `Escena ${+a + 1}`;
   if (k === 'fx') return `Efecto #${a} · ${b}`;
   return t;
@@ -6939,6 +7298,33 @@ function mapEditorSync() {
   msub.value = sf.bez ? 'bez' : sf.mesh ? sf.mesh.sub : 1;
   msub.onchange = () => { applyMeshMode(sf, msub.value); markDirty(); rebuildMapHandles(); buildSurfList(); };
   row2.append(msel, softL, soft, lineL, line, meshL, msub);
+  // edge blending por lado (solapar 2 proyectores sin que se note la unión)
+  const ebL = el('span'); ebL.textContent = '🏢 blend';
+  ebL.title = 'edge blending POR LADO: fundido con curva gamma en el borde elegido — solapá dos proyectores y la unión desaparece';
+  row2.appendChild(ebL);
+  sf.eblend = sf.eblend || { l: 0, r: 0, t: 0, b: 0 };
+  [['l', '◧'], ['r', '◨'], ['t', '⬒'], ['b', '⬓']].forEach(([k2, ic]) => {
+    const inp = el('input'); inp.type = 'range'; inp.min = 0; inp.max = .4; inp.step = .01;
+    inp.value = sf.eblend[k2] || 0; inp.style.width = '38px';
+    inp.title = 'fundido del borde ' + ({ l: 'izquierdo', r: 'derecho', t: 'superior', b: 'inferior' })[k2];
+    inp.oninput = () => { sf.eblend[k2] = +inp.value; markDirty(); };
+    const lb2 = el('span'); lb2.textContent = ic; lb2.style.opacity = .7;
+    row2.append(lb2, inp);
+  });
+  // mapping vivo 🌊: la superficie se mueve al ritmo
+  const vvL = el('span'); vvL.textContent = '🌊';
+  vvL.title = 'mapping vivo: la superficie entera late, tiembla o deriva al ritmo (solo superficies planas)';
+  const vsel = el('select');
+  [['off', 'quieta'], ['late', '💓 late'], ['tiembla', '🫨 tiembla'], ['deriva', '🌊 deriva']].forEach(([v, n]) => {
+    const o = el('option'); o.value = v; o.textContent = n;
+    if ((sf.vivo && sf.vivo.mode) === v || (!sf.vivo && v === 'off')) o.selected = true;
+    vsel.appendChild(o);
+  });
+  const vamt = el('input'); vamt.type = 'range'; vamt.min = .1; vamt.max = 1; vamt.step = .05;
+  vamt.value = (sf.vivo && sf.vivo.amt) || .5; vamt.style.width = '46px'; vamt.title = 'intensidad';
+  vsel.onchange = () => { sf.vivo = vsel.value === 'off' ? null : { mode: vsel.value, amt: +vamt.value }; markDirty(); };
+  vamt.oninput = () => { if (sf.vivo) { sf.vivo.amt = +vamt.value; markDirty(); } };
+  row2.append(vvL, vsel, vamt);
   tb.appendChild(row2);
   // fila 3: imagen de guía (foto del escenario para alinear las superficies)
   const row3 = el('span');
@@ -7605,6 +7991,10 @@ function pubMsg(conn, d) {
     if (pub.vote && (d.v === 'a' || d.v === 'b')) pub.vote.votes.set(conn, d.v);
     return;
   }
+  if (d.k === 'h') { // 🔥 hype: machacable, cada tap suma (decae solo)
+    hype.val = Math.min(1, hype.val + .09);
+    return;
+  }
   const now = performance.now();
   const lastT = pub._last.get(conn) || 0;
   if (now - lastT < 900) return; // máx ~1 por segundo por celular
@@ -8114,6 +8504,29 @@ function pickVideoFor(cell) {
   inp.onchange = () => { if (inp.files[0]) assignVideo(cell, inp.files[0]); };
   inp.click();
 }
+function pickSlideshowFor(cell) { // 🖼 varias imágenes en UNA celda, rotando por beats
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp'; inp.multiple = true;
+  inp.onchange = () => { if (inp.files.length) assignSlideshow(cell, [...inp.files]); };
+  inp.click();
+}
+async function assignSlideshow(cell, files) {
+  const imgs = files.filter(f => f.type.startsWith('image') && f.type !== 'image/gif').slice(0, 24);
+  if (imgs.length < 2) { toast('🖼 Elegí 2 o más imágenes (para una sola, arrastrala directo)'); return; }
+  freeCellMedia(cell);
+  const frames = [];
+  for (const f of imgs) {
+    try { frames.push({ bmp: await createImageBitmap(f), dur: 1 }); } catch (e) { }
+  }
+  if (frames.length < 2) { toast('🖼 No pude leer esas imágenes'); return; }
+  cell.kind = 'gif'; cell.isImage = true;
+  cell.gframes = frames; cell.gtotal = frames.length;
+  cell.slide = cell.slide || 4;
+  cell.name = '🖼×' + frames.length;
+  cell.video = null; cell.thumb = ''; cell.presetIdx = -1; cell.file = imgs[0];
+  refreshCell(cell.l, cell.c); markDirty();
+  toast('🖼 Slideshow de ' + frames.length + ' imágenes — rota cada ' + cell.slide + ' beats (Propiedades para cambiarlo)');
+}
 function emptyCell(cell) {
   state.layers.forEach((L, l) => { if (L.slots[L.target].cell === cell) clearLayer(l); });
   freeCellMedia(cell); // cierra los ImageBitmaps del GIF/imagen, revoca URL y frena cámara (evita fuga de RAM)
@@ -8144,6 +8557,7 @@ document.addEventListener('contextmenu', e => {
       items.push('-');
     }
     items.push({ label: '🎬 Cargar video acá…', fn: () => pickVideoFor(cell) });
+    items.push({ label: '🖼 Slideshow de imágenes…', fn: () => pickSlideshowFor(cell) });
     items.push({ label: '📷 Cámara / capturadora…', fn: () => camPicker(cell, e.clientX, e.clientY) });
     items.push({
       label: cell.kind === 'text' ? '✏ Editar texto…' : '💬 Poner texto…',
@@ -8211,6 +8625,16 @@ document.addEventListener('contextmenu', e => {
     const items = [{ label: '📸 Guardar estado acá', fn: () => captureScene(i) }];
     if (state.scenes[i]) {
       items.push({ label: '▶ Disparar escena', fn: () => recallScene(i) });
+      items.push('-');
+      const es = state.energyScenes || (state.energyScenes = { calm: -1, hard: -1 });
+      items.push({
+        label: es.calm === i ? '😴 Ya es la escena CALMA (quitar)' : '😴 Marcar como escena CALMA',
+        fn: () => { es.calm = es.calm === i ? -1 : i; markDirty(); toast(es.calm === i ? '😴 ESC ' + (i + 1) + ' = escena de los breakdowns' : 'Marca quitada'); },
+      });
+      items.push({
+        label: es.hard === i ? '⚡ Ya es la escena FUERTE (quitar)' : '⚡ Marcar como escena FUERTE',
+        fn: () => { es.hard = es.hard === i ? -1 : i; markDirty(); toast(es.hard === i ? '⚡ ESC ' + (i + 1) + ' = escena de los drops' : 'Marca quitada'); },
+      });
       items.push('-');
       items.push({ label: '🧹 Vaciar escena', fn: () => { state.scenes[i] = null; updateSceneBtns(-1); markDirty(); } });
     }
@@ -8904,6 +9328,12 @@ function buildPropClip(b) {
           style="width:26px;height:20px;padding:0;border:none;background:none${g3.color === 'cycle' ? ';display:none' : ''}"></span>`)}
       <div class="cprow"><span class="v">El trazo late con los graves y brilla al beat.
         Triángulos: ${cell.glb ? cell.glb.tris : '— (sin enlazar, usá 🔗 RELINK)'}</span></div>`;
+  } else if (cell.kind === 'gif' && cell.isImage && cell.slide) {
+    extra = `<div class="cph">SLIDESHOW 🖼 (${cell.gframes ? cell.gframes.length : '?'} imágenes)</div>
+      ${pRow('Rotar cada', `<select id="ppslide">${[1, 2, 4, 8, 16, 32].map(n =>
+        `<option value="${n}"${cell.slide === n ? ' selected' : ''}>${n} beats</option>`).join('')}</select>`)}
+      <div class="cprow"><span class="v">Las imágenes rotan clavadas al BPM. Ideal para logos de
+        sponsors o flyers. (Al cerrar la app hay que volver a cargarlas.)</span></div>`;
   } else if (cell.kind === 'gif' && cell.isImage) {
     extra = `<div class="cph">IMAGEN 🖼</div>
       <div class="cprow"><span class="v">Imagen fija. Usá el TRANSFORM de arriba para escala/posición/rotación.</span></div>`;
@@ -8920,10 +9350,18 @@ function buildPropClip(b) {
       ${pRow('P1 velocidad', `<input type="range" id="ppp1" min="0" max="1" step="0.01" value="${gp.p1 ?? .5}">`)}
       ${pRow('P2 tono', `<input type="range" id="ppp2" min="0" max="1" step="0.01" value="${gp.p2 ?? .5}">`)}`;
   } else if (cell.kind === 'text') {
+    const sysFonts = ['Arial', 'Arial Black', 'Impact', 'Georgia', 'Courier New', 'Comic Sans MS', 'Times New Roman', 'Verdana'];
     extra = `<div class="cph">TEXTO</div>
       ${pRow('Texto', `<input type="text" id="pptxt" value="${cell.name.replace(/"/g, '&quot;')}" maxlength="40">`)}
       ${pRow('Animación', `<select id="ppstyle">${TEXT_STYLES.map(s =>
-        `<option${(cell.textStyle || 'pulso') === s ? ' selected' : ''}>${s}</option>`).join('')}</select>`)}`;
+        `<option${(cell.textStyle || 'pulso') === s ? ' selected' : ''}>${s}</option>`).join('')}</select>`)}
+      ${pRow('🔤 Tipografía', `<span style="display:flex;gap:4px;align-items:center">
+        <select id="ppfont">
+          <option value=""${!cell.font ? ' selected' : ''}>por defecto</option>
+          ${customFonts.map(f2 => `<option value="${f2}"${cell.font === f2 ? ' selected' : ''}>★ ${f2}</option>`).join('')}
+          ${sysFonts.map(f2 => `<option value="${f2}"${cell.font === f2 ? ' selected' : ''}>${f2}</option>`).join('')}
+        </select>
+        <button class="mini" id="ppfontadd" title="cargar tu .ttf/.otf (la del flyer del evento) — queda guardada en esta PC">＋ .ttf</button></span>`)}`;
   } else if (cell.kind === 'cam') {
     extra = `<div class="cph">CÁMARA</div>
       ${pRow('Dispositivo', `<button class="mini" id="ppcam">📷 cambiar…</button>`)}`;
@@ -8953,6 +9391,7 @@ function buildPropClip(b) {
   $('#pptr0').onclick = () => { cell.tr = { sc: 1, x: 0, y: 0, rot: 0 }; cell.spd = 1; applyAllSpeeds(); markDirty(); buildProps(); };
   wireAnimUI(cell);
   if ($('#ppcues')) buildCueChips(cell);
+  if ($('#ppslide')) $('#ppslide').onchange = e => { cell.slide = +e.target.value; markDirty(); };
   if ($('#ppg3spin')) { // controles del objeto 3D 🧊
     const g3 = cell.g3;
     if ($('#ppg3anim')) $('#ppg3anim').onchange = e => { g3.anim = +e.target.value; markDirty(); };
@@ -9000,6 +9439,8 @@ function buildPropClip(b) {
   } else if (cell.kind === 'text') {
     $('#pptxt').onchange = e => { cell.name = e.target.value || cell.name; refreshCell(cell.l, cell.c); markDirty(); buildProps(); };
     $('#ppstyle').onchange = e => { cell.textStyle = e.target.value; markDirty(); };
+    $('#ppfont').onchange = e => { cell.font = e.target.value || null; cell._pv = false; markDirty(); };
+    $('#ppfontadd').onclick = fontImport;
   } else if (cell.kind === 'cam') {
     $('#ppcam').onclick = e => camPicker(cell, e.clientX, e.clientY);
   }
@@ -10058,6 +10499,21 @@ if (curLang() !== 'es') applyLang(); // idioma elegido (persistido en prefs de U
 if (!uiPrefs.welcomed) showWelcome(); // cartel de bienvenida en el primer arranque
 setTimeout(autoRelinkBoot, 1800); // los videos vuelven solos si hay permisos guardados
 setTimeout(autoFileBoot, 2600); // reconectar el auto-guardado a archivo de otras sesiones
+fontsBoot(); // recargar las tipografías .ttf guardadas en esta PC
+(function kioskBoot() { // 🤖 modo kiosko: la app corre sola (instalaciones, vidrieras)
+  const q = new URLSearchParams(location.search);
+  if (q.get('kiosk') !== '1') return;
+  document.body.classList.add('kiosk');
+  setTimeout(() => {
+    const col = +q.get('col');
+    if (col >= 1) qTriggerColumn(col - 1);
+    const sc = +q.get('scene');
+    if (sc >= 1) recallScene(sc - 1);
+  }, 2500);
+  setInterval(() => { // watchdog: si el render se murió, la app renace sola
+    if (performance.now() - (renderTick._last || 0) > 15000) location.reload();
+  }, 5000);
+})();
 if (uiPrefs.propDock) setPropDock(true); // arrancar con Propiedades acoplada si quedó así
 midiInit();
 requestAnimationFrame(frame);

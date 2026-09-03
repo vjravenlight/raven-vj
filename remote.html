@@ -119,6 +119,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;heigh
     <div id="pubvst" style="font-size:11px;opacity:.7"></div>
   </div>
   <div id="pubemos"></div>
+  <button id="pubhype" style="font-size:22px;padding:14px 30px;border-radius:16px;font-weight:800">🔥 HYPE 🔥</button>
   <div id="pubtxts"></div>
   <div id="pubfree"><input id="pubin" maxlength="24" placeholder="escribí algo…"><button id="pubsend">➤</button></div>
 </div>
@@ -256,6 +257,15 @@ if (pubCode) {
     $('#pubfree').style.display = cfg.free ? 'flex' : 'none';
   };
   window._pubBuild = buildPub; // para tests
+  let lastHype = 0;
+  $('#pubhype').onclick = () => { // 🔥 machacable: manda hype cada 130 ms como mucho
+    const now = Date.now();
+    if (!pconn || !pconn.open || now - lastHype < 130) return;
+    lastHype = now;
+    try { pconn.send({ t: 'pub', k: 'h' }); } catch (e) { }
+    $('#pubhype').style.transform = 'scale(1.12)';
+    setTimeout(() => { $('#pubhype').style.transform = ''; }, 90);
+  };
   $('#pubsend').onclick = () => { const v = $('#pubin').value.trim(); if (v) { psend('t', v); $('#pubin').value = ''; } };
   $('#pubin').addEventListener('keydown', e => { if (e.key === 'Enter') $('#pubsend').click(); });
   const peer = new Peer();

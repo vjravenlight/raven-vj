@@ -1,2 +1,4 @@
 # script de deploy con datos del hosting — no va al repo
 deploy.ps1
+tests/node_modules/
+tests/package-lock.json
