@@ -66,6 +66,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #wizbox .wbtns{display:flex;gap:6px;justify-content:center}
 #wizbox .wnote{margin-top:10px;font-size:9px;color:var(--dim)}
 canvas.envcv{background:#0a0a0d;border:1px solid var(--line);border-radius:4px;cursor:crosshair;touch-action:none}
+body.painting #outCanvas{cursor:crosshair;outline:2px solid var(--acc)}
 #barLbl{min-width:34px;color:var(--dim);font-variant-numeric:tabular-nums}
 body.kiosk #menubar,body.kiosk #topbar,body.kiosk #bottom,body.kiosk #gridwrap,
 body.kiosk #clock,body.kiosk #relinkBar,body.kiosk #welcome,body.kiosk .welcome,
@@ -430,7 +431,10 @@ body.kiosk #outCanvas{position:fixed;inset:0;width:100vw;height:100vh;object-fit
       <label>ESC</label><span id="sceneBtns"></span>
       <select id="morphSel" title="MORPH: la escena no entra de golpe — opacidades, crossfader y perillas se deslizan en N beats">
         <option value="0">⚡ directa</option><option value="2">🎚 2♪</option>
-        <option value="4">🎚 4♪</option><option value="8">🎚 8♪</option></select></span>
+        <option value="4">🎚 4♪</option><option value="8">🎚 8♪</option></select>
+      <select id="stransSel" title="TRANSICIÓN DE ESCENA: un golpe visual al cambiar de escena">
+        <option value="none">🌀 sin golpe</option><option value="flash">⚡ flash</option>
+        <option value="black">⬛ por negro</option><option value="glitch">▦ glitch</option><option value="confeti">🎊 confeti</option></select></span>
     <span class="grp"><button id="diceBtn" data-map="dice" title="randomizar parámetros de los efectos">🎲</button>
       <select id="rndSel" title="randomizar FX automáticamente cada N beats">
         <option value="0">manual</option><option value="4">c/4</option><option value="8">c/8</option>
@@ -494,7 +498,7 @@ body.kiosk #outCanvas{position:fixed;inset:0;width:100vw;height:100vh;object-fit
         <div class="mon"><span class="mlabel">PREVIA (click der.)</span>
           <canvas id="prev2d" width="320" height="180"></canvas>
           <canvas id="prevgl" width="320" height="180" style="display:none"></canvas></div>
-        <div class="mon"><span class="mlabel">SALIDA · <span id="nowName" style="color:var(--acc)"></span></span>
+        <div class="mon"><span class="mlabel">SALIDA · <span id="nowName" style="color:var(--acc)"></span> <button id="paintBtn" class="mini" title="🖌 PINTAR EN VIVO: dibujá con el mouse sobre este monitor y los trazos salen brillando en la salida (se desvanecen solos)">🖌</button></span>
           <canvas id="outCanvas" width="1280" height="720"></canvas></div>
         <div id="xyWrap">
           <div id="xypad"><div id="xydot" style="left:50%;top:50%"></div></div>
@@ -983,6 +987,7 @@ const state = {
   customGens: [], gSpeed: 1, snap: 0, trans: 0, autoDrop: false, structs: [], colColors: {}, logo: null, cd: null,
   morphBeats: 0, autoEnergy: false, energyScenes: { calm: -1, hard: -1 },
   macros: [{ targets: [] }, { targets: [] }], hitBass: 'off', hitHigh: 'off', party: 'off',
+  spot: { on: false, r: .2, dark: .85, follow: true, x: .5, y: .5 }, sceneTrans: 'none', notes: '',
   decks: null, deckIdx: 0,
 };
 const DECK_NAMES = ['A', 'B', 'C', 'D'];
@@ -1334,6 +1339,7 @@ precision highp float;
 in vec2 v_uv; out vec4 o;
 uniform sampler2D u_tex; uniform sampler2D u_prev;
 uniform vec2 u_res; uniform float u_time,u_bass,u_mid,u_high,u_beat,u_bpm,u_p1,u_p2;
+uniform vec2 u_xy;
 ` + HELP;
 
 /* ---------------- presets generativos ---------------- */
@@ -1619,6 +1625,71 @@ void main(){
  vec3 c=hsv2rgb(vec3(fract(ang+u_p2+u_time*.03),.85,1.))*m;
  c+=hsv2rgb(vec3(fract(ang+u_p2),.9,.4))*smoothstep(ring,ring-.15,r)*u_p1*.5;
  o=vec4(c*(.65+u_beat*.7),1.);}` },
+{ name: 'Agua', icon: '💧', fs: `void main(){
+ vec2 p=(v_uv-.5)*vec2(AR,1.); float t=u_time*.8;
+ float w=0.;
+ for(int i=0;i<5;i++){ float fi=float(i); vec2 c=vec2(sin(fi*2.1+t*.3),cos(fi*1.7+t*.4))*.5;
+  float d=length(p-c); w+=sin(d*(18.+u_p1*30.)-t*4.-fi)*exp(-d*2.5)*(1.+u_bass*u_beat); }
+ vec3 c=mix(vec3(.02,.1,.25),vec3(.3,.8,1.),w*.5+.5);
+ c+=pow(max(0.,w),6.)*vec3(1.);
+ o=vec4(hsv2rgb(vec3(u_p2*.6+.5,.7,1.))*c,1.);}` },
+{ name: 'Cristales', icon: '💎', fs: `void main(){
+ vec2 p=(v_uv-.5)*vec2(AR,1.)*mix(3.,8.,u_p1)+u_time*.15;
+ vec2 g=floor(p),f=fract(p); float d1=9.,d2=9.; vec2 id=vec2(0.);
+ for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){ vec2 o2=vec2(x,y); vec2 h=vec2(hash(g+o2),hash(g+o2+7.));
+  vec2 pt=o2+h*.5+.25+.2*sin(u_time+h*6.28); float d=length(f-pt);
+  if(d<d1){d2=d1;d1=d;id=g+o2;} else if(d<d2)d2=d; }
+ float edge=smoothstep(0.,.08,d2-d1);
+ vec3 c=hsv2rgb(vec3(hash(id)*.3+u_p2+u_time*.02,.6,.35+hash(id+3.)*.5))*edge;
+ c+=(1.-edge)*vec3(1.)*(.6+u_beat*.6);
+ o=vec4(c,1.);}` },
+{ name: 'Portal', icon: '🌀', fs: `void main(){
+ vec2 p=(v_uv-.5)*vec2(AR,1.); float r=length(p)+1e-3, a=atan(p.y,p.x);
+ float z=1./r*.5-u_time*(1.+u_p1*2.);
+ float sw=a*mix(2.,8.,u_p2)+r*8.-u_time*3.;
+ float v=sin(z*6.+sw)*.5+.5;
+ v=pow(v,3.)*smoothstep(0.,.3,r);
+ vec3 c=hsv2rgb(vec3(fract(z*.1+a/6.28),.9,1.))*v*(1.+u_bass);
+ c+=vec3(1.,.9,1.)*smoothstep(.06,0.,r)*(.5+u_beat);
+ o=vec4(c,1.);}` },
+{ name: 'Julia', icon: '🌌', fs: `void main(){
+ vec2 p=(v_uv-.5)*vec2(AR,1.)*2.6;
+ vec2 c=vec2(-.75+sin(u_time*.21)*.12+(u_p1-.5)*.4,.2+cos(u_time*.17)*.12+(u_p2-.5)*.3);
+ float k=0.;
+ for(int i=0;i<48;i++){ p=vec2(p.x*p.x-p.y*p.y,2.*p.x*p.y)+c; if(dot(p,p)>16.)break; k+=1.; }
+ float t=k/48.;
+ vec3 col=hsv2rgb(vec3(fract(t*2.+u_time*.05),.8,smoothstep(0.,.1,t)))*(1.-step(1.,t));
+ o=vec4(col*(1.+u_bass*.6),1.);}` },
+{ name: 'Möbius', icon: '♾', fs: `void main(){
+ vec2 p=(v_uv-.5)*vec2(AR,1.); vec3 col=vec3(0.);
+ float t=u_time*(.3+u_p1*.6);
+ for(int i=0;i<40;i++){ float u=float(i)/40.*6.2832;
+  for(int j=0;j<2;j++){ float v=float(j)*2.-1.;
+   float x=(1.+v*.28*cos(u*.5))*cos(u), y=(1.+v*.28*cos(u*.5))*sin(u), z=v*.28*sin(u*.5);
+   float cx=x*cos(t)-z*sin(t), cz=x*sin(t)+z*cos(t);
+   float cy=y*cos(t*.7)-cz*sin(t*.7); cz=y*sin(t*.7)+cz*cos(t*.7);
+   vec2 q=vec2(cx,cy)*.34/(1.+cz*.25);
+   float d=length(p-q); col+=hsv2rgb(vec3(u/6.28+u_p2,.9,1.))*smoothstep(.018,0.,d)*(.6+u_beat*.6); } }
+ o=vec4(col,1.);}` },
+{ name: 'Galaxia', icon: '✨', fs: `void main(){
+ vec2 p=(v_uv-.5)*vec2(AR,1.); vec3 col=vec3(0.);
+ float t=u_time*(.15+u_p1*.3);
+ for(int i=0;i<3;i++){ float arm=float(i)*2.094+t;
+  for(int j=0;j<30;j++){ float fj=float(j)/30.; float r=fj*.55; float a=arm+r*7.+hash(vec2(fj,float(i)))*.4;
+   vec2 q=vec2(cos(a),sin(a))*r+(vec2(hash(vec2(fj*3.,float(i))),hash(vec2(fj*5.,float(i)+2.)))-.5)*.06;
+   float d=length(p-q); col+=hsv2rgb(vec3(.55+fj*.3+u_p2,.6,1.))*smoothstep(.02,0.,d)*(1.-fj*.5)*(.7+u_bass*.6); } }
+ col+=vec3(1.,.95,.8)*smoothstep(.09,0.,length(p))*(.6+u_beat*.4);
+ o=vec4(col,1.);}` },
+{ name: 'Circuito', icon: '🔌', fs: `void main(){
+ vec2 p=v_uv*vec2(AR,1.)*mix(6.,14.,u_p1); vec2 g=floor(p),f=fract(p);
+ float h=hash(g); float line=0.;
+ if(h<.33) line=step(abs(f.y-.5),.05);
+ else if(h<.66) line=step(abs(f.x-.5),.05);
+ else line=max(step(abs(f.y-.5),.05)*step(f.x,.5),step(abs(f.x-.5),.05)*step(f.y,.5));
+ float pulse=step(.97,hash(g+floor(u_time*(2.+u_beat*6.))));
+ float pad=smoothstep(.16,.1,length(f-.5))*step(.8,hash(g+5.));
+ vec3 c=hsv2rgb(vec3(.33+u_p2*.5,.9,1.))*(line*(.25+pulse)+pad*(.5+u_bass));
+ o=vec4(c,1.);}` },
 ];
 
 /* ---------------- efectos master ---------------- */
@@ -1710,7 +1781,7 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  else d=min(c.r,c.b)-c.g;                             // magenta
  float k=smoothstep(.5-u_p2*.45,.52-u_p2*.4,d);       // umbral con borde suave
  o=vec4(c*(1.-k),1.);}` },
-{ id: 'kaleido', name: 'Caleidoscopio', p: ['sectores', 'giro'], fs: `void main(){
+{ id: 'kaleido', name: 'Caleidoscopio (con giro)', p: ['sectores', 'giro'], fs: `void main(){
  vec2 p=v_uv-.5; p.x*=u_res.x/u_res.y;
  float n=floor(2.+u_p1*10.);                          // 2 a 12 espejos
  float a=atan(p.y,p.x)+u_p2*6.2832+u_time*.1;
@@ -1732,11 +1803,11 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  float n=fract(sin(dot(v_uv*u_res+u_time*97.,vec2(12.9898,78.233)))*43758.5);
  c=c*scan+(n-.5)*u_p1*.25;
  o=vec4(c,1.);}` },
-{ id: 'rgbs', name: 'RGB Split', p: ['cantidad', 'ángulo'], fs: `void main(){
+{ id: 'rgbs', name: 'RGB Split (con ángulo)', p: ['cantidad', 'ángulo'], fs: `void main(){
  float a=u_p2*6.2832;
  vec2 d=vec2(cos(a),sin(a))*(u_p1*.02+u_bass*u_p1*.02);
  o=vec4(texture(u_tex,v_uv+d).r,texture(u_tex,v_uv).g,texture(u_tex,v_uv-d).b,1.);}` },
-{ id: 'pixgrid', name: 'Pixelate', p: ['tamaño', 'al beat'], fs: `void main(){
+{ id: 'pixgrid', name: 'Pixelate (late al beat)', p: ['tamaño', 'al beat'], fs: `void main(){
  float n=mix(160.,8.,u_p1*(1.-u_p2*.6*(1.-u_beat)));      // con p2, el mosaico late
  vec2 g=vec2(n,n*u_res.y/u_res.x);
  o=vec4(texture(u_tex,(floor(v_uv*g)+.5)/g).rgb,1.);}` },
@@ -1797,6 +1868,15 @@ void main(){ vec3 c=texture(u_tex,v_uv).rgb;
  float e=clamp(length(vec2(lx,ly))*(4.+u_p1*20.),0.,1.);
  vec3 col=e*(.6+.4*u_beat)*hsv2rgb(vec3(fract(u_p2+v_uv.x*.15+u_time*.03),.9,1.));
  o=vec4(col+texture(u_tex,v_uv).rgb*(1.-u_p1)*.35,1.);}` },
+{ id: 'echo', name: '👻 Eco temporal', p: ['beats atrás', 'mezcla'], fs: `void main(){
+ vec3 cur=texture(u_tex,v_uv).rgb;
+ vec3 old=texture(u_prev,v_uv).rgb;                       // u_prev = la salida de hace N beats (anillo)
+ o=vec4(max(cur*(1.-u_p2*.5),old*(.35+u_p2*.65)),1.);}` },
+{ id: 'vcam', name: '🔍 Cámara virtual (zoom/pan XY)', p: ['zoom', 'seguir pad XY'], fs: `void main(){
+ float z=1.+u_p1*3.;
+ vec2 c=.5+(u_xy-.5)*u_p2*(1.-1./z);                      // el pad XY pasea la cámara
+ vec2 uv=(v_uv-c)/z+c;
+ o=vec4(texture(u_tex,clamp(uv,0.,1.)).rgb,1.);}` },
 { id: 'strobe', name: 'Estrobo', p: ['velocidad', 'oscuridad'], fs: `void main(){
  float st=max(u_bpm,30.)/60.*pow(2.,floor(u_p1*3.99)); // destellos por beat: 1/2/4/8
  float duty=1.-u_p2*.85;                               // oscuridad: cuánto dura el negro
@@ -1816,6 +1896,7 @@ float thash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return frac
 vec3 blendm(vec3 b,vec3 s,int m){
  if(m==1)return b+s; if(m==2)return 1.-(1.-b)*(1.-s);
  if(m==3)return b*s; if(m==4)return abs(b-s); if(m==5)return max(b,s);
+ if(m==6)return b*dot(s,vec3(.299,.587,.114)); // máscara: lo de arriba recorta lo de abajo
  return s;}
 /* transición: peso del clip B según el modo elegido (0..5) */
 float transW(float pos){
@@ -2142,6 +2223,7 @@ function setAudioUniforms(gl, p) {
   gl.uniform1f(U(gl, p, 'u_high'), audio.high);
   gl.uniform1f(U(gl, p, 'u_beat'), beatEnv);
   gl.uniform1f(U(gl, p, 'u_bpm'), state.bpm);
+  gl.uniform2f(U(gl, p, 'u_xy'), state.xy.x, state.xy.y);
 }
 /* generadores custom (creados con el constructor por bloques) */
 function buildGenFS(cfg) {
@@ -2325,6 +2407,18 @@ function renderGen(ctx, presetIdx, target, p1, p2, time) {
 }
 /* celdas de TEXTO: canvas 2D que late con el beat, subido como textura */
 const TEXT_STYLES = ['pulso', 'scroll', 'onda', '3d', 'zoom'];
+/* texto dinámico 🕐: tokens que se actualizan solos dentro de un texto */
+function dynText(t) {
+  if (!t || t.indexOf('{') < 0) return t;
+  const d = new Date(), p2 = v => String(v).padStart(2, '0');
+  const rel = Math.max(0, beatFloat - phraseAnchor);
+  return t.replace(/\{hora\}/gi, p2(d.getHours()) + ':' + p2(d.getMinutes()))
+    .replace(/\{seg\}/gi, p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()))
+    .replace(/\{fecha\}/gi, p2(d.getDate()) + '/' + p2(d.getMonth() + 1))
+    .replace(/\{bpm\}/gi, String(Math.round(state.bpm)))
+    .replace(/\{compas\}/gi, (Math.floor(rel / 4) % 4 + 1) + '.' + (Math.floor(rel) % 4 + 1))
+    .replace(/\{cuenta\}/gi, () => { if (!state.cd) return '0:00'; const sec = Math.max(0, Math.ceil((state.cd.end - Date.now()) / 1000)); return Math.floor(sec / 60) + ':' + p2(sec % 60); });
+}
 /* tipografías 🔤: fuentes del sistema + .ttf/.otf/.woff cargadas por el usuario (persisten en esta PC) */
 const customFonts = []; // nombres ya registrados en document.fonts
 function cellFont(cell) {
@@ -2383,18 +2477,19 @@ function drawTextCell(cell) {
   x.fillStyle = '#000'; x.fillRect(0, 0, 960, 540);
   const hue = (nowSec * 40) % 360;
   const st = cell.textStyle || 'pulso';
+  const txt = dynText(cell.name); // 🕐 tokens {hora} {fecha} {bpm} {cuenta} {compas}
   x.textAlign = 'center'; x.textBaseline = 'middle';
   if (st === 'scroll') {
     x.font = '900 170px ' + cellFont(cell);
-    const w = x.measureText(cell.name).width + 500;
+    const w = x.measureText(txt).width + 500;
     const px = 960 - ((nowSec * (150 + audio.bass * 250)) % (960 + w));
     x.textAlign = 'left';
     x.shadowColor = `hsl(${hue},100%,60%)`; x.shadowBlur = 30;
     x.fillStyle = `hsl(${hue},100%,65%)`;
-    x.fillText(cell.name, px, 270);
+    x.fillText(txt, px, 270);
   } else if (st === 'onda') {
     x.font = '900 110px ' + cellFont(cell);
-    const chars = [...cell.name];
+    const chars = [...txt];
     let tw = 0;
     const ws = chars.map(ch => { const w2 = x.measureText(ch).width; tw += w2; return w2; });
     let cx = 480 - tw / 2;
@@ -2414,11 +2509,11 @@ function drawTextCell(cell) {
     x.font = '900 130px ' + cellFont(cell);
     for (let dz = 9; dz >= 1; dz--) { // extrusión falsa
       x.fillStyle = `hsl(${hue},80%,${10 + dz * 3}%)`;
-      x.fillText(cell.name, dz * 2.4, dz * 2.4, 860);
+      x.fillText(txt, dz * 2.4, dz * 2.4, 860);
     }
     x.shadowColor = `hsl(${hue},100%,60%)`; x.shadowBlur = 30;
     x.fillStyle = `hsl(${hue},100%,68%)`;
-    x.fillText(cell.name, 0, 0, 860);
+    x.fillText(txt, 0, 0, 860);
     x.restore();
   } else if (st === 'zoom') {
     const ph = (nowSec * .45) % 1;
@@ -2429,7 +2524,7 @@ function drawTextCell(cell) {
     x.font = '900 120px ' + cellFont(cell);
     x.shadowColor = `hsl(${hue},100%,60%)`; x.shadowBlur = 24;
     x.fillStyle = `hsl(${hue},100%,65%)`;
-    x.fillText(cell.name, 0, 0, 860);
+    x.fillText(txt, 0, 0, 860);
     x.restore();
     x.globalAlpha = 1;
   } else { // pulso
@@ -2440,7 +2535,7 @@ function drawTextCell(cell) {
     x.font = '900 120px ' + cellFont(cell);
     x.shadowColor = `hsl(${hue},100%,60%)`; x.shadowBlur = 34 + audio.bass * 40;
     x.fillStyle = `hsl(${hue},100%,${62 + audio.high * 25}%)`;
-    x.fillText(cell.name, 0, 0, 880);
+    x.fillText(txt, 0, 0, 880);
     x.restore();
   }
 }
@@ -2530,6 +2625,17 @@ function audioTick(dt) {
     return a / ((i1 - i0 + 1) * 255);
   };
   const raw = [band(20, 140), band(140, 2000), band(2000, 12000)];
+  { // 🎼 nota dominante: pico espectral entre 80 y 2000 Hz → clase de nota (0..1)
+    const i0 = Math.max(1, Math.floor(80 / nyq * n)), i1 = Math.min(n - 1, Math.ceil(2000 / nyq * n));
+    let bi = i0, bv = 0;
+    for (let i = i0; i <= i1; i++) if (audio.buf[i] > bv) { bv = audio.buf[i]; bi = i; }
+    if (bv > 90) {
+      const f = bi / n * nyq;
+      const note = 12 * Math.log2(f / 440) + 69;
+      const pc = ((Math.round(note) % 12) + 12) % 12 / 12;
+      audio.pitch = audio.pitch == null ? pc : audio.pitch + (pc - audio.pitch) * .25;
+    }
+  }
   const keys = ['bass', 'mid', 'high'];
   for (let i = 0; i < 3; i++) {
     audio._max[i] = Math.max(audio._max[i] * (1 - dt * .05), raw[i], .04);
@@ -2595,8 +2701,19 @@ function modValue(name) {
     case 'beat': return beatEnv; case 'x': return state.xy.x; case 'y': return state.xy.y;
     case 'motion': return motion.val; // 🏃 cuánto se mueve la gente frente a la cámara
     case 'hype': return hype.val; // 🔥 cuánto machaca el público el botón del celu
+    case 'pitch': return audio.pitch || 0;      // 🎼 nota dominante de la música (0..1 = do..si)
+    case 'beatinv': return 1 - beatEnv;         // ducking: se hunde en cada bombo
+    case 'rms': return Math.min(1, (audio.bass + audio.mid + audio.high) / 2.2); // volumen general
+    case 'walk': return walkMod.v;              // caminata aleatoria suave
+    case 'bend': return midiBend;               // pitch bend del controlador
   }
   return 0;
+}
+const walkMod = { v: .5, t: .5 };
+let midiBend = .5;
+function walkTick(dt) { // deriva aleatoria suave (nuevo destino cada ~1.5 s)
+  if (Math.random() < dt * .7) walkMod.t = Math.random();
+  walkMod.v += (walkMod.t - walkMod.v) * Math.min(1, dt * 1.2);
 }
 /* ---------------- sensor de movimiento 🏃: la cámara mide cuánto se mueve la gente (sin IA) ---------------- */
 const motion = { on: false, val: 0, stream: null, _v: null, _cv: null, _prev: null, _t: 0 };
@@ -2727,8 +2844,14 @@ function colHasContent(c) { return state.grid.some(row => row[c] && row[c].kind 
 function autopilotBeat() {
   const a = state.auto;
   if (a.mode === 'off') return;
-  if (++a.count < a.beats) return;
-  a.count = 0;
+  if (a.phrase) { // 🎶 cambiar solo al INICIO de la frase (16/32 beats), donde cambia el tema
+    const rel = Math.round(beatFloat - phraseAnchor);
+    if (rel % (uiPrefs.phraseLen || 16) !== 0) return;
+    a.count = 0;
+  } else {
+    if (++a.count < a.beats) return;
+    a.count = 0;
+  }
   const cols = [];
   for (let c = 0; c < COLS; c++) if (colHasContent(c)) cols.push(c);
   if (!cols.length) return;
@@ -3198,6 +3321,8 @@ function loadSlot(s, cell) {
   if (!cell || cell.kind === 'empty') { s.kind = 'empty'; s.video = null; return; }
   if (cell.kind === 'video' || cell.kind === 'cam') {
     if (!cell.video) { s.kind = 'empty'; return; }
+    cell._lastUse = performance.now();
+    if (cell._unloaded && cell.url) { try { cell.video.src = cell.url; cell.video.load(); } catch (e) { } cell._unloaded = false; } // 💤 vuelve de la siesta
     s.kind = 'video'; s.video = cell.video;
     if (cell.kind === 'video') try { s.video.currentTime = cell.inT || 0; } catch (e) { }
     s.video.play().catch(() => { });
@@ -3295,11 +3420,13 @@ function clearSnapQueue() { // descartar disparos encolados (PÁNICO, cambio de 
   const s = $('#snapSel'); if (s) s.classList.remove('armed');
 }
 function qTriggerCell(l, c) {
+  emitPerf({ k: 'cell', l, c, dk: state.deckIdx });
   if (!(state.snap > 0)) { triggerCell(l, c); return; }
   snapQueue.push({ run: () => triggerCell(l, c), mark: () => cellEl(l, c) });
   markSnapPending();
 }
 function qTriggerColumn(c) {
+  emitPerf({ k: 'col', c });
   if (!(state.snap > 0)) { triggerColumn(c); return; }
   snapQueue.push({ run: () => triggerColumn(c), mark: () => cellEl(0, c) });
   markSnapPending();
@@ -3564,7 +3691,7 @@ function renderTick() {
   }
 
   audioTick(dt); clockTick(dt); layerTick(dt); gpTick(); autoDropTick(dt); motionTick(dt);
-  brepTick(); morphTick(); barTick(); energyTick(dt); hypeTick(dt); hitTick(); envRecTick(); partyTick(dt); diaryTick();
+  brepTick(); morphTick(); barTick(); energyTick(dt); hypeTick(dt); hitTick(); envRecTick(); partyTick(dt); diaryTick(); walkTick(dt); paintTick(dt); perfPlayTick(); adaptiveTick(dt); unloadTick();
   if (scanFlat) { // escaneo de auto-máscara: proyectar plano blanco o negro
     const gfl = main.gl;
     gfl.bindFramebuffer(gfl.FRAMEBUFFER, null);
@@ -3579,6 +3706,7 @@ function renderTick() {
   $('#mH').style.height = (2 + audio.high * 16) + 'px';
 
   const gl = main.gl;
+  costBegin(gl); // 📊 medir el frame
   // 1) fuentes
   // opacidad efectiva por capa: si una capa no se ve (crossfader, opacidad 0, solo,
   // bypass, blackout), NO gastamos GPU renderizando su generador.
@@ -3690,7 +3818,7 @@ function renderTick() {
     gl.useProgram(p);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ping[cur].tex);
     gl.uniform1i(U(gl, p, 'u_tex'), 0);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, fbTgt.tex);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, fx.id === 'echo' ? echoTexFor(fx) : fbTgt.tex);
     gl.uniform1i(U(gl, p, 'u_prev'), 1);
     gl.uniform2f(U(gl, p, 'u_res'), state.res[0], state.res[1]);
     setAudioUniforms(gl, p);
@@ -3714,6 +3842,7 @@ function renderTick() {
       draw(gl);
     }
   }
+  if (state.effects.some(f => f.enabled && f.id === 'echo')) echoCapture(gl, ping[cur].tex); // 👻 anillo del eco (con o sin mapping)
   // 4) final a pantalla
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, main.canvas.width, main.canvas.height);
@@ -3722,7 +3851,7 @@ function renderTick() {
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ping[cur].tex);
   gl.uniform1i(U(gl, fp, 'u_tex'), 0);
   state.build = clamp01(state.build + (state.building ? dt / 3.5 : -dt * 5));
-  gl.uniform1f(U(gl, fp, 'u_master'), state.blackout ? 0 : state.master);
+  gl.uniform1f(U(gl, fp, 'u_master'), state.blackout ? 0 : state.master * dipK());
   gl.uniform1f(U(gl, fp, 'u_flash'), state.flash);
   gl.uniform1f(U(gl, fp, 'u_build'), state.build);
   gl.uniform1f(U(gl, fp, 'u_time'), nowSec);
@@ -3747,7 +3876,7 @@ function renderTick() {
         gl.useProgram(mp);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
         gl.uniform1i(U(gl, mp, 'u_tex'), 0);
-        gl.uniform1f(U(gl, mp, 'u_master'), state.blackout ? 0 : state.master);
+        gl.uniform1f(U(gl, mp, 'u_master'), state.blackout ? 0 : state.master * dipK());
         gl.uniform1f(U(gl, mp, 'u_flash'), state.flash);
         gl.uniform1f(U(gl, mp, 'u_build'), state.build);
         gl.uniform1f(U(gl, mp, 'u_time'), nowSec);
@@ -3809,11 +3938,15 @@ function renderTick() {
     setLUTUniforms(gl, fp);
     draw(gl);
   }
+  ovBegin(); // lienzo 2D compartido: TODOS los overlays, una sola subida a la GPU por frame
   structsDraw(gl); // estructuras de líneas animadas sobre el mapping
   partyDraw(gl); // 🎊 confeti / chispas / lluvia / nieve
+  paintDraw(gl); // 🖌 trazos pintados en vivo
   overlayExtras(gl); // logo 🖼 y cuenta regresiva ⏱
   pubDraw(gl); // reacciones del público flotando sobre la salida
+  ovFlush(gl);
   if (snapshotPNG._want) snapshotGrab(); // 📸 dentro del frame, con el buffer todavía vivo
+  costEnd(gl);
 
   livePrevTick();
   previewTick();
@@ -3912,8 +4045,8 @@ function previewTick() {
 }
 
 /* ---------------- grilla DOM ---------------- */
-const BLENDS = ['Normal', 'Add', 'Screen', 'Multiply', 'Difference', 'Lighten'];
-const OPMODS = ['off', 'bass', 'mid', 'high', 'lfo1', 'lfo2', 'beat', 'motion', 'hype'];
+const BLENDS = ['Normal', 'Add', 'Screen', 'Multiply', 'Difference', 'Lighten', '🎭 Máscara'];
+const OPMODS = ['off', 'bass', 'mid', 'high', 'lfo1', 'lfo2', 'beat', 'motion', 'hype', 'pitch', 'beatinv', 'rms', 'walk', 'bend'];
 function cellEl(l, c) { return document.querySelector(`.cell[data-l="${l}"][data-c="${c}"]`); }
 function setColColor(c, hx) { // 🎨 color de columna: para organizar el set a ojo (psy / techno / chill…)
   state.colColors = state.colColors || {};
@@ -4530,8 +4663,10 @@ function assignVideo(cell, file) {
   cell.url = URL.createObjectURL(file);
   cell.video = makeVideoEl(cell.url);
   cell.presetIdx = -1; cell.thumb = '';
+  if (!file._isProxy) cell.isProxy = false;
   genThumb(cell);
   refreshCell(cell.l, cell.c); markDirty(); updateRelinkBar();
+  if (!file._isProxy) proxyLookup(cell, file); // 🎞 si hay proxy guardado, se usa
 }
 function assignVideosFrom(l, c, files) {
   let ci = c;
@@ -4671,7 +4806,7 @@ function buildShelf() {
 }
 
 /* ---------------- rack de efectos ---------------- */
-const MODS = ['none', 'lfo1', 'lfo2', 'bass', 'mid', 'high', 'beat', 'x', 'y', 'motion', 'hype'];
+const MODS = ['none', 'lfo1', 'lfo2', 'bass', 'mid', 'high', 'beat', 'x', 'y', 'motion', 'hype', 'pitch', 'beatinv', 'rms', 'walk', 'bend'];
 function addEffect(id) {
   const def = FXDEFS.find(d => d.id === id);
   if (!def) return;
@@ -4968,6 +5103,14 @@ function cmdList() {
     { n: '⚙ Panel de control', k: 'panel control opciones', fn: () => togglePanel(true) },
     { n: '↩ Deshacer', k: 'undo deshacer', fn: undo },
     { n: '📔 Diario de la noche on/off', k: 'diario fotos galeria noche', fn: diaryToggle },
+    { n: '🎙 Grabar performance on/off', k: 'grabar performance record', fn: perfRecToggle },
+    { n: '▶ Reproducir performance', k: 'reproducir performance play', fn: () => perfPlayStart(true) },
+    { n: '📊 Resumen del set', k: 'resumen estadisticas stats', fn: statsReport },
+    { n: '🖌 Pintar en vivo on/off', k: 'pintar dibujar graffiti', fn: paintToggle },
+    { n: '🎯 Foco de atención on/off', k: 'foco spot luz', fn: () => { state.spot.on = !state.spot.on; markDirty(); } },
+    { n: '🪫 Perfil PC de batalla', k: 'perfil rendimiento liviano', fn: () => applyProfile('batalla') },
+    { n: '🚀 Perfil PC potente', k: 'perfil rendimiento full', fn: () => applyProfile('potente') },
+    { n: '🧪 Benchmark 3 s', k: 'benchmark medir fps', fn: () => benchRun(avg => toast('🧪 ' + avg + ' fps')) },
     ...cols,
     ...state.scenes.map((s, i) => s ? { n: '🎬 Escena ' + (i + 1), k: 'escena ' + (i + 1), fn: () => recallScene(i) } : null).filter(Boolean),
   ];
@@ -5415,6 +5558,7 @@ function setClockOut(on) {
 }
 function onMIDI(e) {
   const [st, d1, d2] = e.data;
+  if ((st & 0xF0) === 0xE0) { midiBend = d2 / 127; return; } // rueda de pitch bend → modulador 'bend'
   // MIDI Clock in (esclavo del DJ/DAW): 0xF8 tick (24 por negra), 0xFA start, 0xFC stop
   if (st === 0xF8) {
     if (!uiPrefs.midiClock) return;
@@ -5682,6 +5826,7 @@ function importMidiMaps() {
   inp.click();
 }
 function applyTarget(id, val, kind, on) {
+  if (kind === 'note' || perf.rec || clone.conns.length) emitPerf({ k: 'tgt', id, val, kind, on });
   const [t, a, b] = id.split(':');
   switch (t) {
     case 'cell': if (on) qTriggerCell(+a, +b); break;
@@ -5708,6 +5853,8 @@ function applyTarget(id, val, kind, on) {
     case 'brep': if (on) brepStart(+a || brep.len); else brepStop(); break; // momentáneo: apretado = tartamudea
     case 'macro': applyMacro(+a, val); break;
     case 'party': if (on) partyBurst(); break;
+    case 'spot': if (on) { state.spot.on = !state.spot.on; markDirty(); } break;
+    case 'paint': if (on) paintToggle(); break;
     case 'resample': if (on) resampleStart(+a || 8); break;
     case 'lseek': { // 🎚 jog/scratch: el fader ES el cabezal del video de esa capa
       const L = state.layers[+a];
@@ -5954,17 +6101,19 @@ function serialize() {
   return {
     app: 'raven-vj', version: 1,
     bpm: state.bpm, fade: state.fade, master: state.master, cols: COLS,
-    auto: { mode: state.auto.mode, beats: state.auto.beats },
+    auto: { mode: state.auto.mode, beats: state.auto.beats, phrase: !!state.auto.phrase },
     lfo: state.lfo.map(l => ({ wave: l.wave, rate: l.rate })),
     scenes: state.scenes, rndBeats: state.rndBeats, xfade: state.xfade, snap: state.snap, trans: state.trans, autoDrop: !!state.autoDrop,
     morphBeats: state.morphBeats || 0, autoEnergy: !!state.autoEnergy, energyScenes: state.energyScenes || null,
     macros: state.macros, hitBass: state.hitBass || 'off', hitHigh: state.hitHigh || 'off', party: state.party || 'off',
+    spot: state.spot, sceneTrans: state.sceneTrans || 'none', notes: state.notes || '',
+    perf: perf.events.length ? perf.events : null,
     structs: state.structs && state.structs.length ? state.structs : null,
     colColors: state.colColors && Object.keys(state.colColors).length ? state.colColors : null,
     logo: state.logo && state.logo.src ? state.logo : null,
     beatSens: state.beatSens, fpsCap: state.fpsCap, mono: state.mono, monoV: 2,
     outScreen: state.outScreen, theme: state.theme, gSpeed: state.gSpeed,
-    res: state.res,
+    res: adaptive.active && adaptive.orig ? adaptive.orig : state.res, // la calidad adaptativa no se guarda
     layers: state.layers.map(L => ({
       opacity: L.opacity, mode: L.mode, opMod: L.opMod, speed: L.speed,
       solo: !!L.solo, byp: !!L.byp,
@@ -6117,6 +6266,12 @@ function deserialize(d) {
   state.hitBass = HIT_ACTIONS.some(([v]) => v === d.hitBass) ? d.hitBass : 'off';
   state.hitHigh = HIT_ACTIONS.some(([v]) => v === d.hitHigh) ? d.hitHigh : 'off';
   state.party = ['off', 'lluvia', 'nieve', 'chispas'].includes(d.party) ? d.party : 'off';
+  state.spot = d.spot && typeof d.spot === 'object' ? { on: !!d.spot.on, r: +d.spot.r || .2, dark: d.spot.dark == null ? .85 : +d.spot.dark, follow: d.spot.follow !== false, x: +d.spot.x || .5, y: +d.spot.y || .5 } : { on: false, r: .2, dark: .85, follow: true, x: .5, y: .5 };
+  state.sceneTrans = ['none', 'flash', 'black', 'glitch', 'confeti'].includes(d.sceneTrans) ? d.sceneTrans : 'none';
+  if ($('#stransSel')) $('#stransSel').value = state.sceneTrans;
+  state.notes = typeof d.notes === 'string' ? d.notes.slice(0, 4000) : '';
+  perf.events = Array.isArray(d.perf) ? d.perf.filter(e => e && typeof e.b === 'number').slice(0, 8000) : [];
+  perf.play = null; perf.rec = false;
   buildMacroBar();
   state.structs = Array.isArray(d.structs)
     ? d.structs.filter(s => s && Array.isArray(s.pts) && s.pts.length > 1).slice(0, 24)
@@ -6345,6 +6500,8 @@ function morphTick() {
 function recallScene(i) {
   const s = state.scenes[i];
   if (!s) { toast('Escena ' + (i + 1) + ' vacía — click derecho (o Shift+F' + (i + 1) + ') para guardar'); return; }
+  emitPerf({ k: 'scene', i });
+  sceneTransKick(); // 🌀 flash / negro / glitch / confeti al cambiar
   const mb = state.morphBeats | 0;
   const pre = mb > 0 ? morphSnapshot() : null;
   s.layers.forEach((sl, l) => {
@@ -6392,6 +6549,351 @@ for (let i = 0; i < 8; i++) {
   $('#sceneBtns').appendChild(b);
 }
 
+/* ---------------- grabar performance 🎙 + resumen 📊 + clon sincronizado 🔗 (un solo emisor de eventos) ---------------- */
+const perf = { rec: false, events: [], t0: 0, play: null, loop: true, applying: false };
+const stats = { start: performance.now(), trig: new Map(), scenes: new Map(), cols: 0, drops: 0 };
+const clone = { conns: [], follower: null };
+function emitPerf(ev) {
+  if (perf.applying) return; // lo que reproduce la máquina no se re-graba ni se re-manda
+  if (perf.rec && perf.events.length < 8000) perf.events.push({ b: +(beatFloat - perf.t0).toFixed(3), ...ev });
+  if (clone.conns.length) clone.conns.forEach(c => { try { c.send({ t: 'evt', ev }); } catch (e) { } });
+  if (ev.k === 'cell') { const key = ev.dk + ':' + ev.l + ':' + ev.c; stats.trig.set(key, (stats.trig.get(key) || 0) + 1); }
+  else if (ev.k === 'col') stats.cols++;
+  else if (ev.k === 'scene') stats.scenes.set(ev.i, (stats.scenes.get(ev.i) || 0) + 1);
+}
+function applyPerfEvent(ev) {
+  perf.applying = true;
+  try {
+    if (ev.k === 'cell') triggerCell(ev.l, ev.c, ev.dk);
+    else if (ev.k === 'col') triggerColumn(ev.c);
+    else if (ev.k === 'scene') recallScene(ev.i);
+    else if (ev.k === 'tgt') applyTarget(ev.id, ev.val, ev.kind, ev.on);
+  } catch (e) { }
+  perf.applying = false;
+}
+function perfRecToggle() {
+  if (perf.rec) { perf.rec = false; markDirty(); toast('🎙 Performance grabada: ' + perf.events.length + ' eventos (Archivo → reproducir)'); return; }
+  perf.events = []; perf.t0 = beatFloat; perf.rec = true;
+  toast('🎙 GRABANDO tu performance — disparos, perillas y escenas quedan con su tiempo en beats');
+}
+function perfPlayStart(loop) {
+  if (!perf.events.length) { toast('🎙 No hay performance grabada'); return; }
+  perf.loop = loop !== false;
+  perf.play = { i: 0, t0: beatFloat };
+  toast('▶ Reproduciendo tu performance (' + perf.events.length + ' eventos' + (perf.loop ? ', en loop' : '') + ')');
+}
+function perfPlayStop() { if (perf.play) { perf.play = null; toast('⏹ Reproducción parada'); } }
+function perfPlayTick() {
+  const p = perf.play;
+  if (!p) return;
+  const rel = beatFloat - p.t0;
+  while (p.i < perf.events.length && perf.events[p.i].b <= rel) { applyPerfEvent(perf.events[p.i]); p.i++; }
+  if (p.i >= perf.events.length) {
+    if (!perf.loop) { perf.play = null; return; }
+    const last = perf.events[perf.events.length - 1].b;
+    p.t0 += Math.max(1, Math.ceil(last)); p.i = 0; // vuelve a empezar clavado al beat
+  }
+}
+function statsReport() {
+  const mins = Math.round((performance.now() - stats.start) / 60000);
+  const top = [...stats.trig.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => {
+    const [dk, l, c] = k.split(':').map(Number);
+    const cell = state.decks && state.decks[dk] && state.decks[dk][l] && state.decks[dk][l][c];
+    return (cell && cell.name ? cell.name : 'C' + (l + 1) + '·' + (c + 1)) + ' ×' + v;
+  });
+  const esc = [...stats.scenes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([i, v]) => 'ESC ' + (i + 1) + ' ×' + v);
+  const total = [...stats.trig.values()].reduce((a, b) => a + b, 0);
+  alert('📊 RESUMEN DEL SET\n\n' +
+    'Duración: ' + mins + ' min\nClips disparados: ' + total + ' (' + stats.trig.size + ' distintos)\nColumnas: ' + stats.cols + '\nDrops: ' + stats.drops + '\n\n' +
+    'Más usados:\n  ' + (top.join('\n  ') || '—') + '\n\nEscenas favoritas:\n  ' + (esc.join('\n  ') || '—'));
+}
+function cloneFollow(code) { // 🔗 esta RAVEN VJ obedece a otra (mismos disparos, mismo beat)
+  if (clone.follower) {
+    try { clone.follower.conn.close(); clone.follower.peer.destroy(); } catch (e) { }
+    clone.follower = null; buildCpTab('remote'); toast('🔗 Clon cortado'); return;
+  }
+  code = (code || '').trim().toLowerCase();
+  if (code.length < 4) { toast('Poné el código del remoto de la RAVEN VJ líder'); return; }
+  loadPeerJS(() => {
+    const p = new Peer();
+    p.on('error', err => toast('🔗 Clon: ' + (err.type || err.message)));
+    p.on('open', () => {
+      const conn = p.connect('ravenvj-' + code, { metadata: { clone: 1 }, reliable: true });
+      clone.follower = { peer: p, conn };
+      conn.on('open', () => { toast('🔗 Conectada a la líder — esperando que acepte'); buildCpTab('remote'); });
+      conn.on('data', d => {
+        if (!d) return;
+        if (d.t === 'evt') applyPerfEvent(d.ev);
+        else if (d.t === 'sync') {
+          if (Math.abs(beatFloat - d.beat) > .08) beatFloat = d.beat;
+          if (d.bpm && state.bpm !== d.bpm) { state.bpm = d.bpm; $('#bpmIn').value = state.bpm; }
+        }
+      });
+      conn.on('close', () => { clone.follower = null; buildCpTab('remote'); toast('🔗 La líder se desconectó'); });
+    });
+  });
+}
+setInterval(() => { // la líder manda su reloj a los clones cada 2 s
+  if (clone.conns.length) clone.conns.forEach(c => { try { c.send({ t: 'sync', beat: beatFloat, bpm: state.bpm }); } catch (e) { } });
+}, 2000);
+/* ---------------- calidad adaptativa ⚙: si la PC no llega, baja la resolución sola (y vuelve) ---------------- */
+const adaptive = { low: 0, high: 0, active: false, orig: null };
+function adaptiveTick(dt) {
+  if (uiPrefs.adaptive === false || state.fpsCap) return;
+  if (fps <= 0 || performance.now() < 20000) return;
+  if (!adaptive.active) {
+    if (fps < 24) { adaptive.low += dt; if (adaptive.low > 3) { adaptive.orig = [...state.res]; adaptive.active = true; adaptive.low = 0; setRes(960, 540); toast('⚙ Calidad adaptativa: bajé a 960×540 para que no se trabe (vuelve sola)'); } }
+    else adaptive.low = 0;
+  } else {
+    if (fps > 55) { adaptive.high += dt; if (adaptive.high > 25) { const o = adaptive.orig || [1280, 720]; adaptive.active = false; adaptive.high = 0; setRes(o[0], o[1]); toast('⚙ La PC se recuperó: volví a ' + o.join('×')); } }
+    else adaptive.high = 0;
+  }
+}
+/* ---------------- perfiles 🪫🚀 + benchmark 🧪 ---------------- */
+function applyProfile(kind) {
+  if (kind === 'batalla') { setRes(960, 540); state.fpsCap = 30; uiPrefs.adaptive = true; uiPrefs.unload = true; }
+  else { setRes(1280, 720); state.fpsCap = 0; }
+  saveUI(); markDirty(); buildCpTab('render');
+  toast(kind === 'batalla' ? '🪫 Perfil PC DE BATALLA: 960×540, 30 fps, todo lo pesado apagado' : '🚀 Perfil PC POTENTE: 1280×720 a 60 fps');
+}
+function benchRun(cb) { // mide fps durante 3 s con lo que esté sonando
+  const samples = [];
+  const iv = setInterval(() => { if (fps > 0) samples.push(fps); }, 400);
+  setTimeout(() => {
+    clearInterval(iv);
+    const avg = samples.length ? Math.round(samples.reduce((a, b) => a + b, 0) / samples.length) : 0;
+    uiPrefs.bench = { fps: avg, t: Date.now(), res: state.res.join('×') };
+    saveUI();
+    if (cb) cb(avg);
+  }, 3200);
+}
+function benchBoot() {
+  if (uiPrefs.bench || document.body.classList.contains('kiosk')) return;
+  benchRun(avg => {
+    if (!avg) return;
+    if (avg < 30) { applyProfile('batalla'); toast('🧪 Benchmark: ' + avg + ' fps → apliqué el perfil PC de batalla'); }
+    else toast('🧪 Benchmark: ' + avg + ' fps a ' + state.res.join('×') + ' — tu máquina va bien');
+  });
+}
+/* ---------------- descarga de inactivos 💤: videos sin usar en 10 min liberan memoria ---------------- */
+function unloadTick() {
+  const now = performance.now();
+  if (now - (unloadTick._t || 0) < 30000) return;
+  unloadTick._t = now;
+  if (uiPrefs.unload === false) return;
+  let n2 = 0;
+  (state.decks || [state.grid]).forEach(g => g.forEach(row => row.forEach(c => {
+    if (c.kind !== 'video' || !c.video || c._unloaded || !c.url) return;
+    if (slotUsesVideo(c.video) || c.video === previewVideo()) return;
+    if (now - (c._lastUse || 0) > 600000) { try { c.video.removeAttribute('src'); c.video.load(); } catch (e) { } c._unloaded = true; n2++; }
+  })));
+  if (n2) console.log('💤 videos descargados por inactividad:', n2);
+}
+/* ---------------- proxies 🎞: copia liviana 540p de los videos pesados (persisten en esta PC) ---------------- */
+function proxyDB() {
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open('ravenvj-proxies', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('p');
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+async function proxyLookup(cell, file) { // al cargar un video, si ya hay proxy guardado se usa ese
+  if (uiPrefs.useProxies === false || file._isProxy) return;
+  try {
+    const db = await proxyDB();
+    const blob = await new Promise(r => { const q = db.transaction('p').objectStore('p').get(file.name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); });
+    if (!blob || cell.file !== file) return;
+    const pf = new File([blob], file.name, { type: 'video/webm' });
+    pf._isProxy = true;
+    cell._origFile = file;
+    assignVideo(cell, pf);
+    cell.isProxy = true;
+  } catch (e) { }
+}
+async function makeProxy(cell) {
+  if (!cell.file || !cell.url) { toast('🎞 Ese clip no tiene archivo'); return; }
+  if (makeProxy._busy) { toast('🎞 Ya hay un proxy generándose'); return; }
+  makeProxy._busy = true;
+  const v = document.createElement('video');
+  v.src = cell.url; v.muted = true; v.playsInline = true;
+  await new Promise(r => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 4000); });
+  if (!v.videoWidth) { makeProxy._busy = false; toast('🎞 No pude leer el video'); return; }
+  const w = 960, h = Math.round(960 * v.videoHeight / v.videoWidth) || 540;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const st = cv.captureStream(30);
+  const mime = ['video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  const rec2 = new MediaRecorder(st, { mimeType: mime, videoBitsPerSecond: 4e6 });
+  const chunks = [];
+  rec2.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  const stopped = new Promise(r => { rec2.onstop = r; });
+  let raf = 0;
+  const drawF = () => { try { x.drawImage(v, 0, 0, w, h); } catch (e) { } raf = requestAnimationFrame(drawF); };
+  toast('🎞 Generando proxy 540p de "' + cell.name + '" (' + Math.round(v.duration) + ' s, tarda lo que dura el clip)…');
+  try { v.currentTime = 0; await v.play(); } catch (e) { makeProxy._busy = false; toast('🎞 No pude reproducir el video para el proxy'); return; }
+  rec2.start(); drawF();
+  await new Promise(r => { v.onended = r; setTimeout(r, (v.duration + 2) * 1000); });
+  cancelAnimationFrame(raf);
+  try { rec2.stop(); } catch (e) { }
+  await stopped;
+  st.getTracks().forEach(t2 => t2.stop());
+  const blob = new Blob(chunks, { type: 'video/webm' });
+  const name = cell.file.name;
+  try { const db = await proxyDB(); db.transaction('p', 'readwrite').objectStore('p').put(blob, name); } catch (e) { }
+  const pf = new File([blob], name, { type: 'video/webm' }); // MISMO nombre: el relink sigue andando
+  pf._isProxy = true;
+  const keep = { inT: cell.inT, outT: cell.outT, cues: cell.cues, play: cell.play, tr: cell.tr, anim: cell.anim, spd: cell.spd };
+  cell._origFile = cell.file;
+  assignVideo(cell, pf);
+  Object.assign(cell, keep);
+  cell.isProxy = true;
+  makeProxy._busy = false;
+  if (propOpen) buildProps();
+  toast('🎞 Proxy listo: "' + cell.name + '" ahora pesa ' + (blob.size / 1048576).toFixed(1) + ' MB a 540p (queda guardado en esta PC)');
+}
+async function removeProxy(cell) {
+  if (!cell.isProxy) return;
+  try { const db = await proxyDB(); db.transaction('p', 'readwrite').objectStore('p').delete(cell.file.name); } catch (e) { }
+  const keep = { inT: cell.inT, outT: cell.outT, cues: cell.cues, play: cell.play, tr: cell.tr, anim: cell.anim, spd: cell.spd };
+  const orig = cell._origFile || mediaPool.get(cell.file.name);
+  cell.isProxy = false;
+  if (orig && !orig._isProxy) { uiPrefs.useProxies = uiPrefs.useProxies; assignVideo(cell, orig); Object.assign(cell, keep); toast('🎞 Proxy quitado: de vuelta el original'); }
+  else toast('🎞 Proxy borrado — volvé a cargar el video original con RELINK');
+  if (propOpen) buildProps();
+}
+/* ---------------- medidor de costo 📊: cuánto tarda cada frame en GPU (si el driver lo permite) y en JS ---------------- */
+const cost = { gpu: 0, js: 0, ext: null, q: null, pending: false, active: false, t0: 0 };
+function costBegin(gl) {
+  cost.t0 = performance.now();
+  if (uiPrefs.costMeter === false) return;
+  if (cost.ext === null) cost.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') || false;
+  if (!cost.ext || cost.pending) return;
+  cost.q = gl.createQuery();
+  gl.beginQuery(cost.ext.TIME_ELAPSED_EXT, cost.q);
+  cost.pending = true; cost.active = true;
+}
+function costEnd(gl) {
+  cost.js = cost.js * .85 + (performance.now() - cost.t0) * .15;
+  if (cost.active) { gl.endQuery(cost.ext.TIME_ELAPSED_EXT); cost.active = false; return; }
+  if (cost.pending && cost.q) { // consultar el resultado del frame anterior
+    const avail = gl.getQueryParameter(cost.q, gl.QUERY_RESULT_AVAILABLE);
+    const dis = gl.getParameter(cost.ext.GPU_DISJOINT_EXT);
+    if (avail && !dis) cost.gpu = cost.gpu * .8 + gl.getQueryParameter(cost.q, gl.QUERY_RESULT) / 1e6 * .2;
+    if (avail || dis) { gl.deleteQuery(cost.q); cost.q = null; cost.pending = false; }
+  }
+}
+function costText() {
+  return '📊 JS ' + cost.js.toFixed(1) + ' ms · GPU ' + (cost.ext ? cost.gpu.toFixed(1) + ' ms' : 'n/d') + ' · ' + fps + ' fps' +
+    (cost.js + (cost.ext ? cost.gpu : 0) > 14 ? ' ⚠ justo' : ' ✔');
+}
+/* ---------------- precalentar shaders 🔥: compilar todo al arrancar para que en vivo no haya tirones ---------------- */
+function warmShaders() {
+  const jobs = [];
+  FXDEFS.forEach(d => { if (d.fs) jobs.push(() => program(main, 'fx' + d.id, FX_PRE + d.fs)); });
+  PRESETS.forEach((p, i) => jobs.push(() => program(main, genKey(i), genPrelude(i) + genSrc(i))));
+  jobs.push(() => glbProg(main.gl));
+  let i = 0;
+  const step = () => {
+    const t0 = performance.now();
+    while (i < jobs.length && performance.now() - t0 < 6) { try { jobs[i](); } catch (e) { } i++; } // de a poquito, sin frenar el render
+    if (i < jobs.length) setTimeout(step, 40); else warmShaders.done = true;
+  };
+  step();
+}
+/* ---------------- pintar en vivo 🖌: trazos sobre la salida que brillan y se van ---------------- */
+const paint = { on: false, strokes: [], cur: null };
+function paintToggle() {
+  paint.on = !paint.on;
+  document.body.classList.toggle('painting', paint.on);
+  if ($('#paintBtn')) $('#paintBtn').classList.toggle('on', paint.on);
+  toast(paint.on ? '🖌 PINTAR: dibujá sobre el monitor de SALIDA — los trazos se desvanecen solos' : '🖌 Pintar off');
+}
+function paintTick(dt) {
+  if (!paint.strokes.length) return;
+  const now = performance.now();
+  paint.strokes = paint.strokes.filter(st => now - st.born < 4200 || st === paint.cur);
+}
+function paintDraw(gl) {
+  if (!paint.strokes.length) return;
+  const x = ovCtx(); const W = ov.cv.width, H = ov.cv.height, now = performance.now();
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  for (const st of paint.strokes) {
+    if (st.pts.length < 2) continue;
+    const age = (now - st.born) / 1000;
+    const alpha = st === paint.cur ? 1 : Math.max(0, 1 - Math.max(0, age - 2.2) / 2);
+    x.globalAlpha = alpha;
+    x.strokeStyle = st.col; x.shadowColor = st.col; x.shadowBlur = H * .02;
+    x.lineWidth = H * .012 * (1 + beatEnv * .6);
+    x.beginPath();
+    st.pts.forEach((p, i) => i ? x.lineTo(p[0] * W, (1 - p[1]) * H) : x.moveTo(p[0] * W, (1 - p[1]) * H));
+    x.stroke();
+  }
+  x.globalAlpha = 1; x.shadowBlur = 0;
+}
+function paintWire() { // el monitor de SALIDA es el lienzo
+  const cv = $('#outCanvas');
+  if (!cv) return;
+  const uvOf = e => { const r = cv.getBoundingClientRect(); return [clamp01((e.clientX - r.left) / r.width), clamp01(1 - (e.clientY - r.top) / r.height)]; };
+  cv.addEventListener('pointerdown', e => {
+    if (!paint.on) return;
+    e.preventDefault();
+    const c = hue2rgb(Math.random());
+    paint.cur = { pts: [uvOf(e)], born: performance.now(), col: 'rgb(' + c.map(v => Math.round(v * 255)).join(',') + ')' };
+    paint.strokes.push(paint.cur);
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => { if (paint.on && paint.cur) paint.cur.pts.push(uvOf(e)); });
+  const end = () => { if (paint.cur) { paint.cur.born = performance.now(); paint.cur = null; } };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  if ($('#paintBtn')) $('#paintBtn').onclick = paintToggle;
+}
+/* ---------------- transición entre escenas 🌀: flash / negro / glitch / confeti al cambiar de escena ---------------- */
+let sceneDip = null;
+function dipK() { // factor del master durante el 'por negro' (1 → 0 → 1 en 700 ms)
+  if (!sceneDip) return 1;
+  const k = (performance.now() - sceneDip.t0) / 700;
+  if (k >= 1) { sceneDip = null; return 1; }
+  return Math.abs(k * 2 - 1);
+}
+function sceneTransKick() {
+  const m = state.sceneTrans || 'none';
+  if (m === 'flash') state.flash = 1;
+  else if (m === 'black') sceneDip = { t0: performance.now() };
+  else if (m === 'confeti') partyBurst();
+  else if (m === 'glitch') { // glitch master de medio segundo
+    const def = FXDEFS.find(d => d.id === 'gli');
+    if (!def) return;
+    const tmp = { id: 'gli', uid: 999999, enabled: true, _tmp: true, params: def.p.map((_, i) => ({ value: i ? .6 : .9, mod: 'none', amt: 0 })) };
+    state.effects.unshift(tmp); buildFx();
+    setTimeout(() => { state.effects = state.effects.filter(f => f !== tmp); buildFx(); }, 520);
+  }
+}
+/* ---------------- eco temporal 👻: anillo de la salida (1 foto cada 1/8 de beat, 4 beats de historia) ---------------- */
+const echo = { ring: [], head: 0, lastStep: -1, N: 32 };
+function echoCapture(gl, srcTex) {
+  const step = Math.floor(beatFloat * 8);
+  if (step === echo.lastStep) return;
+  echo.lastStep = step;
+  if (!echo.ring[echo.head]) echo.ring[echo.head] = makeTarget(gl, 640, 360);
+  const t = echo.ring[echo.head];
+  const vp = gl.getParameter(gl.VIEWPORT);
+  const bp = program(main, 'blit', BLIT_FS);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+  gl.viewport(0, 0, 640, 360);
+  gl.useProgram(bp);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
+  draw(gl);
+  gl.viewport(vp[0], vp[1], vp[2], vp[3]);
+  echo.head = (echo.head + 1) % echo.N;
+}
+function echoTexFor(fx) { // p1 → cuántos beats atrás (¼ a 4)
+  const beats = .25 + (fx.params[0].value || 0) * 3.75;
+  const steps = Math.max(1, Math.round(beats * 8));
+  const t = echo.ring[(echo.head - steps + echo.N * 4) % echo.N];
+  return t ? t.tex : fbTgt.tex;
+}
 /* ---------------- partículas de fiesta 🎊: confeti, chispas, lluvia, nieve sobre la salida ---------------- */
 const party = { parts: [] };
 const PARTY_COLORS = ['#ff3d54', '#ff7a1a', '#ffd21a', '#8dff3f', '#1ad8ff', '#b44aff', '#ff4ad0', '#ffffff'];
@@ -6425,14 +6927,7 @@ function partyTick(dt) {
 }
 function partyDraw(gl) {
   if (!party.parts.length) return;
-  const W = main.canvas.width, H = main.canvas.height;
-  const me = partyDraw;
-  if (!me.cv || me.cv.width !== W || me.cv.height !== H) {
-    me.cv = document.createElement('canvas'); me.cv.width = W; me.cv.height = H;
-    me.ctx = me.cv.getContext('2d');
-  }
-  const x = me.ctx;
-  x.clearRect(0, 0, W, H);
+  const x = ovCtx(); const W = ov.cv.width, H = ov.cv.height;
   for (const p of party.parts) {
     const a2 = Math.min(1, p.life);
     x.globalAlpha = a2;
@@ -6454,22 +6949,6 @@ function partyDraw(gl) {
     }
   }
   x.globalAlpha = 1;
-  if (!me.tex) me.tex = makeTex(gl, 2, 2);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, me.tex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, me.cv); }
-  catch (e) { gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); return; }
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  const bp = program(main, 'blit', BLIT_FS);
-  gl.useProgram(bp);
-  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  draw(gl);
-  gl.disable(gl.BLEND);
 }
 /* ---------------- overlays de fiesta: logo 🖼 + cuenta regresiva ⏱ sobre la salida ---------------- */
 let logoImg = null, logoImgSrc = '';
@@ -6477,15 +6956,10 @@ function overlayExtras(gl) {
   const lg = state.logo, cd = state.cd;
   const showLogo = lg && lg.on && lg.src;
   const showCd = cd && cd.end;
-  if (!showLogo && !showCd) return;
-  const W = main.canvas.width, H = main.canvas.height;
-  const me = overlayExtras;
-  if (!me.cv || me.cv.width !== W || me.cv.height !== H) {
-    me.cv = document.createElement('canvas'); me.cv.width = W; me.cv.height = H;
-    me.ctx = me.cv.getContext('2d');
-  }
-  const x = me.ctx;
-  x.clearRect(0, 0, W, H);
+  const showSpot = state.spot && state.spot.on;
+  const showNum = state.map.numbers && state.map.on;
+  if (!showLogo && !showCd && !showSpot && !showNum) return;
+  const x = ovCtx(); const W = ov.cv.width, H = ov.cv.height;
   if (showLogo) {
     if (logoImgSrc !== lg.src) { logoImg = new Image(); logoImg.src = lg.src; logoImgSrc = lg.src; }
     if (logoImg.complete && logoImg.naturalWidth) {
@@ -6517,26 +6991,27 @@ function overlayExtras(gl) {
     x.restore();
     if (left <= 0) { state.cd = null; buildDrop(); toast('⏱ ¡CERO! 💥'); }
   }
-  if (!me.tex) me.tex = makeTex(gl, 2, 2);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, me.tex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, me.cv); }
-  catch (e) {
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    return;
+  if (showSpot) { // 🎯 foco: oscurece todo menos un círculo que sigue al pad XY
+    const sp = state.spot;
+    const cx = (sp.follow ? state.xy.x : sp.x) * W, cy = (1 - (sp.follow ? state.xy.y : sp.y)) * H;
+    const r = (sp.r || .2) * H * (1 + beatEnv * .06);
+    const g = x.createRadialGradient(cx, cy, r * .55, cx, cy, r);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,' + (sp.dark == null ? .85 : sp.dark) + ')');
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
   }
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  const bp = program(main, 'blit', BLIT_FS);
-  gl.useProgram(bp);
-  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  draw(gl);
-  gl.disable(gl.BLEND);
+  if (showNum) { // 🔢 número de cada superficie/proyector, para el montaje
+    state.map.surfaces.forEach((sf, i) => {
+      if (!sf.on) return;
+      let cx = 0, cy = 0; sf.pts.forEach(p => { cx += p[0] / 4; cy += p[1] / 4; });
+      x.save(); x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = '900 ' + Math.round(H * .16) + 'px "Segoe UI",Arial,sans-serif';
+      x.fillStyle = '#fff'; x.shadowColor = '#000'; x.shadowBlur = H * .03;
+      x.fillText(String(i + 1), cx * W, (1 - cy) * H);
+      x.font = 'bold ' + Math.round(H * .035) + 'px "Segoe UI",Arial,sans-serif';
+      x.fillText('SUPERFICIE ' + (i + 1) + (sf.layer >= 0 ? ' · CAPA ' + (sf.layer + 1) : ''), cx * W, (1 - cy) * H + H * .1);
+      x.restore();
+    });
+  }
 }
 function countdownPrompt() { // ⏱ minutos ("5") u hora exacta ("23:59")
   if (state.cd) { state.cd = null; toast('⏱ Cuenta regresiva cancelada'); return; }
@@ -6841,6 +7316,7 @@ $('#barLbl').oncontextmenu = e => {
   saveUI();
   toast('🧮 Frase de ' + uiPrefs.phraseLen + ' beats');
 };
+$('#stransSel').onchange = e => { state.sceneTrans = e.target.value; markDirty(); };
 $('#morphSel').onchange = e => {
   state.morphBeats = +e.target.value;
   markDirty();
@@ -6868,6 +7344,7 @@ function buildStart() {
   $('#buildBtn').classList.add('on');
 }
 function buildDrop() {
+  stats.drops++;
   if (!state.building) return;
   state.building = false;
   $('#buildBtn').classList.remove('on');
@@ -7067,6 +7544,17 @@ function buildCpTab(id) {
         <option value="0">60 (sin límite)</option><option value="30">30 (ahorro / PC lenta)</option></select></span></div>
       <div class="cprow"><b>PC floja de papeles 🐢</b><span>
         <button id="cplite" class="mini${state.res[0] === 960 && state.res[1] === 540 && state.fpsCap === 30 ? ' on' : ''}">${state.res[0] === 960 && state.res[1] === 540 && state.fpsCap === 30 ? 'modo liviano ON' : 'activar modo liviano'}</button></span></div>
+      <div class="cprow"><b>Perfil de máquina</b><span style="display:flex;gap:5px">
+        <button id="cpprofb" class="mini" title="960×540, 30 fps, todo lo pesado apagado — para notebooks viejas y GPU integrada">🪫 PC de batalla</button>
+        <button id="cpprofp" class="mini" title="1280×720 a 60 fps, todo abierto">🚀 PC potente</button></span></div>
+      <div class="cprow"><b>⚙ Calidad adaptativa</b><span>
+        <button id="cpadapt" class="mini${uiPrefs.adaptive !== false ? ' on' : ''}" title="si los fps caen por debajo de 24 durante 3 s, baja sola a 960×540; cuando la PC se recupera, vuelve">${uiPrefs.adaptive !== false ? 'ON (baja y sube sola)' : 'off'}</button>
+        ${adaptive.active ? '<span class="v" style="margin-left:6px">⬇ activa ahora</span>' : ''}</span></div>
+      <div class="cprow"><b>💤 Descargar inactivos</b><span>
+        <button id="cpunload" class="mini${uiPrefs.unload !== false ? ' on' : ''}" title="los videos que no se usan en 10 min liberan memoria y se recargan solos al dispararlos">${uiPrefs.unload !== false ? 'ON' : 'off'}</button></span></div>
+      <div class="cprow"><b>🎞 Usar proxies</b><span>
+        <button id="cpproxy" class="mini${uiPrefs.useProxies !== false ? ' on' : ''}" title="cuando un video tiene proxy 540p guardado, se usa ese (se generan desde las propiedades del clip)">${uiPrefs.useProxies !== false ? 'ON' : 'off'}</button></span></div>
+      <div class="cprow"><b>📊 Costo del frame</b><span class="v" id="cpcost">${costText()}</span></div>
       <div class="cprow"><b>Motor gráfico</b><span><button id="cpglreset" class="mini">↻ Reiniciar (si se ve raro)</button></span></div>
       <div class="cph">COLOR (LUT .cube)</div>
       <div class="cprow"><b>LUT de color</b><span style="display:flex;gap:6px;align-items:center">
@@ -7083,6 +7571,12 @@ function buildCpTab(id) {
       <div class="cprow"><span class="v">Graba los últimos ~${tm.SEG} s de tu salida en segundo plano.
         REPLAY los mete como clip en una celda vacía: rebobiná el momento épico y loopealo.
         (usa algo de CPU: prendela cuando la vayas a usar)</span></div>
+      <div class="cph">🎯 FOCO DE ATENCIÓN</div>
+      <div class="cprow"><b>Foco</b><span style="display:flex;gap:5px;align-items:center">
+        <button id="cpspot" class="mini${state.spot.on ? ' on' : ''}" data-map="spot" title="oscurece todo menos un círculo de luz (mapeable)">${state.spot.on ? 'ON' : 'off'}</button>
+        <input id="cpspotr" type="range" min="0.05" max="0.6" step="0.01" value="${state.spot.r}" style="width:60px" title="tamaño">
+        <input id="cpspotd" type="range" min="0.3" max="1" step="0.05" value="${state.spot.dark}" style="width:60px" title="oscuridad">
+        <button id="cpspotf" class="mini${state.spot.follow ? ' on' : ''}" title="el foco sigue al pad XY">🎮 pad XY</button></span></div>
       <div class="cph">🎊 PARTÍCULAS DE FIESTA</div>
       <div class="cprow"><b>Modo continuo</b><span style="display:flex;gap:4px">
         ${[['off', 'off'], ['lluvia', '🌧 lluvia'], ['nieve', '❄ nieve'], ['chispas', '✨ chispas']].map(([v, n]) =>
@@ -7169,6 +7663,10 @@ function buildCpTab(id) {
     if ($('#cplutmix')) $('#cplutmix').oninput = e => { lutMix = +e.target.value; };
     if ($('#cptm')) $('#cptm').onclick = tmToggle;
     if ($('#cptmgo')) $('#cptmgo').onclick = tmReplay;
+    if ($('#cpspot')) $('#cpspot').onclick = () => { state.spot.on = !state.spot.on; markDirty(); buildCpTab('render'); };
+    if ($('#cpspotr')) $('#cpspotr').oninput = e => { state.spot.r = +e.target.value; markDirty(); };
+    if ($('#cpspotd')) $('#cpspotd').oninput = e => { state.spot.dark = +e.target.value; markDirty(); };
+    if ($('#cpspotf')) $('#cpspotf').onclick = () => { state.spot.follow = !state.spot.follow; markDirty(); buildCpTab('render'); };
     document.querySelectorAll('[data-party]').forEach(b2 => {
       b2.onclick = () => { state.party = b2.dataset.party; markDirty(); buildCpTab('render'); };
     });
@@ -7197,6 +7695,11 @@ function buildCpTab(id) {
     if ($('#cplogoop')) $('#cplogoop').oninput = e => { state.logo.op = +e.target.value; markDirty(); };
     if ($('#cplogobeat')) $('#cplogobeat').onclick = () => { state.logo.beat = !state.logo.beat; markDirty(); buildCpTab('render'); };
     if ($('#cplogox')) $('#cplogox').onclick = () => { state.logo = null; markDirty(); buildCpTab('render'); toast('🖼 Logo quitado'); };
+    if ($('#cpprofb')) $('#cpprofb').onclick = () => applyProfile('batalla');
+    if ($('#cpprofp')) $('#cpprofp').onclick = () => applyProfile('potente');
+    if ($('#cpadapt')) $('#cpadapt').onclick = () => { uiPrefs.adaptive = uiPrefs.adaptive === false; saveUI(); buildCpTab('render'); };
+    if ($('#cpunload')) $('#cpunload').onclick = () => { uiPrefs.unload = uiPrefs.unload === false; saveUI(); buildCpTab('render'); };
+    if ($('#cpproxy')) $('#cpproxy').onclick = () => { uiPrefs.useProxies = uiPrefs.useProxies === false; saveUI(); buildCpTab('render'); };
     $('#cpglreset').onclick = () => {
       const ext = main.gl.getExtension('WEBGL_lose_context');
       if (ext) { ext.loseContext(); setTimeout(() => ext.restoreContext(), 150); }
@@ -7340,6 +7843,12 @@ function buildCpTab(id) {
         espejo.html?code=${remote.code}&amp;auto=1</span></div>`
         : `<div class="cprow"><span class="v">Activalo: aparece un código + QR. Desde el celu manejás la grilla,
         escenas, columnas, XY, master, crossfader y macros (FLASH, BUILD, BLACKOUT, PÁNICO) en tiempo real.</span></div>`);
+    b.innerHTML += `<div class="cph">🔗 CLON SINCRONIZADO (video-walls con varias PCs)</div>
+      <div class="cprow"><span class="v">LÍDER: activá el remoto y pasá tu código. SEGUIDORA: poné el código y
+        esta RAVEN VJ repite cada disparo, perilla y escena de la líder, con el mismo beat (${clone.conns.length} clon(es) conectados).</span></div>
+      <div class="cprow"><b>SEGUIR A</b><span style="display:flex;gap:4px">
+        <input id="cpclonecode" maxlength="6" placeholder="código" autocomplete="off" style="width:76px;text-transform:uppercase" ${clone.follower ? 'disabled' : ''}>
+        <button id="cpclonego" class="mini${clone.follower ? ' danger on' : ''}">${clone.follower ? '✕ cortar' : '🔗 seguir'}</button></span></div>`;
     b.innerHTML += `<div class="cph">🤝 B2B (dos VJs)</div>
       <div class="cprow"><span class="v">RECIBIR: activá el remoto de arriba y pasale tu código al otro VJ.
         Su salida cae como un clip 🤝 en una celda vacía — la disparás y mezclás como cualquier clip.</span></div>
@@ -7392,6 +7901,7 @@ function buildCpTab(id) {
     $('#cpremote').onclick = remoteToggle;
     if ($('#cpkick')) $('#cpkick').onclick = kickAllRemotes;
     if ($('#cpb2bgo')) $('#cpb2bgo').onclick = b2bSendToggle;
+    if ($('#cpclonego')) $('#cpclonego').onclick = () => cloneFollow($('#cpclonecode') ? $('#cpclonecode').value : '');
     if ($('#cprauto')) $('#cprauto').onclick = () => {
       uiPrefs.remoteAuto = !uiPrefs.remoteAuto; saveUI(); buildCpTab('remote');
       toast(uiPrefs.remoteAuto ? '📱 Conexiones auto-aceptadas (solo con gente de confianza)' : '📱 Cada conexión te va a preguntar');
@@ -7466,6 +7976,8 @@ function buildCpTab(id) {
       <div class="cprow"><b>🎯 Golpe AGUDO dispara</b><span>
         <select id="cphith" class="mini">${HIT_ACTIONS.map(([v, n]) =>
           `<option value="${v}"${(state.hitHigh || 'off') === v ? ' selected' : ''}>${n}</option>`).join('')}</select></span></div>
+      <div class="cprow"><b>🎶 Autopilot por frases</b><span>
+        <button id="cpphrase" class="mini${state.auto.phrase ? ' on' : ''}" title="el autopilot cambia de clip SOLO al inicio de la frase de 16/32 beats — justo donde cambia el tema">${state.auto.phrase ? 'ON (cada frase)' : 'off (cada N beats)'}</button></span></div>
       <div class="cprow"><b>😴⚡ Auto-escenas por energía</b><span>
         <button id="cpenergy" class="mini${state.autoEnergy ? ' on' : ''}" title="cuando la música baja (breakdown) entra sola tu escena CALMA; cuando vuelve la energía, la FUERTE. Marcá las escenas con click derecho en sus botones">${state.autoEnergy ? 'ON 🤖' : 'off'}</button>
         <span class="v" style="margin-left:6px">😴 ${(state.energyScenes && state.energyScenes.calm >= 0) ? 'ESC ' + (state.energyScenes.calm + 1) : '–'} ·
@@ -7476,6 +7988,7 @@ function buildCpTab(id) {
     if ($('#cprehearse')) $('#cprehearse').onclick = () => { rehearseToggle(); buildCpTab('audio'); };
     if ($('#cphitb')) $('#cphitb').onchange = e => { state.hitBass = e.target.value; markDirty(); };
     if ($('#cphith')) $('#cphith').onchange = e => { state.hitHigh = e.target.value; markDirty(); };
+    if ($('#cpphrase')) $('#cpphrase').onclick = () => { state.auto.phrase = !state.auto.phrase; markDirty(); buildCpTab('audio'); };
     if ($('#cpenergy')) $('#cpenergy').onclick = () => {
       state.autoEnergy = !state.autoEnergy;
       const es = state.energyScenes || { calm: -1, hard: -1 };
@@ -7492,7 +8005,10 @@ function buildCpTab(id) {
       toast(state.autoDrop ? '💥 Auto-DROP activo — la app arma el build y suelta el drop sola' : 'Auto-DROP off');
     };
   } else if (id === 'ses') {
-    b.innerHTML = `<div class="cph">ESTADO DEL SET</div>
+    b.innerHTML = `<div class="cph">📋 NOTAS DEL SET</div>
+      <textarea id="cpnotes" data-noi18n placeholder="el drop del tema 3 va con la escena 5… (viaja con el set)" style="width:100%;box-sizing:border-box;min-height:64px;font-size:11px">${(state.notes || '').replace(/</g, '&lt;')}</textarea>
+      <div class="cph">ESTADO DEL SET</div>
+      <div class="cprow"><b>🧪 Benchmark</b><span><span class="v">${uiPrefs.bench ? uiPrefs.bench.fps + ' fps a ' + uiPrefs.bench.res + (uiPrefs.bench.fps < 30 ? ' 🪫' : ' 🚀') : 'sin medir'}</span> <button id="cpbench" class="mini">medir 3 s</button></span></div>
       ${cpRow('Clips en la grilla', 'clips')}${cpRow('Videos sin enlazar', 'unlink')}
       ${cpRow('Escenas guardadas', 'scn')}${cpRow('Autosave (local)', 'asize')}
       <div class="cph">ACCIONES</div>
@@ -7506,6 +8022,8 @@ function buildCpTab(id) {
       <div class="cprow"><b>Antes de la fiesta</b><span>
         <button id="pfrun" class="mini on">🧪 chequear todo</button></span></div>
       <div id="pfout"></div>`;
+    if ($('#cpnotes')) $('#cpnotes').onchange = e => { state.notes = e.target.value.slice(0, 4000); markDirty(); };
+    if ($('#cpbench')) $('#cpbench').onclick = () => { toast('🧪 Midiendo 3 s… dejá algo sonando'); benchRun(avg => { buildCpTab('ses'); toast('🧪 ' + avg + ' fps a ' + state.res.join('×')); }); };
     $('#cpsave').onclick = () => $('#saveBtn').click();
     $('#cpload').onclick = () => $('#setIn').click();
     $('#cprelink').onclick = () => $('#relinkIn').click();
@@ -7549,7 +8067,7 @@ function mapTargetName(t) {
     flash: 'Flash', panic: 'Pánico', dice: 'Randomizar FX', x: 'Pad X', y: 'Pad Y',
     xfade: 'Crossfader A/B', auto: 'Autopilot', react: '🎉 Ráfaga de reacciones',
     resync: 'Resync (1 del compás)', mono: 'Modo 1× (mono)', build: 'BUILD → DROP', gspeed: 'Velocidad global',
-    party: '🎊 Confeti', resample: '⏺ Resample',
+    party: '🎊 Confeti', resample: '⏺ Resample', spot: '🎯 Foco de atención', paint: '🖌 Pintar en vivo',
   };
   if (flat[k]) return flat[k];
   if (k === 'cue') return `📍 Cue ${+a + 1}`;
@@ -7808,6 +8326,7 @@ function cpTick() {
     const h = JSON.stringify(state.mappings);
     if (h !== cpTick._mh) { cpTick._mh = h; buildCpMaps(); }
   }
+  if (cpTab === 'render' && $('#cpcost')) $('#cpcost').textContent = costText();
   if (cpTab === 'audio') {
     const set = (id, v) => { const e2 = $(id); if (e2) e2.style.width = (v * 100) + '%'; };
     set('#cpbB', audio.bass); set('#cpbM', audio.mid); set('#cpbH', audio.high);
@@ -8025,6 +8544,16 @@ function mapEditorSync() {
   // fila 3: imagen de guía (foto del escenario para alinear las superficies)
   const row3 = el('span');
   row3.style.cssText = 'display:flex;gap:6px;align-items:center;width:100%;font-size:10px;color:var(--dim)';
+  const snapB = el('button', 'mini' + (uiPrefs.mapSnap ? ' on' : '')); snapB.textContent = '🧲';
+  snapB.title = 'imán: las esquinas se pegan a los bordes y a las esquinas de las otras superficies';
+  snapB.onclick = () => { uiPrefs.mapSnap = !uiPrefs.mapSnap; saveUI(); mapEditorSync(); };
+  const dupB = el('button', 'mini'); dupB.textContent = '⧉';
+  dupB.title = 'duplicar esta superficie (corrida un poco) — para video-walls de muchos paneles';
+  dupB.onclick = dupSurface;
+  const numB = el('button', 'mini' + (state.map.numbers ? ' on' : '')); numB.textContent = '🔢';
+  numB.title = 'mostrar el número de cada superficie GRANDE en la salida (para saber qué proyector es cuál en el montaje)';
+  numB.onclick = () => { state.map.numbers = !state.map.numbers; mapEditorSync(); };
+  row3.append(snapB, dupB, numB);
   const gld = el('button', 'mini'); gld.textContent = '🖼 guía';
   gld.title = 'cargar una foto del escenario/objeto para alinear las superficies encima (solo en el editor)';
   gld.onclick = () => {
@@ -8163,6 +8692,37 @@ function setEditPt(sf, idx, xy) { // mutar el punto real y regenerar lo que corr
   else { sf.pts[idx] = xy; computeWarp(sf); }
 }
 const mapStageEl = $('#mapstage');
+function snapPt(xy, sf) { // 🧲 imán a los bordes y a las esquinas de las otras superficies
+  if (!uiPrefs.mapSnap) return xy;
+  const T = .015;
+  let [x, y] = xy;
+  if (Math.abs(x) < T) x = 0; else if (Math.abs(1 - x) < T) x = 1;
+  if (Math.abs(y) < T) y = 0; else if (Math.abs(1 - y) < T) y = 1;
+  for (const o of state.map.surfaces) {
+    if (o === sf) continue;
+    for (const p of editPts(o)) {
+      if (Math.abs(p[0] - x) < T) x = p[0];
+      if (Math.abs(p[1] - y) < T) y = p[1];
+    }
+  }
+  return [x, y];
+}
+function dupSurface() { // ⧉ copia de la superficie elegida, corrida un poco
+  const sf = state.map.surfaces[state.map.sel];
+  if (!sf || state.map.surfaces.length >= 16) return;
+  const c = JSON.parse(JSON.stringify(serialize().map.surfaces[state.map.sel]));
+  c.pts = c.pts.map(p => [Math.min(1, p[0] + .04), Math.max(0, p[1] - .04)]);
+  if (c.mesh) c.mesh.pts = c.mesh.pts.map(p => [Math.min(1, p[0] + .04), Math.max(0, p[1] - .04)]);
+  if (c.bez) { c.bez.c = c.bez.c.map(p => [Math.min(1, p[0] + .04), Math.max(0, p[1] - .04)]); c.bez.h = c.bez.h.map(p => [Math.min(1, p[0] + .04), Math.max(0, p[1] - .04)]); }
+  const md = { on: true, sel: 0, surfaces: [c] };
+  const keep = state.map.surfaces;
+  restoreMapData(md);
+  const nuevo = state.map.surfaces[0];
+  state.map.surfaces = [...keep, nuevo];
+  state.map.sel = state.map.surfaces.length - 1;
+  computeAllWarps(); markDirty(); buildSurfList(); mapEditorSync();
+  toast('⧉ Superficie duplicada (' + state.map.surfaces.length + ')');
+}
 function rebuildMapHandles() {
   mapHandles.forEach(h => h.remove());
   mapHandles = [];
@@ -8178,7 +8738,7 @@ function rebuildMapHandles() {
       const mv = ev => {
         const r = mapStageEl.getBoundingClientRect();
         const s2 = state.map.surfaces[state.map.sel]; if (!s2) return;
-        setEditPt(s2, idx, [clamp01((ev.clientX - r.left) / r.width), clamp01(1 - (ev.clientY - r.top) / r.height)]);
+        setEditPt(s2, idx, snapPt([clamp01((ev.clientX - r.left) / r.width), clamp01(1 - (ev.clientY - r.top) / r.height)], s2));
         syncMapHandles(); markDirty();
       };
       const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
@@ -8792,17 +9352,50 @@ function structHit(uv) { // ¿el click cae sobre el trazo de alguna estructura? 
   }
   return -1;
 }
+/* lienzo 2D COMPARTIDO de overlays: una sola textura por frame, a resolución acotada (los glows 2D son caros) */
+const ov = { cv: null, ctx: null, tex: null, dirty: false, cleared: false };
+function ovBegin() {
+  const W = main.canvas.width, H = main.canvas.height;
+  const sc = uiPrefs.ovFull ? 1 : Math.min(1, 960 / W);
+  const w = Math.max(2, Math.round(W * sc)), h = Math.max(2, Math.round(H * sc));
+  if (!ov.cv || ov.cv.width !== w || ov.cv.height !== h) {
+    ov.cv = document.createElement('canvas'); ov.cv.width = w; ov.cv.height = h;
+    ov.ctx = ov.cv.getContext('2d');
+  }
+  ov.dirty = false; ov.cleared = false;
+}
+function ovCtx() { // el primero que dibuja en el frame limpia el lienzo
+  if (!ov.cleared) { ov.ctx.setTransform(1, 0, 0, 1, 0, 0); ov.ctx.globalAlpha = 1; ov.ctx.clearRect(0, 0, ov.cv.width, ov.cv.height); ov.cleared = true; }
+  ov.dirty = true;
+  return ov.ctx;
+}
+function ovFlush(gl) {
+  if (!ov.dirty || !ov.cv) return;
+  if (!ov.tex) ov.tex = makeTex(gl, 2, 2);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, ov.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ov.cv); }
+  catch (e) { // lienzo manchado por una imagen sin CORS (QR) → apagar el QR y renacer el lienzo
+    pub.qrShow = false; pub.qrImg = null; ov.cv = null;
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    return;
+  }
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  const bp = program(main, 'blit', BLIT_FS);
+  gl.useProgram(bp);
+  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  draw(gl);
+  gl.disable(gl.BLEND);
+}
 function structsDraw(gl) {
   const list = state.structs;
   if (!list || !list.length || !list.some(s => s.on !== false && s.pts && s.pts.length > 1)) return;
-  const W = main.canvas.width, H = main.canvas.height;
-  const me = structsDraw;
-  if (!me.cv || me.cv.width !== W || me.cv.height !== H) {
-    me.cv = document.createElement('canvas'); me.cv.width = W; me.cv.height = H;
-    me.ctx = me.cv.getContext('2d');
-  }
-  const x = me.ctx;
-  x.clearRect(0, 0, W, H);
+  const x = ovCtx(); const W = ov.cv.width, H = ov.cv.height;
   list.forEach((st, si) => {
     if (st.on === false || !st.pts || st.pts.length < 2) return;
     const P = st.pts.map(p => [p[0] * W, (1 - p[1]) * H]);
@@ -8873,37 +9466,11 @@ function structsDraw(gl) {
       x.shadowBlur = 0;
     }
   });
-  if (!me.tex) me.tex = makeTex(gl, 2, 2);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, me.tex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, me.cv); }
-  catch (e) {
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    return;
-  }
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  const bp = program(main, 'blit', BLIT_FS);
-  gl.useProgram(bp);
-  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  draw(gl);
-  gl.disable(gl.BLEND);
 }
 function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) sobre la salida
   const showQR = pub.qrShow && pub.qrImg && pub.qrImg.complete && pub.qrImg.naturalWidth > 0;
   if (!pub.parts.length && !showQR && !pub.vote && !pub.wallCur && !pub.wallShow.length) return;
-  const [W, H] = [main.canvas.width, main.canvas.height];
-  if (!pub.canvas || pub.canvas.width !== W || pub.canvas.height !== H) {
-    pub.canvas = document.createElement('canvas'); pub.canvas.width = W; pub.canvas.height = H;
-    pub.ctx = pub.canvas.getContext('2d');
-  }
-  const x = pub.ctx, now = performance.now();
-  x.clearRect(0, 0, W, H);
+  const x = ovCtx(); const W = ov.cv.width, H = ov.cv.height, now = performance.now();
   if (showQR) { // QR proyectado abajo a la derecha, con zona blanca y leyenda
     const qs = Math.round(H * .24), m = Math.round(H * .035), pad = Math.round(qs * .06);
     const qx = W - qs - m, qy = H - qs - m;
@@ -8964,28 +9531,6 @@ function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) so
     x.fillText(p.txt, 0, 0);
     x.restore();
   }
-  if (!pub.tex) pub.tex = makeTex(gl, 2, 2);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, pub.tex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-  try {
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pub.canvas);
-  } catch (e) { // canvas manchado por una imagen sin CORS → apagar el QR y seguir
-    pub.qrShow = false; pub.qrImg = null; pub.canvas = null;
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    return;
-  }
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  const bp = program(main, 'blit', BLIT_FS);
-  gl.useProgram(bp);
-  gl.uniform1i(U(gl, bp, 'u_tex'), 0);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // canvas 2D viene premultiplicado
-  draw(gl);
-  gl.disable(gl.BLEND);
 }
 
 /* ---------------- control remoto (celular, WebRTC vía PeerJS) ---------------- */
@@ -9001,6 +9546,7 @@ function genRemoteCode() {
 function acceptRemoteConn(conn) {
   conn._ok = true;
   remote.conns.push(conn);
+  if (conn.metadata && conn.metadata.clone) { clone.conns.push(conn); conn.on('close', () => { clone.conns = clone.conns.filter(c => c !== conn); }); }
   try { sendLayout(conn); } catch (e) { }
   toast('📱 Celular aceptado (' + remote.conns.length + ' conectado' + (remote.conns.length > 1 ? 's' : '') + ')');
   buildCpTab('remote');
@@ -9010,6 +9556,7 @@ function askRemoteConn(conn) { // cartel Aceptar / Rechazar con timeout de 20 s
   const tt = el('b');
   tt.textContent = conn.metadata && conn.metadata.espejo
     ? '🪞 Alguien quiere VER tu salida (espejo, solo mirar)'
+    : conn.metadata && conn.metadata.clone ? '🔗 Otra RAVEN VJ quiere CLONARTE (recibir tus disparos y tu beat)'
     : '📱 Un celular quiere conectarse al remoto';
   const row = el('span');
   const ok = el('button', 'mini on'); ok.textContent = '✔ Aceptar';
@@ -9029,6 +9576,7 @@ function kickAllRemotes() {
   const n = remote.conns.length;
   remote.conns.forEach(c => { try { c.close(); } catch (e) { } });
   remote.conns = [];
+  clone.conns = [];
   stopMirror();
   buildCpTab('remote');
   toast(n ? '📱 ' + n + ' celular(es) expulsado(s)' : 'No había nadie conectado');
@@ -9082,6 +9630,7 @@ function loadPeerJS(cb) { // PeerJS local (alojado con la app); CDN solo de resp
 function layoutMsg() {
   return {
     t: 'layout', cols: COLS, bpm: state.bpm, deck: state.deckIdx,
+    map: state.map.on ? state.map.surfaces.map(sf => ({ pts: sf.pts, simple: !sf.mesh && !sf.bez })) : null, // 🗺 para editar desde la tablet
     theme: { vars: (THEMES[state.theme] || THEMES.fenix).vars, grad: (THEMES[state.theme] || THEMES.fenix).grad },
     grid: state.grid.map(row => row.map(c => ({
       k: c.kind,
@@ -9101,6 +9650,16 @@ function remoteMsg(d, conn) {
   else if (d.t === 'scene') recallScene(+d.i);
   else if (d.t === 'tgt') applyTarget(String(d.id), +d.val || 0, d.kind || 'cc', d.on ? 1 : 0);
   else if (d.t === 'espejo') mirrorTo(conn);
+  else if (d.t === 'mappt') remoteMapPt(d);
+}
+function remoteMapPt(d) { // 🗺 una esquina movida desde la tablet (solo superficies planas)
+  const sf = state.map.surfaces[d.s | 0];
+  if (!sf || sf.mesh || sf.bez) return;
+  const i = d.i | 0;
+  if (i < 0 || i > 3) return;
+  sf.pts[i] = [clamp01(+d.x || 0), clamp01(+d.y || 0)];
+  computeWarp(sf); markDirty();
+  if (mapWinOn) syncMapHandles();
 }
 /* ---------------- espejo de salida 🪞: ver la salida en cualquier browser (y en OBS) ---------------- */
 let mirrorStream = null;
@@ -10089,7 +10648,8 @@ function buildPropClip(b) {
       ${pRow('🔂 Loop musical', `<span style="display:flex;gap:4px;align-items:center">
         <select id="pplab" class="mini">${[2, 4, 8, 16].map(n => `<option value="${n}"${n === 4 ? ' selected' : ''}>${n}♪</option>`).join('')}</select>
         <button class="mini" id="pplabgo" title="marca inicio ACÁ y fin exactamente N beats después (al BPM actual): loop clavado a la música">marcar desde acá</button></span>`)}
-      ${pRow('⏪ Reversa', `<button class="mini" id="pprev" title="convierte el recorte (máx 6 s) a frames en memoria → reproducción en REBOTE ida y vuelta, imposible con video normal en el browser">convertir a rebote ↔</button>`)}`;
+      ${pRow('⏪ Reversa', `<button class="mini" id="pprev" title="convierte el recorte (máx 6 s) a frames en memoria → reproducción en REBOTE ida y vuelta, imposible con video normal en el browser">convertir a rebote ↔</button>`)}
+      ${pRow('🎞 Proxy liviano', cell.isProxy ? `<span class="v">✔ usando proxy 540p</span> <button class="mini" id="ppproxyx">quitar</button>` : `<button class="mini" id="ppproxy" title="genera una copia 540p liviana del video (tarda lo que dura el clip) y la usa en vez del original — PCs modestas lo agradecen; queda guardada en esta PC">generar 540p</button>`)}`;
   } else if (cell.kind === 'glb') {
     const g3 = cell.g3 || (cell.g3 = { spin: .5, expl: 0, exMod: 'beat', color: 'cycle' });
     const anims = (cell.glb && cell.glb.anims) || [];
@@ -10196,6 +10756,8 @@ function buildPropClip(b) {
     toast('🔂 Loop de ' + beats + ' beats (' + secs.toFixed(1) + ' s) desde ' + cell.inT + 's — clavado al BPM ' + state.bpm);
   };
   if ($('#pprev')) $('#pprev').onclick = () => videoToFrames(cell);
+  if ($('#ppproxy')) $('#ppproxy').onclick = () => makeProxy(cell);
+  if ($('#ppproxyx')) $('#ppproxyx').onclick = () => removeProxy(cell);
   if ($('#ppg3spin')) { // controles del objeto 3D 🧊
     const g3 = cell.g3;
     if ($('#ppg3anim')) $('#ppg3anim').onchange = e => { g3.anim = +e.target.value; markDirty(); };
@@ -10557,6 +11119,11 @@ const MENUS = {
     '-',
     { label: '📸 Foto de la salida (PNG)', fn: snapshotPNG },
     { label: '⏱ Cuenta regresiva en la salida…', fn: countdownPrompt },
+    { label: '🎙 Grabar performance (on/off)', fn: perfRecToggle },
+    { label: '▶ Reproducir performance (loop)', fn: () => perfPlayStart(true) },
+    { label: '⏹ Parar reproducción', fn: perfPlayStop },
+    { label: '📊 Resumen del set', fn: statsReport },
+    '-',
     { label: '📔 Diario de la noche (foto c/5 min)', fn: diaryToggle },
     { label: '📔 Descargar galería del diario', fn: diaryExport },
     '-',
@@ -11329,6 +11896,9 @@ setTimeout(autoRelinkBoot, 1800); // los videos vuelven solos si hay permisos gu
 setTimeout(autoFileBoot, 2600); // reconectar el auto-guardado a archivo de otras sesiones
 fontsBoot(); // recargar las tipografías .ttf guardadas en esta PC
 buildMacroBar(); // 🎛 barra de macros (necesita midiRefs ya inicializado)
+paintWire(); // 🖌 el monitor de salida como lienzo
+setTimeout(warmShaders, 3500); // 🔥 compilar todos los shaders de fondo: cero tirones en vivo
+setTimeout(benchBoot, 9000); // 🧪 primera vez: medir la máquina y sugerir perfil
 (function kioskBoot() { // 🤖 modo kiosko: la app corre sola (instalaciones, vidrieras)
   const q = new URLSearchParams(location.search);
   if (q.get('kiosk') !== '1') return;
@@ -11338,6 +11908,7 @@ buildMacroBar(); // 🎛 barra de macros (necesita midiRefs ya inicializado)
     if (col >= 1) qTriggerColumn(col - 1);
     const sc = +q.get('scene');
     if (sc >= 1) recallScene(sc - 1);
+    if (q.get('perf') === '1') perfPlayStart(true); // 🎙 tu performance grabada, en loop
   }, 2500);
   setInterval(() => { // watchdog: si el render se murió, la app renace sola
     if (performance.now() - (renderTick._last || 0) > 15000) location.reload();

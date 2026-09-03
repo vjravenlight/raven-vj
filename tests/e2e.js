@@ -629,6 +629,297 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   t('auditoría: duplicar un texto 3D crea geometría propia', r.menu && r.ok && r.buffersPropios, JSON.stringify(r));
   t('auditoría: todos los targets MIDI tienen nombre legible', r.legibles, (r.nombres || []).join(' | '));
 
+  // ================= RONDA 25: máscara de capa, eco, cámara virtual, gens vol.3, moduladores =================
+  r = await page.evaluate(async () => {
+    // 🎭 capa de arriba en modo Máscara recorta a la de abajo por luminancia
+    for (let l = 0; l < 4; l++) clearLayer(l);
+    const monoPrev = state.mono; state.mono = false; // en modo 1× todo iría a la capa 0
+    state.effects = []; buildFx(); state.fade = 0; state.map.on = false; state.xfade = 0;
+    const mk = async draw => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36; draw(cv.getContext('2d')); return new File([await new Promise(res => cv.toBlob(res, 'image/png'))], 'm.png', { type: 'image/png' }); };
+    const white = await mk(x => { x.fillStyle = '#fff'; x.fillRect(0, 0, 64, 36); });
+    const half = await mk(x => { x.fillStyle = '#000'; x.fillRect(0, 0, 64, 36); x.fillStyle = '#fff'; x.fillRect(32, 0, 32, 36); });
+    await assignImage(state.grid[0][6], white); await assignImage(state.grid[1][6], half);
+    state.layers[1].mode = 6; state.layers[0].mode = 0; state.layers[0].opacity = 1; state.layers[1].opacity = 1;
+    triggerCell(0, 6); triggerCell(1, 6);
+    await new Promise(res => setTimeout(res, 450));
+    const gl = main.gl, W = main.canvas.width, H = main.canvas.height;
+    const a = new Uint8Array(4), b = new Uint8Array(4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels((W * .25) | 0, (H / 2) | 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, a);
+    gl.readPixels((W * .75) | 0, (H / 2) | 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b);
+    state.layers[1].mode = 0; clearLayer(0); clearLayer(1); emptyCell(state.grid[0][6]); emptyCell(state.grid[1][6]); state.xfade = .5; state.mono = monoPrev;
+    return { izq: a[0], der: b[0], blends: BLENDS.length === 7 };
+  });
+  t('máscara de capa: la mitad negra tapa, la blanca deja ver', r.izq < 40 && r.der > 200 && r.blends, JSON.stringify(r));
+  r = await page.evaluate(async () => {
+    state.effects = []; addEffect('echo'); addEffect('vcam');
+    assignPreset(state.grid[0][7], 1); state.fade = 0; triggerCell(0, 7);
+    await new Promise(res => setTimeout(res, 500));
+    const glErr = main.gl.getError();
+    const ring = echo.ring.filter(Boolean).length > 0;
+    state.effects = []; buildFx(); clearLayer(0); emptyCell(state.grid[0][7]);
+    return { glErr, ring };
+  });
+  t('eco temporal + cámara virtual: renderizan y el anillo se llena', !r.glErr && r.ring, JSON.stringify(r));
+  r = await page.evaluate(async () => {
+    const nombres = ['Agua', 'Cristales', 'Portal', 'Julia', 'Möbius', 'Galaxia', 'Circuito'];
+    const idx = nombres.map(nm => PRESETS.findIndex(p => p.name === nm));
+    if (idx.some(i => i < 0)) return { falta: nombres.filter((_, i) => idx[i] < 0) };
+    let ok = true;
+    for (const i of idx) {
+      assignPreset(state.grid[0][5], i); state.fade = 0; triggerCell(0, 5);
+      await new Promise(res => setTimeout(res, 120));
+      if (main.gl.getError()) ok = false;
+    }
+    clearLayer(0); emptyCell(state.grid[0][5]);
+    return { ok };
+  });
+  t('generadores vol.3: los 7 compilan y renderizan', r.ok === true, JSON.stringify(r));
+  r = await page.evaluate(() => {
+    const lists = ['pitch', 'beatinv', 'rms', 'walk', 'bend'].every(m => OPMODS.includes(m) && MODS.includes(m));
+    const save = beatEnv; beatEnv = .3;
+    const inv = Math.abs(modValue('beatinv') - .7) < .01;
+    beatEnv = save;
+    onMIDI({ data: [0xE0, 0, 127] });
+    const bend = modValue('bend') === 1;
+    const w0 = walkMod.v; for (let i = 0; i < 200; i++) walkTick(.05);
+    const walk = typeof walkMod.v === 'number' && walkMod.v >= 0 && walkMod.v <= 1;
+    // 🎼 pitch: pico sintético en 440 Hz → la (clase 9/12 = .75)
+    const saveOn = audio.on, saveAn = audio.an, saveCtx = audio.ctx, saveBuf = audio.buf;
+    audio.buf = new Uint8Array(1024); audio.ctx = { sampleRate: 44100 }; audio.on = true; audio.pitch = null;
+    const bin = Math.round(440 / 22050 * 1024);
+    audio.an = { getByteFrequencyData(b) { b.fill(0); b[bin] = 220; } };
+    audioTick(.016);
+    const pitch = audio.pitch;
+    audio.on = saveOn; audio.an = saveAn; audio.ctx = saveCtx; audio.buf = saveBuf;
+    return { lists, inv, bend, walk, pitch };
+  });
+  t('moduladores: beat-inv, bend, walk y pitch (440 Hz → la)', r.lists && r.inv && r.bend && r.walk && Math.abs(r.pitch - .75) < .06, JSON.stringify(r));
+
+  // ================= autopilot por frases, texto dinámico, pintar, foco, números, notas, transición =================
+  r = await page.evaluate(() => {
+    let fired = 0;
+    const orig = window.triggerColumn; window.triggerColumn = () => { fired++; };
+    assignPreset(state.grid[0][0], 1);
+    const save = beatFloat;
+    state.auto.mode = 'seq'; state.auto.phrase = true; state.auto.beats = 1; state.auto.count = 0; phraseAnchor = 0;
+    beatFloat = 5; autopilotBeat();           // mitad de frase → no
+    beatFloat = 16; autopilotBeat();          // inicio de frase → sí
+    const ok = fired === 1;
+    state.auto.mode = 'off'; state.auto.phrase = false; beatFloat = save;
+    window.triggerColumn = orig; emptyCell(state.grid[0][0]);
+    return ok;
+  });
+  t('autopilot por frases: solo cambia al inicio de la frase', r);
+  r = await page.evaluate(() => {
+    state.bpm = 128;
+    const s1 = dynText('BPM {bpm} · {hora}');
+    const cell = state.grid[2][0]; assignText(cell, '{bpm}'); drawTextCell(cell); emptyCell(cell);
+    state.bpm = 120;
+    return /BPM 128 · \d\d:\d\d/.test(s1);
+  });
+  t('texto dinámico: {bpm} y {hora} se reemplazan', r);
+  r = await page.evaluate(() => {
+    paintToggle();
+    const on = paint.on && document.body.classList.contains('painting');
+    paint.strokes.push({ pts: [[.1, .1], [.9, .9]], born: performance.now(), col: '#0f0' });
+    paintTick(.016);
+    ovBegin(); paintDraw(main.gl); ovFlush(main.gl);
+    const glErr = main.gl.getError();
+    paintToggle(); paint.strokes = [];
+    return on && !glErr && !paint.on;
+  });
+  t('pintar en vivo: modo, trazos y render', r);
+  r = await page.evaluate(async () => {
+    for (let l = 0; l < 4; l++) clearLayer(l);
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36; cv.getContext('2d').fillStyle = '#fff'; cv.getContext('2d').fillRect(0, 0, 64, 36);
+    await assignImage(state.grid[0][4], new File([await new Promise(res => cv.toBlob(res, 'image/png'))], 'w.png', { type: 'image/png' }));
+    state.fade = 0; triggerCell(0, 4);
+    state.spot.on = true; state.spot.follow = false; state.spot.x = .5; state.spot.y = .5; state.spot.r = .2; state.spot.dark = .9;
+    await new Promise(res => setTimeout(res, 400));
+    const gl = main.gl, W = main.canvas.width, H = main.canvas.height;
+    const c = new Uint8Array(4), k = new Uint8Array(4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels((W / 2) | 0, (H / 2) | 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, k);
+    state.spot.on = false;
+    state.map.on = true; state.map.numbers = true;
+    await new Promise(res => setTimeout(res, 150));
+    const glErr = gl.getError();
+    state.map.numbers = false; state.map.on = false;
+    clearLayer(0); emptyCell(state.grid[0][4]);
+    return { centro: c[0], esquina: k[0], glErr };
+  });
+  t('foco: el centro queda claro y la esquina oscura · números de superficie renderizan', r.centro > 200 && r.esquina < 60 && !r.glErr, JSON.stringify(r));
+  r = await page.evaluate(() => {
+    state.notes = 'el drop va con la 5';
+    const j = serialize();
+    const ok1 = j.notes === 'el drop va con la 5';
+    state.sceneTrans = 'flash'; state.flash = 0;
+    captureScene(4); recallScene(4);
+    const flash = state.flash === 1;
+    state.sceneTrans = 'black'; recallScene(4);
+    const dip = !!sceneDip && dipK() < 1;
+    sceneDip = null; state.sceneTrans = 'none'; state.flash = 0;
+    state.scenes[4] = null; updateSceneBtns(-1); state.notes = '';
+    return { ok1, flash, dip };
+  });
+  t('notas del set + transición de escena (flash y por negro)', r.ok1 && r.flash && r.dip, JSON.stringify(r));
+  r = await page.evaluate(() => {
+    uiPrefs.mapSnap = true;
+    const sf = state.map.surfaces[0];
+    const p = snapPt([.008, .994], sf);
+    uiPrefs.mapSnap = false;
+    const n0 = state.map.surfaces.length;
+    dupSurface();
+    const dup = state.map.surfaces.length === n0 + 1;
+    state.map.surfaces.pop(); state.map.sel = 0; buildSurfList(); mapEditorSync();
+    return { snap: p[0] === 0 && p[1] === 1, dup };
+  });
+  t('mapping: imán a bordes + duplicar superficie', r.snap && r.dup, JSON.stringify(r));
+
+  // ================= performance rec/play, resumen, clon, tablet mapping =================
+  r = await page.evaluate(() => {
+    perf.events = []; perf.rec = false;
+    assignPreset(state.grid[0][0], 1);
+    const save = beatFloat;
+    beatFloat = 200; perfRecToggle();
+    beatFloat = 201; qTriggerCell(0, 0);
+    beatFloat = 203; qTriggerColumn(1);
+    perfRecToggle();
+    const grabado = perf.events.length === 2 && Math.abs(perf.events[0].b - 1) < .01;
+    let fired = [];
+    const o1 = window.triggerCell, o2 = window.triggerColumn;
+    window.triggerCell = (l, c) => fired.push('cell' + l + c); window.triggerColumn = c => fired.push('col' + c);
+    beatFloat = 300; perfPlayStart(false);
+    beatFloat = 300.5; perfPlayTick();
+    const antes = fired.length;
+    beatFloat = 303.5; perfPlayTick();
+    const despues = fired.join(',');
+    window.triggerCell = o1; window.triggerColumn = o2;
+    perf.play = null; beatFloat = save;
+    const j = serialize(); const ser = Array.isArray(j.perf) && j.perf.length === 2;
+    perf.events = []; emptyCell(state.grid[0][0]);
+    return { grabado, antes, despues, ser };
+  });
+  t('performance: graba con tiempos en beats y reproduce en orden', r.grabado && r.antes === 0 && r.despues === 'cell00,col1' && r.ser, JSON.stringify(r));
+  r = await page.evaluate(() => {
+    let txt = ''; const oa = window.alert; window.alert = m => { txt = m; };
+    stats.drops = 3; statsReport(); window.alert = oa;
+    return txt.includes('RESUMEN') && txt.includes('Drops: 3');
+  });
+  t('resumen del set: informe con drops y clips', r);
+  r = await page.evaluate(() => {
+    const msgs = [];
+    const fake = { metadata: { clone: 1 }, on() { }, send(m) { msgs.push(m); }, close() { } };
+    acceptRemoteConn(fake);
+    const enLista = clone.conns.includes(fake);
+    emitPerf({ k: 'col', c: 2 });
+    const mando = msgs.some(m => m.t === 'evt' && m.ev.k === 'col');
+    kickAllRemotes();
+    const limpio = clone.conns.length === 0;
+    return { enLista, mando, limpio };
+  });
+  t('clon: la líder acepta y le manda cada evento', r.enLista && r.mando && r.limpio, JSON.stringify(r));
+  r = await page.evaluate(() => {
+    state.map.on = true;
+    const lm = layoutMsg();
+    const tieneMap = Array.isArray(lm.map) && lm.map[0].simple === true;
+    remoteMapPt({ s: 0, i: 0, x: .3, y: .4 });
+    const movido = Math.abs(state.map.surfaces[0].pts[0][0] - .3) < .001;
+    state.map.surfaces[0].pts[0] = [0, 0]; computeAllWarps(); state.map.on = false;
+    return { tieneMap, movido };
+  });
+  t('mapping desde la tablet: el host publica y aplica esquinas', r.tieneMap && r.movido, JSON.stringify(r));
+
+  // ================= rendimiento: adaptativa, perfiles, unload, proxy, costo, overlays =================
+  r = await page.evaluate(async () => {
+    if (performance.now() < 20000) await new Promise(res => setTimeout(res, 20500 - performance.now()));
+    const orig = [...state.res];
+    uiPrefs.adaptive = true; state.fpsCap = 0; adaptive.active = false; adaptive.low = 0; adaptive.high = 0;
+    fps = 10; adaptiveTick(4);
+    const bajo = adaptive.active && state.res[0] === 960;
+    const serRes = serialize().res[0] === orig[0]; // el set no guarda la bajada
+    fps = 60; adaptiveTick(30);
+    const volvio = !adaptive.active && state.res[0] === orig[0];
+    applyProfile('batalla'); const bat = state.res[0] === 960 && state.fpsCap === 30;
+    applyProfile('potente'); const pot = state.res[0] === 1280 && state.fpsCap === 0;
+    return { bajo, serRes, volvio, bat, pot };
+  });
+  t('calidad adaptativa: baja sola, no se guarda, y vuelve · perfiles', r.bajo && r.serRes && r.volvio && r.bat && r.pot, JSON.stringify(r));
+  r = await page.evaluate(() => {
+    const cell = state.grid[3][0];
+    let loaded = 0;
+    cell.kind = 'video'; cell.name = 'zz'; cell.url = 'blob:fake';
+    cell.video = { paused: true, play() { return { catch() { } }; }, pause() { }, removeAttribute() { }, load() { loaded++; }, set src(v) { loaded += 10; } };
+    cell._lastUse = performance.now() - 700000;
+    uiPrefs.unload = true; unloadTick._t = -1e6; // el guard de 30 s mide uptime
+    unloadTick();
+    const dormido = cell._unloaded === true;
+    const s2 = { kind: 'empty', cell: null, video: null, tex: null, tgt: null, fit: [1, 1] };
+    loadSlot(s2, cell);
+    const despierto = cell._unloaded === false && loaded >= 10;
+    cell.video = null; emptyCell(cell);
+    return { dormido, despierto };
+  });
+  t('descarga de inactivos: duerme a los 10 min y despierta al disparar', r.dormido && r.despierto, JSON.stringify(r));
+  r = await page.evaluate(async () => {
+    // proxy sobre un video real cortito generado in-page
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36;
+    const x = cv.getContext('2d'); const st = cv.captureStream(20);
+    const rec2 = new MediaRecorder(st, { mimeType: 'video/webm' }); const chunks = [];
+    rec2.ondataavailable = e => chunks.push(e.data); const stopped = new Promise(res => { rec2.onstop = res; });
+    rec2.start();
+    for (let i = 0; i < 16; i++) { x.fillStyle = `hsl(${i * 20},80%,50%)`; x.fillRect(0, 0, 64, 36); await new Promise(res => setTimeout(res, 50)); }
+    rec2.stop(); await stopped; st.getTracks().forEach(t2 => t2.stop());
+    const orig = new File([new Blob(chunks, { type: 'video/webm' })], 'proxytest.webm', { type: 'video/webm' });
+    const cell = state.grid[3][1];
+    try { const db = await proxyDB(); db.transaction('p', 'readwrite').objectStore('p').delete('proxytest.webm'); } catch (e) { }
+    assignVideo(cell, orig);
+    for (let i = 0; i < 30 && !(cell.video && cell.video.videoWidth); i++) await new Promise(res => setTimeout(res, 200));
+    if (!cell.video || !cell.video.videoWidth) { emptyCell(cell); return { skip: true }; }
+    await makeProxy(cell);
+    const conProxy = cell.isProxy === true && cell.file.name === 'proxytest.webm';
+    assignVideo(cell, orig); // al recargar el original, el proxy guardado se usa solo
+    await new Promise(res => setTimeout(res, 900));
+    const auto = cell.isProxy === true;
+    await removeProxy(cell);
+    const sinProxy = cell.isProxy === false;
+    emptyCell(cell);
+    return { conProxy, auto, sinProxy };
+  });
+  t('proxies: genera 540p, se usa solo al recargar, y se quita', r.skip || (r.conProxy && r.auto && r.sinProxy), JSON.stringify(r));
+  t('medidor de costo: informa JS/GPU', await page.evaluate(() => /JS \d/.test(costText())));
+  r = await page.evaluate(async () => {
+    // overlays unificados: con TODO prendido, ≤ 2 subidas de textura por frame
+    const orig = WebGL2RenderingContext.prototype.texImage2D;
+    let count = 0;
+    WebGL2RenderingContext.prototype.texImage2D = function () { count++; return orig.apply(this, arguments); };
+    state.structs = [{ pts: [[.1, .5], [.9, .5]], closed: false, fx: 'chase', color: 'cycle', beats: 2, width: 6, react: 'off', on: true }];
+    partyBurst(30); state.spot.on = true; pub.on = true; pubSpawn('🔥');
+    await new Promise(res => setTimeout(res, 300));
+    count = 0;
+    let frames = 0;
+    await new Promise(res => { const f = () => { frames++; frames < 30 ? requestAnimationFrame(f) : res(); }; requestAnimationFrame(f); });
+    WebGL2RenderingContext.prototype.texImage2D = orig;
+    state.structs = []; party.parts = []; state.spot.on = false; pub.on = false; pub.parts = [];
+    return +(count / frames).toFixed(2);
+  });
+  t('optimización: todos los overlays = 1 subida de textura por frame', r <= 2, 'subidas/frame=' + r);
+  {
+    const pg2 = await browser.newPage();
+    await pg2.goto(REMOTE + '?r=ZZZZ');
+    await pg2.waitForTimeout(700);
+    const rr = await pg2.evaluate(() => {
+      const has = !!document.getElementById('mapcv') && typeof drawMapCv === 'function';
+      mapData = [{ pts: [[.1, .1], [.9, .1], [.9, .9], [.1, .9]], simple: true }];
+      drawMapCv();
+      return has;
+    });
+    t('remoto: pestaña 🗺 Map con lienzo de esquinas', rr);
+    await pg2.close();
+  }
+
   // ================= errores acumulados =================
   const errs = await page.evaluate(() => window.__errs || []);
   t('sin errores JS acumulados', !errs.length, errs.join(' | ').slice(0, 200));

@@ -140,6 +140,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;heigh
     <button data-rt="mezcla">🎚 Mezcla</button>
     <button data-rt="seq">🥁 Bucles</button>
     <button data-rt="macros">⚡ Macros</button>
+    <button data-rt="map">🗺 Map</button>
   </div>
 
   <div class="tab on" data-tab="grilla">
@@ -179,6 +180,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;heigh
     </div>
   </div>
 
+  <div class="tab" data-tab="map">
+    <div class="sec"><h3>MAPPING DESDE ACÁ</h3>
+      <div style="font-size:11px;opacity:.7;margin-bottom:6px">Pará al lado del proyector y arrastrá las esquinas 🟠 mirando la pared. (Superficies planas; el mapping tiene que estar ON en la compu.)</div>
+      <canvas id="mapcv" width="640" height="360" style="width:100%;max-width:640px;aspect-ratio:16/9;background:#111;border:1px solid #333;border-radius:8px;touch-action:none;display:block"></canvas>
+    </div>
+  </div>
   <div class="tab" data-tab="macros">
     <div class="sec macros"><h3 style="grid-column:1/3">MACROS</h3>
       <button id="mBuild">⚡ BUILD (mantener)</button>
@@ -292,7 +299,7 @@ function may(what) { // qué puede tocar este rol
   return rol === what; // seq | macros
 }
 function applyRol() {
-  const tabs = { grilla: may('grilla'), mezcla: may('mezcla'), seq: may('seq') || rol === 'todo', macros: may('macros') || rol === 'todo' };
+  const tabs = { grilla: may('grilla'), mezcla: may('mezcla'), seq: may('seq') || rol === 'todo', macros: may('macros') || rol === 'todo', map: rol === 'todo' };
   if (rol === 'seq') { tabs.grilla = tabs.mezcla = tabs.macros = false; tabs.seq = true; }
   if (rol === 'macros') { tabs.grilla = tabs.mezcla = tabs.seq = false; tabs.macros = true; }
   document.querySelectorAll('#rtabs button').forEach(b => {
@@ -343,6 +350,7 @@ function connect() {
       if (!d || d.t !== 'layout') return;
       layout = d;
       applyThemeBpm(d);
+      if (!mapDrag) { mapData = d.map || null; drawMapCv(); } // 🗺 (no pisar mientras arrastrás)
       // reconstruir la UI solo si algo cambió (si no, roba toques cada 3s)
       const key = JSON.stringify([d.grid, d.cols, d.scenes, d.deck]);
       if (key !== renderLayout._key) { renderLayout._key = key; renderLayout(d); }
@@ -367,6 +375,47 @@ function applyThemeBpm(d) {
     seq.bpm = d.bpm; $('#seqBpm').value = d.bpm;
     if (seq.on) seqRestart();
   }
+}
+/* ---- 🗺 mapping desde la tablet: las esquinas se arrastran acá y viajan a la compu ---- */
+let mapData = null, mapDrag = null, mapLastSend = 0;
+const mapcv = document.getElementById('mapcv');
+function drawMapCv() {
+  if (!mapcv) return;
+  const x = mapcv.getContext('2d'), W = mapcv.width, H = mapcv.height;
+  x.fillStyle = '#111'; x.fillRect(0, 0, W, H);
+  if (!mapData) { x.fillStyle = '#888'; x.font = '16px sans-serif'; x.textAlign = 'center'; x.fillText('el mapping está apagado en la compu', W / 2, H / 2); return; }
+  mapData.forEach((sf, si) => {
+    x.strokeStyle = sf.simple ? '#ff7a1a' : '#666'; x.lineWidth = 2;
+    x.beginPath();
+    sf.pts.forEach((p, i) => i ? x.lineTo(p[0] * W, (1 - p[1]) * H) : x.moveTo(p[0] * W, (1 - p[1]) * H));
+    x.closePath(); x.stroke();
+    const cx = sf.pts.reduce((a, p) => a + p[0], 0) / sf.pts.length * W, cy = (1 - sf.pts.reduce((a, p) => a + p[1], 0) / sf.pts.length) * H;
+    x.fillStyle = '#fff'; x.font = 'bold 18px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(String(si + 1), cx, cy);
+    if (sf.simple) sf.pts.forEach(p => { x.fillStyle = '#ff7a1a'; x.beginPath(); x.arc(p[0] * W, (1 - p[1]) * H, 10, 0, 6.2832); x.fill(); });
+  });
+}
+if (mapcv) {
+  const uvOf = e => { const rc = mapcv.getBoundingClientRect(); return [Math.max(0, Math.min(1, (e.clientX - rc.left) / rc.width)), Math.max(0, Math.min(1, 1 - (e.clientY - rc.top) / rc.height))]; };
+  mapcv.addEventListener('pointerdown', e => {
+    if (!mapData) return;
+    const uv = uvOf(e); let best = null, bd = .07;
+    mapData.forEach((sf, si) => { if (!sf.simple) return; sf.pts.forEach((p, i) => { const d = Math.hypot(p[0] - uv[0], p[1] - uv[1]); if (d < bd) { bd = d; best = { si, i }; } }); });
+    if (best) { mapDrag = best; mapcv.setPointerCapture(e.pointerId); e.preventDefault(); }
+  });
+  mapcv.addEventListener('pointermove', e => {
+    if (!mapDrag || !mapData) return;
+    const uv = uvOf(e);
+    mapData[mapDrag.si].pts[mapDrag.i] = uv;
+    drawMapCv();
+    const now = Date.now();
+    if (now - mapLastSend > 40) { mapLastSend = now; send({ t: 'mappt', s: mapDrag.si, i: mapDrag.i, x: uv[0], y: uv[1] }); }
+  });
+  const upM = () => {
+    if (mapDrag && mapData) { const p = mapData[mapDrag.si].pts[mapDrag.i]; send({ t: 'mappt', s: mapDrag.si, i: mapDrag.i, x: p[0], y: p[1] }); }
+    mapDrag = null;
+  };
+  mapcv.addEventListener('pointerup', upM); mapcv.addEventListener('pointercancel', upM);
 }
 function renderLayout(d) {
   const dk = $('#decks');

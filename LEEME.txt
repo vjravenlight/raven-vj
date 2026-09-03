@@ -136,6 +136,105 @@ AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
   psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
   el golpe visual del drop sale solo.
 
+MÁSCARA DE CAPA 🎭
+  Modo de mezcla nuevo en cada capa: "Máscara". La capa de arriba
+  RECORTA a la de abajo por luminancia: un texto o figura en la
+  capa 2 = ventana por donde se ve el video de la capa 1. Blanco
+  deja ver, negro tapa.
+
+ECO TEMPORAL 👻 (efecto)
+  Mezcla la salida con copias de hace ¼ a 4 beats (clones en el
+  tiempo, no en el espacio). El "efecto fantasma" de los breakdowns.
+
+CÁMARA VIRTUAL 🔍 (efecto)
+  Zoom sobre la mezcla final; con "seguir pad XY" el pad pasea la
+  cámara por la imagen. Efecto de cámara en vivo sobre tus visuales.
+
+GENERADORES VOL.3 🧩
+  7 nuevos: 💧 Agua, 💎 Cristales, 🌀 Portal, 🌌 Julia (fractal),
+  ♾ Möbius, ✨ Galaxia, 🔌 Circuito.
+
+PACK DE MODULADORES 📦
+  Fuentes nuevas para cualquier perilla: 🎼 pitch (la NOTA dominante
+  de la música → tono de los visuales siguiendo la melodía, pura
+  matemática), beat invertido (ducking: se hunde en cada bombo),
+  rms (volumen general), walk (caminata aleatoria suave) y bend
+  (rueda de pitch bend del MIDI).
+
+AUTOPILOT POR FRASES 🎶
+  Panel → Audio: el autopilot cambia de clip SOLO al inicio de la
+  frase de 16/32 beats, donde cambia el tema. Suena a VJ humano.
+
+PINTAR EN VIVO 🖌
+  Botón 🖌 en el monitor de SALIDA: dibujá con el mouse/tableta y
+  los trazos salen brillando en la salida y se desvanecen solos.
+  Graffiti en vivo. Mapeable a MIDI.
+
+FOCO DE ATENCIÓN 🎯
+  Panel → Render → FOCO: oscurece todo menos un círculo de luz que
+  sigue al pad XY (o queda fijo). Para señalar al DJ o a alguien.
+
+TEXTO DINÁMICO 🕐
+  En cualquier texto escribí {hora}, {seg}, {fecha}, {bpm},
+  {compas} o {cuenta} y se actualizan solos. Reloj gigante en
+  pantalla, el BPM en vivo para el DJ.
+
+TRANSICIÓN ENTRE ESCENAS 🌀
+  Selector al lado de las escenas: al cambiar de escena, un golpe:
+  ⚡ flash, ⬛ por negro, ▦ glitch o 🎊 confeti.
+
+MAPPING: IMÁN, DUPLICAR Y NÚMEROS 📐
+  En el editor: 🧲 imán (las esquinas se pegan a los bordes y a las
+  otras superficies), ⧉ duplicar superficie (video-walls de muchos
+  paneles) y 🔢 números gigantes en la salida para saber qué
+  proyector es cuál durante el montaje.
+
+MAPPING DESDE LA TABLET 📱🗺
+  Remoto → pestaña "🗺 Map": vas hasta la pared con la tablet y
+  arrastrás las esquinas de las superficies mirando el proyector.
+  Se acabó ir y venir a la compu. (Superficies planas, mapping ON.)
+
+GRABAR PERFORMANCE 🎙
+  Archivo → "Grabar performance": graba TODO lo que tocás (disparos,
+  perillas, escenas) con su tiempo en beats. Después "Reproducir"
+  y la app repite tu set solo, en loop. Con el kiosko:
+  ?kiosk=1&perf=1 → tu set exacto corriendo en una instalación.
+
+CLON SINCRONIZADO 🔗
+  Panel → Remoto → CLON: una segunda PC con RAVEN VJ sigue a la
+  primera — cada disparo, perilla y escena, con el mismo beat. Para
+  video-walls con máquinas separadas (el B2B mezcla; esto replica).
+
+RESUMEN DEL SET 📊
+  Archivo → "Resumen del set": duración, clips más usados, cuántos
+  drops, escenas favoritas. Para aprender de tu propio set.
+
+NOTAS DEL SET 📋
+  Panel → Sesión: un bloc de notas que viaja con el set.
+
+MACHINES MODESTAS 🐢 — el pack de rendimiento
+  ⚙ CALIDAD ADAPTATIVA (Render): si los fps caen, la app baja sola a
+    960×540 y vuelve cuando la PC se recupera. Como los videojuegos.
+  🎞 PROXIES: en las propiedades de un video pesado, "generar 540p"
+    crea una copia liviana (tarda lo que dura el clip), la usa en vez
+    del original y queda guardada en esta PC — la próxima vez que
+    cargues ese video, se usa el proxy solo. LA diferencia para
+    máquinas modestas. Se quita con un click.
+  🪫🚀 PERFILES: "PC de batalla" (960×540, 30 fps, todo lo pesado
+    apagado) y "PC potente" con un click.
+  🧪 BENCHMARK: la primera vez que abrís la app mide tu máquina 3 s
+    y si va justa aplica sola el perfil de batalla. Se repite desde
+    Sesión.
+  💤 DESCARGA DE INACTIVOS: los videos que no usás en 10 minutos
+    liberan memoria y se recargan solos al dispararlos.
+  📊 COSTO DEL FRAME (Render): cuánto tarda cada frame en JS y en la
+    GPU, para ver qué te está matando el rendimiento.
+  🔥 PRECALENTAR SHADERS: todos los efectos y generadores se
+    compilan al arrancar → cero tirones la primera vez que los usás.
+  Y una optimización interna: los overlays (estructuras, partículas,
+  pintura, logo, público) ahora comparten UN solo lienzo → 5 veces
+  menos subidas a la GPU por frame.
+
 PALETA DE COMANDOS ⌨ (Ctrl+K)
   La app tiene tantas funciones que ahora tiene buscador: Ctrl+K,
   escribís "confeti" o "escena 3" o "rec", Enter, y se ejecuta.
