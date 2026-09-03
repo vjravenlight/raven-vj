@@ -1,5 +1,7 @@
 RAVEN VJ — mixer de video para VJing en vivo, portable
 ====================================================
+Versión 2026.09.03 — la ves en Ayuda → Acerca de, en el extremo derecho
+del menú (click = Acerca de) y en el panel → Sesión.
 
 CÓMO ABRIR
   Doble click en index.html (Chrome o Edge). No requiere instalar nada.

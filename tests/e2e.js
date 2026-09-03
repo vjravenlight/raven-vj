@@ -920,6 +920,24 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await pg2.close();
   }
 
+  // ================= versión visible + link de donación PayPal =================
+  r = await page.evaluate(() => {
+    const v = typeof APP_VERSION === 'string' && /^\d{4}\.\d{2}\.\d{2}$/.test(APP_VERSION);
+    const lbl = $('#verLbl') && $('#verLbl').textContent === 'v' + APP_VERSION;
+    const foot = $('#welver') && $('#welver').textContent === 'v' + APP_VERSION;
+    const title = document.title.includes(APP_VERSION);
+    const pp = $('#welpp');
+    const link = pp && pp.tagName === 'A' && /paypal\.com\/donate/.test(pp.href) && pp.href.includes('vjravenlight%40gmail.com');
+    let opened = '';
+    const oo = window.open; window.open = u => { opened = u; return null; };
+    const item = MENUS.ayuda().find(x => x && x.label && x.label.includes('PayPal'));
+    if (item) item.fn();
+    window.open = oo;
+    return { v, lbl, foot, title, link, menu: /paypal\.com\/donate/.test(opened) };
+  });
+  t('versión: visible en menú, acerca de y título', r.v && r.lbl && r.foot && r.title, JSON.stringify(r));
+  t('PayPal: link de donación real (no copia el mail)', r.link && r.menu, JSON.stringify(r));
+
   // ================= errores acumulados =================
   const errs = await page.evaluate(() => window.__errs || []);
   t('sin errores JS acumulados', !errs.length, errs.join(' | ').slice(0, 200));

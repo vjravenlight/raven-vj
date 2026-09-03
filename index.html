@@ -397,6 +397,7 @@ body.kiosk #outCanvas{position:fixed;inset:0;width:100vw;height:100vh;object-fit
     <button data-menu="ayuda">Ayuda</button>
     <a id="donateBtn" href="https://cafecito.app/vjravenlight" target="_blank" rel="noopener"
       title="si RAVEN VJ te sirvió, invitame un cafecito ☕">☕ Donar</a>
+    <span id="verLbl" data-noi18n title="versión de RAVEN VJ — click: Acerca de" style="margin-left:auto;font-size:10px;color:var(--dim);cursor:pointer;padding:0 8px;align-self:center"></span>
   </div>
   <div id="topbar">
     <span class="grp"><label>BPM</label>
@@ -930,13 +931,13 @@ ATAJOS
     <p class="welp"><b>¡Gracias por usarlo!</b> <span>Si te sirve, apoyá el proyecto:</span></p>
     <div class="weldon">
       <a class="welbtn" href="https://cafecito.app/vjravenlight" target="_blank" rel="noopener" data-noi18n>☕ Cafecito</a>
-      <button class="welbtn" id="welpp" title="click para copiar el mail" data-noi18n>💙 PayPal: vjravenlight@gmail.com</button>
+      <a class="welbtn" id="welpp" href="https://www.paypal.com/donate/?business=vjravenlight%40gmail.com&currency_code=USD&item_name=RAVEN+VJ" target="_blank" rel="noopener" title="donar por PayPal (abre la página de donación)" data-noi18n>💙 PayPal</a>
     </div>
     <div class="welrow"><label>Idioma</label><select id="welLang" data-noi18n></select></div>
     <button id="welgo">🚀 EMPEZAR</button>
     <div class="welvisit" id="welvisit" style="display:none"><span>Sos el visitante N°</span><b id="welvisitN" data-noi18n></b></div>
     <div class="welarg"><span>Hecho en Argentina</span><svg class="argflag" viewBox="0 0 30 20" data-noi18n aria-label="bandera argentina"><rect width="30" height="20" rx="2" fill="#74ACDF"/><rect y="6.7" width="30" height="6.6" fill="#fff"/><circle cx="15" cy="10" r="2.6" fill="#F6B40E"/><circle cx="15" cy="10" r="2.6" fill="none" stroke="#85340A" stroke-width="0.3"/></svg></div>
-    <div class="welfoot" data-noi18n>RAVEN VJ · 2026 ·
+    <div class="welfoot" data-noi18n>RAVEN VJ <b id="welver"></b> · 2026 ·
       <a href="https://www.ravenlight.net/ravenvj/" target="_blank" rel="noopener">ravenlight.net</a> · por VJ Ravenlight</div>
   </div>
 </div>
@@ -968,6 +969,8 @@ const LAYERS = 4;
 let COLS = 8;
 
 /* ---------------- estado global ---------------- */
+const APP_VERSION = '2026.09.03'; // 📌 versión visible en Acerca de, menú y Sesión
+document.title = 'RAVEN VJ v' + APP_VERSION;
 const state = {
   bpm: 120, fade: 1.0, master: 1, blackout: false, flash: 0,
   auto: { mode: 'off', beats: 4, count: 0, lastCol: -1, lastScene: -1 },
@@ -8008,6 +8011,7 @@ function buildCpTab(id) {
     b.innerHTML = `<div class="cph">📋 NOTAS DEL SET</div>
       <textarea id="cpnotes" data-noi18n placeholder="el drop del tema 3 va con la escena 5… (viaja con el set)" style="width:100%;box-sizing:border-box;min-height:64px;font-size:11px">${(state.notes || '').replace(/</g, '&lt;')}</textarea>
       <div class="cph">ESTADO DEL SET</div>
+      <div class="cprow"><b>📌 Versión</b><span class="v" data-noi18n>RAVEN VJ v${APP_VERSION}</span></div>
       <div class="cprow"><b>🧪 Benchmark</b><span><span class="v">${uiPrefs.bench ? uiPrefs.bench.fps + ' fps a ' + uiPrefs.bench.res + (uiPrefs.bench.fps < 30 ? ' 🪫' : ' 🚀') : 'sin medir'}</span> <button id="cpbench" class="mini">medir 3 s</button></span></div>
       ${cpRow('Clips en la grilla', 'clips')}${cpRow('Videos sin enlazar', 'unlink')}
       ${cpRow('Escenas guardadas', 'scn')}${cpRow('Autosave (local)', 'asize')}
@@ -11250,7 +11254,7 @@ const MENUS = {
     { label: '📖 Manual', fn: openManual },
     '-',
     { label: '☕ Invitame un cafecito (donar)', fn: () => window.open('https://cafecito.app/vjravenlight', '_blank') },
-    { label: '💙 Donar por PayPal', fn: () => { try { navigator.clipboard.writeText('vjravenlight@gmail.com'); } catch (e) { } toast('💙 PayPal: vjravenlight@gmail.com (copiado)'); } },
+    { label: '💙 Donar por PayPal', fn: () => window.open('https://www.paypal.com/donate/?business=vjravenlight%40gmail.com&currency_code=USD&item_name=RAVEN+VJ', '_blank') },
     '-',
     { label: 'ℹ Acerca de RAVEN VJ…', fn: showWelcome },
   ],
@@ -11823,11 +11827,7 @@ function closeWelcome() {
 }
 $('#welgo').onclick = closeWelcome;
 $('#welx').onclick = closeWelcome;
-$('#welpp').onclick = () => {
-  const mail = 'vjravenlight@gmail.com';
-  try { navigator.clipboard.writeText(mail); toast('💙 Mail de PayPal copiado: ' + mail); }
-  catch (e) { prompt('Mail de PayPal:', mail); }
-};
+$('#welpp').onclick = () => { toast('💙 ¡Gracias por apoyar RAVEN VJ!'); }; // abre el link de donación (no copia el mail)
 
 /* ---------------- manual flotante (el LEEME adentro de la app) ---------------- */
 function renderManual(filter) {
@@ -11896,6 +11896,8 @@ setTimeout(autoRelinkBoot, 1800); // los videos vuelven solos si hay permisos gu
 setTimeout(autoFileBoot, 2600); // reconectar el auto-guardado a archivo de otras sesiones
 fontsBoot(); // recargar las tipografías .ttf guardadas en esta PC
 buildMacroBar(); // 🎛 barra de macros (necesita midiRefs ya inicializado)
+if ($('#verLbl')) { $('#verLbl').textContent = 'v' + APP_VERSION; $('#verLbl').onclick = showWelcome; }
+if ($('#welver')) $('#welver').textContent = 'v' + APP_VERSION;
 paintWire(); // 🖌 el monitor de salida como lienzo
 setTimeout(warmShaders, 3500); // 🔥 compilar todos los shaders de fondo: cero tirones en vivo
 setTimeout(benchBoot, 9000); // 🧪 primera vez: medir la máquina y sugerir perfil
