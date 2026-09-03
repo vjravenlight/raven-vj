@@ -110,6 +110,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;heigh
 </div>
 <div id="pubui">
   <div id="pubst">conectando…</div>
+  <div id="pubvote" style="display:none;flex-direction:column;gap:8px;align-items:center;width:100%">
+    <div id="pubvq" style="font-size:16px;font-weight:700"></div>
+    <div style="display:flex;gap:10px;width:100%;justify-content:center">
+      <button id="pubva" style="flex:1;max-width:170px;font-size:18px;padding:18px 8px;border-radius:14px"></button>
+      <button id="pubvb" style="flex:1;max-width:170px;font-size:18px;padding:18px 8px;border-radius:14px"></button>
+    </div>
+    <div id="pubvst" style="font-size:11px;opacity:.7"></div>
+  </div>
   <div id="pubemos"></div>
   <div id="pubtxts"></div>
   <div id="pubfree"><input id="pubin" maxlength="24" placeholder="escribí algo…"><button id="pubsend">➤</button></div>
@@ -212,7 +220,25 @@ if (pubCode) {
     $('#pubst').textContent = '¡enviado! ✨';
     cool();
   };
+  const vsend = v => { // el voto va aparte del rate-limit (se puede cambiar hasta el final)
+    if (!pconn || !pconn.open) return;
+    try { pconn.send({ t: 'pub', k: 'v', v }); } catch (e) { }
+    $('#pubva').style.opacity = v === 'a' ? 1 : .45;
+    $('#pubvb').style.opacity = v === 'b' ? 1 : .45;
+    $('#pubvst').textContent = '¡votaste! (podés cambiarlo hasta que cierre)';
+  };
   const buildPub = cfg => {
+    const vt = $('#pubvote');
+    if (cfg.vote && cfg.vote.until > Date.now()) { // 🗳 hay votación abierta
+      vt.style.display = 'flex';
+      $('#pubvq').textContent = '🗳 ' + (cfg.vote.q || '¿Qué visual sigue?');
+      $('#pubva').textContent = cfg.vote.a;
+      $('#pubvb').textContent = cfg.vote.b;
+      $('#pubva').style.opacity = 1; $('#pubvb').style.opacity = 1;
+      $('#pubvst').textContent = 'tocá para votar';
+      $('#pubva').onclick = () => vsend('a');
+      $('#pubvb').onclick = () => vsend('b');
+    } else vt.style.display = 'none';
     const em = $('#pubemos'); em.innerHTML = '';
     (cfg.emojis || []).slice(0, 12).forEach(e2 => {
       const b = document.createElement('button');
@@ -229,6 +255,7 @@ if (pubCode) {
     });
     $('#pubfree').style.display = cfg.free ? 'flex' : 'none';
   };
+  window._pubBuild = buildPub; // para tests
   $('#pubsend').onclick = () => { const v = $('#pubin').value.trim(); if (v) { psend('t', v); $('#pubin').value = ''; } };
   $('#pubin').addEventListener('keydown', e => { if (e.key === 'Enter') $('#pubsend').click(); });
   const peer = new Peer();

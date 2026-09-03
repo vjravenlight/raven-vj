@@ -65,6 +65,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #wizbox .wlbl b{color:var(--acc);font-size:16px}
 #wizbox .wbtns{display:flex;gap:6px;justify-content:center}
 #wizbox .wnote{margin-top:10px;font-size:9px;color:var(--dim)}
+canvas.envcv{background:#0a0a0d;border:1px solid var(--line);border-radius:4px;cursor:crosshair;touch-action:none}
 .connask{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);z-index:95;
   background:var(--panel);border:1px solid var(--acc);border-radius:12px;padding:12px 16px;
   display:flex;flex-direction:column;gap:9px;align-items:center;box-shadow:0 10px 40px #000c;font-size:12px}
@@ -3313,7 +3314,8 @@ function renderTick() {
     setAudioUniforms(gl, p);
     const rp = fx.params.map(pp => {
       let v = pp.value;
-      if (pp.mod !== 'none') v += modValue(pp.mod) * pp.amt;
+      if (pp.mod === 'env') v += envValue(pp) * pp.amt;
+      else if (pp.mod !== 'none') v += modValue(pp.mod) * pp.amt;
       return clamp01(v);
     });
     gl.uniform1f(U(gl, p, 'u_p1'), rp[0]);
@@ -4290,6 +4292,49 @@ function addEffect(id) {
   });
   buildFx(); markDirty();
 }
+/* ---- envolventes dibujables 🎬: una curva a mano alzada loopea el parámetro sync BPM ---- */
+function envValue(pp) {
+  const env = pp.env;
+  if (!env || !env.pts || !env.pts.length) return 0;
+  const N = env.pts.length;
+  const ph = ((beatFloat / (env.beats || 4)) % 1 + 1) % 1;
+  const x = ph * N;
+  const i = Math.floor(x) % N;
+  const f = x - Math.floor(x);
+  return env.pts[i] * (1 - f) + env.pts[(i + 1) % N] * f;
+}
+function drawEnv(cv, env, ph) {
+  if (!cv || !env) return;
+  const x = cv.getContext('2d'), W = cv.width, H = cv.height;
+  x.clearRect(0, 0, W, H);
+  x.fillStyle = '#0a0a0d';
+  x.fillRect(0, 0, W, H);
+  const acc = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#ff7a1a';
+  x.strokeStyle = acc; x.lineWidth = 1.5;
+  x.beginPath();
+  const N = env.pts.length;
+  for (let i = 0; i <= N; i++) {
+    const px = i / N * W, py = (1 - env.pts[i % N]) * (H - 4) + 2;
+    i ? x.lineTo(px, py) : x.moveTo(px, py);
+  }
+  x.stroke();
+  if (ph != null) { // cabezal
+    x.strokeStyle = '#ffffff88';
+    x.beginPath(); x.moveTo(ph * W, 0); x.lineTo(ph * W, H); x.stroke();
+  }
+}
+setInterval(() => { // cabezal animado de todas las envolventes visibles
+  document.querySelectorAll('canvas.envcv').forEach(cv => {
+    if (cv._env) drawEnv(cv, cv._env, ((beatFloat / (cv._env.beats || 4)) % 1 + 1) % 1);
+  });
+}, 120);
+const ENV_SHAPES = {
+  '↗': i => i / 31, '↘': i => 1 - i / 31,
+  '∧': i => 1 - Math.abs(i / 31 * 2 - 1),
+  '∿': i => .5 + .45 * Math.sin(i / 32 * 6.2832),
+  '⎍': i => i % 16 < 8 ? 1 : 0,
+  '🎲': () => Math.random(),
+};
 function buildFx() {
   const list = $('#fxList');
   list.innerHTML = '';
@@ -4316,14 +4361,50 @@ function buildFx() {
       sl.oninput = () => { pp.value = +sl.value; markDirty(); };
       midiRefs[`fx:${fx.uid}:p${pi + 1}`] = sl;
       const md = el('select');
-      MODS.forEach(m => { const o = el('option'); o.value = m; o.textContent = m; md.appendChild(o); });
+      [...MODS, 'env'].forEach(m => { const o = el('option'); o.value = m; o.textContent = m === 'env' ? '✏ curva' : m; md.appendChild(o); });
       md.value = pp.mod;
-      md.onchange = () => { pp.mod = md.value; markDirty(); };
+      md.onchange = () => { pp.mod = md.value; buildFx(); markDirty(); };
       const amt = el('input'); amt.type = 'range'; amt.min = -1; amt.max = 1; amt.step = .01; amt.value = pp.amt;
       amt.title = 'cantidad de modulación';
       amt.oninput = () => { pp.amt = +amt.value; markDirty(); };
       r.append(pn, sl, md, amt);
       d.appendChild(r);
+      if (pp.mod === 'env') { // ✏ envolvente dibujable
+        if (!pp.env || !Array.isArray(pp.env.pts)) pp.env = { pts: Array.from({ length: 32 }, (_, i) => ENV_SHAPES['∿'](i)), beats: 4 };
+        const er = el('div', 'prow');
+        const cv = el('canvas'); cv.className = 'envcv'; cv.width = 150; cv.height = 34;
+        cv.title = 'dibujá la curva con el mouse — el parámetro la recorre en loop, sync BPM';
+        cv._env = pp.env;
+        let lastXi = -1;
+        const paint = ev => {
+          const r2 = cv.getBoundingClientRect();
+          const xi = Math.max(0, Math.min(31, Math.floor((ev.clientX - r2.left) / r2.width * 32)));
+          const yv = 1 - Math.max(0, Math.min(1, (ev.clientY - r2.top) / r2.height));
+          if (lastXi >= 0 && Math.abs(xi - lastXi) > 1) { // arrastre rápido: rellenar el salto
+            const a2 = Math.min(xi, lastXi), b2 = Math.max(xi, lastXi);
+            for (let k = a2; k <= b2; k++) pp.env.pts[k] = yv;
+          } else pp.env.pts[xi] = yv;
+          lastXi = xi;
+          drawEnv(cv, pp.env);
+          markDirty();
+        };
+        cv.onpointerdown = ev => { cv.setPointerCapture(ev.pointerId); cv._dn = true; lastXi = -1; paint(ev); };
+        cv.onpointermove = ev => { if (cv._dn) paint(ev); };
+        cv.onpointerup = () => { cv._dn = false; lastXi = -1; };
+        const bs = el('select'); bs.title = 'beats por vuelta';
+        [1, 2, 4, 8, 16].forEach(n => { const o = el('option'); o.value = n; o.textContent = n + '♪'; if ((pp.env.beats || 4) === n) o.selected = true; bs.appendChild(o); });
+        bs.onchange = () => { pp.env.beats = +bs.value; markDirty(); };
+        const shapes = el('span');
+        shapes.style.cssText = 'display:flex;gap:2px';
+        Object.entries(ENV_SHAPES).forEach(([ic, fn]) => {
+          const b = el('button', 'mini'); b.textContent = ic; b.title = 'forma prearmada';
+          b.onclick = () => { pp.env.pts = Array.from({ length: 32 }, (_, i) => fn(i)); drawEnv(cv, pp.env); markDirty(); };
+          shapes.appendChild(b);
+        });
+        er.append(cv, bs, shapes);
+        d.appendChild(er);
+        drawEnv(cv, pp.env);
+      }
     });
     list.appendChild(d);
   }
@@ -5110,7 +5191,7 @@ function serialize() {
     })),
     effects: state.effects.map(f => ({
       id: f.id, uid: f.uid, enabled: f.enabled,
-      params: f.params.map(p => ({ value: p.value, mod: p.mod, amt: p.amt })),
+      params: f.params.map(p => ({ value: p.value, mod: p.mod, amt: p.amt, env: p.env || null })),
     })),
     mappings: state.mappings,
   };
@@ -5181,7 +5262,13 @@ function deserialize(d) {
     } catch (e) { console.error('celda corrupta en el set, salteada:', e); }
   }
   try {
-    state.effects = (d.effects || []).map(f => ({ ...f, params: (f.params || []).map(p => ({ ...p })) }));
+    state.effects = (d.effects || []).map(f => ({
+      ...f,
+      params: (f.params || []).map(p => ({
+        ...p,
+        env: p.env && Array.isArray(p.env.pts) && p.env.pts.every(isFinite) ? { pts: p.env.pts.slice(0, 64), beats: p.env.beats || 4 } : null,
+      })),
+    }));
   } catch (e) { state.effects = []; console.error('efectos corruptos, se descartan:', e); }
   fxUid = Math.max(1, ...state.effects.map(f => (f.uid || 0) + 1));
   state.mappings = d.mappings || {};
@@ -6274,7 +6361,19 @@ function buildCpTab(id) {
       <div class="cprow"><b>Texto libre</b><span>
         <button id="cppubfree" class="mini${pub.free ? ' danger on' : ''}" title="⚠ deja que escriban CUALQUIER cosa — usalo solo con gente de confianza">${pub.free ? '⚠ ON' : 'off (recomendado)'}</button></span></div>
       <div class="cprow"><b>Tirar vos</b><span id="cppubfire" style="display:flex;gap:4px;flex-wrap:wrap"></span></div>
-      <div class="cprow"><span class="v">💥 RÁFAGA también se puede mapear a un pad MIDI (botón 🎹 y tocás el pad).</span></div>`;
+      <div class="cprow"><span class="v">💥 RÁFAGA también se puede mapear a un pad MIDI (botón 🎹 y tocás el pad).</span></div>
+      <div class="cph">🗳 VOTACIÓN DEL PÚBLICO</div>
+      ${pub.vote ? `
+      <div class="cprow"><b>Votación abierta</b><span class="v">${pub.vote.la} vs ${pub.vote.lb}</span></div>
+      <div class="cprow"><b></b><span><button id="cpvote" class="mini danger on">✕ cancelar votación</button></span></div>` : `
+      <div class="cprow"><b>Columnas A vs B</b><span style="display:flex;gap:4px;align-items:center">
+        <input id="cpvotea" type="number" min="1" max="${COLS}" value="1" style="width:44px" title="columna A">
+        <span class="v">vs</span>
+        <input id="cpvoteb" type="number" min="1" max="${COLS}" value="2" style="width:44px" title="columna B">
+        <select id="cpvotes" class="mini"><option value="20">20 s</option><option value="30" selected>30 s</option><option value="60">60 s</option></select>
+        <button id="cpvote" class="mini on">🗳 abrir votación</button></span></div>
+      <div class="cprow"><span class="v">La gente vota 🅰/🅱 desde su celu, el marcador se ve en la salida,
+        y al cerrar se dispara SOLA la columna ganadora. Democracia rave.</span></div>`}`;
     $('#cpremote').onclick = remoteToggle;
     if ($('#cpkick')) $('#cpkick').onclick = kickAllRemotes;
     if ($('#cpb2bgo')) $('#cpb2bgo').onclick = b2bSendToggle;
@@ -6298,6 +6397,10 @@ function buildCpTab(id) {
       pub.free = !pub.free;
       pubBroadcastConfig(); buildCpTab('remote');
       toast(pub.free ? '⚠ Texto libre ON — el público puede escribir lo que quiera' : 'Texto libre off — solo tus frases');
+    };
+    if ($('#cpvote')) $('#cpvote').onclick = () => {
+      if (pub.vote) pubVoteEnd(true);
+      else pubVoteStart((+$('#cpvotea').value || 1) - 1, (+$('#cpvoteb').value || 2) - 1, +$('#cpvotes').value || 30);
     };
     { // botones para que el VJ tire reacciones cuando quiera (con o sin público conectado)
       const box = $('#cppubfire');
@@ -7438,7 +7541,45 @@ function pubLoadQR() { // QR para PROYECTAR en la salida (con CORS para no ensuc
   img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=2&data=' + encodeURIComponent(url);
 }
 function pubConfigMsg() {
-  return { t: 'publayout', emojis: [...pub.emojis].filter(ch => !/\s/.test(ch)), texts: pub.texts.slice(0, 12), free: !!pub.free };
+  return {
+    t: 'publayout', emojis: [...pub.emojis].filter(ch => !/\s/.test(ch)), texts: pub.texts.slice(0, 12), free: !!pub.free,
+    vote: pub.vote ? { q: pub.vote.q, a: pub.vote.la, b: pub.vote.lb, until: pub.vote.until } : null,
+  };
+}
+/* ---- votación del público 🗳: la gente elige qué columna sigue ---- */
+function pubVoteStart(colA, colB, secs) {
+  if (!pub.on) { toast('🗳 Primero activá el PÚBLICO'); return; }
+  if (pub.vote) { pubVoteEnd(true); return; } // segundo click = cancelar
+  colA = colA | 0; colB = colB | 0;
+  if (colA === colB || colA < 0 || colB < 0 || colA >= COLS || colB >= COLS) { toast('🗳 Elegí dos columnas distintas'); return; }
+  pub.vote = {
+    q: '¿Qué visual sigue?', colA, colB,
+    la: '🅰 Columna ' + (colA + 1), lb: '🅱 Columna ' + (colB + 1),
+    until: Date.now() + (secs || 30) * 1000,
+    votes: new Map(),
+  };
+  pub.vote.timer = setTimeout(() => pubVoteEnd(), (secs || 30) * 1000);
+  pubBroadcastConfig();
+  buildCpTab('remote');
+  toast('🗳 Votación abierta ' + (secs || 30) + ' s — el público elige en su celu');
+}
+function pubVoteEnd(cancel) {
+  const v = pub.vote;
+  if (!v) return;
+  clearTimeout(v.timer);
+  pub.vote = null;
+  pubBroadcastConfig();
+  buildCpTab('remote');
+  if (cancel) { toast('🗳 Votación cancelada'); return; }
+  let a = 0, b = 0;
+  v.votes.forEach(x => x === 'a' ? a++ : b++);
+  const empate = a === b;
+  const win = empate ? (Math.random() < .5 ? 'a' : 'b') : (a > b ? 'a' : 'b');
+  const col = win === 'a' ? v.colA : v.colB;
+  qTriggerColumn(col);
+  pubSpawn((win === 'a' ? v.la : v.lb) + ' ganó 🏆');
+  toast('🗳 ' + (empate ? 'Empate ' + a + '-' + b + ' → moneda: ' : a + ' vs ' + b + ' → ') +
+    'gana la columna ' + (col + 1) + ' 🏆');
 }
 function pubBurst(n) { // ráfaga tirada por el VJ (no necesita público conectado)
   const es = [...pub.emojis].filter(ch => !/\s/.test(ch));
@@ -7460,6 +7601,10 @@ function pubSpawn(txt) {
 }
 function pubMsg(conn, d) {
   if (!pub.on || !d || d.t !== 'pub') return; // del canal del público SOLO se aceptan reacciones
+  if (d.k === 'v') { // 🗳 voto: sin rate-limit (poder cambiarlo hasta el final)
+    if (pub.vote && (d.v === 'a' || d.v === 'b')) pub.vote.votes.set(conn, d.v);
+    return;
+  }
   const now = performance.now();
   const lastT = pub._last.get(conn) || 0;
   if (now - lastT < 900) return; // máx ~1 por segundo por celular
@@ -7653,7 +7798,7 @@ function structsDraw(gl) {
 }
 function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) sobre la salida
   const showQR = pub.qrShow && pub.qrImg && pub.qrImg.complete && pub.qrImg.naturalWidth > 0;
-  if (!pub.parts.length && !showQR) return;
+  if (!pub.parts.length && !showQR && !pub.vote) return;
   const [W, H] = [main.canvas.width, main.canvas.height];
   if (!pub.canvas || pub.canvas.width !== W || pub.canvas.height !== H) {
     pub.canvas = document.createElement('canvas'); pub.canvas.width = W; pub.canvas.height = H;
@@ -7674,6 +7819,19 @@ function pubDraw(gl) { // dibuja las reacciones flotando (y el QR proyectado) so
     x.textAlign = 'right'; x.textBaseline = 'bottom';
     x.shadowColor = '#000'; x.shadowBlur = 8;
     x.fillText('📱 escaneá y mandá tu reacción', qx + qs + pad, qy - pad - Math.round(H * .012));
+    x.restore();
+  }
+  if (pub.vote) { // 🗳 marcador de la votación arriba de todo
+    let a = 0, b = 0;
+    pub.vote.votes.forEach(v2 => v2 === 'a' ? a++ : b++);
+    const secs = Math.max(0, Math.ceil((pub.vote.until - Date.now()) / 1000));
+    const txt = `🗳 ${pub.vote.la}: ${a}   ·   ${pub.vote.lb}: ${b}   ·   ${secs}s`;
+    x.save();
+    x.textAlign = 'center'; x.textBaseline = 'top';
+    x.font = `bold ${Math.round(H * .045)}px "Segoe UI Emoji","Segoe UI",sans-serif`;
+    x.fillStyle = '#fff';
+    x.shadowColor = '#000'; x.shadowBlur = H * .02;
+    x.fillText(txt, W / 2, H * .04);
     x.restore();
   }
   pub.parts = pub.parts.filter(p => now - p.born < 6000 && p.y < 1.15);

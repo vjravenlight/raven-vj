@@ -136,6 +136,31 @@ AUTO-DROP 💥 (beta — sin IA, pura matemática de audio)
   psytrance, techno melódico). Vos seguís mezclando clips tranquilo:
   el golpe visual del drop sale solo.
 
+ENVOLVENTES DIBUJABLES ✏ (efectos coreografiados)
+  En el rack de efectos, poné el modulador de un parámetro en
+  "✏ curva": aparece un mini-lienzo donde DIBUJÁS con el mouse la
+  forma que quieras, y el parámetro la recorre en loop clavado al
+  BPM (1 a 16 beats por vuelta). Formas prearmadas de un click:
+  rampa ↗↘, triángulo ∧, onda ∿, cuadrada ⎍ y azar 🎲. El cabezal
+  se ve en vivo. Ej: el zoom sube 8 beats y cae en seco = build-up
+  coreografiado sin tocar nada. Viajan con el set.
+
+VOTACIÓN DEL PÚBLICO 🗳
+  Panel → Remoto → PÚBLICO → sección VOTACIÓN: elegís dos columnas
+  (A vs B) y la duración. A la gente le aparecen dos botones
+  gigantes en el celu, el MARCADOR se ve en vivo sobre la salida,
+  y al cerrar se dispara SOLA la columna ganadora (empate = moneda).
+  Se puede cambiar el voto hasta el final. Democracia rave.
+
+TECLADO MAPEABLE ⌨ (ya estaba, por si no lo viste)
+  El modo LEARN (botón 🎹) también acepta TECLAS: activás LEARN,
+  click en cualquier control, apretás una tecla, y esa tecla queda
+  mapeada. VJear sin controladora, con el teclado entero.
+
+LUCES EN LA CONTROLADORA 💡 (ya estaba, por si no lo viste)
+  Panel → MIDI → "Luces en la controladora": los pads del clip que
+  está al aire se ENCIENDEN en tu Launchpad/APC (MIDI OUT).
+
 OBJETOS 3D 🧊 (GLB → wireframe audio-rítmico)
   Arrastrá un archivo .glb (el formato 3D estándar — Blender exporta,
   y hay miles gratis en Sketchfab) a una celda: entra como WIREFRAME
